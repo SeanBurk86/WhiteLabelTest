@@ -133,9 +133,9 @@ public class Player {
         updateHitbox();
         basicWeapon.setLevel(1);
         waveBlastWeapon.setLevel(0);
-        thunderWhipWeapon.setLevel(3);
+        thunderWhipWeapon.setLevel(0);
         orbitWeapon.setLevel(0);
-        currentWeapon = thunderWhipWeapon;
+        currentWeapon = basicWeapon;
         shootTimer = 0;
         animationTime = 0;
     }
