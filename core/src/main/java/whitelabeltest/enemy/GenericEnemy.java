@@ -79,7 +79,7 @@ public class GenericEnemy extends BaseEnemy {
 
         // Bounds checking that handles movement in any direction
         return sprite.getY() < -sprite.getHeight() * 2f || sprite.getY() > worldHeight + sprite.getHeight() * 2f ||
-               sprite.getX() < -sprite.getWidth() * 2f || sprite.getX() > worldWidth + sprite.getWidth() * 2f;
+               sprite.getX() + sprite.getWidth() < 0f || sprite.getX() > worldWidth;
     }
 
     @Override

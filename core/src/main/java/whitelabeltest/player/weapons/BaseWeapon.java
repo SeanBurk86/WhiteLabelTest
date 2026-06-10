@@ -63,7 +63,7 @@ public abstract class BaseWeapon implements Weapon {
     public boolean isOffScreen(float worldHeight) {
         if (sprite == null) return true;
         if (path != null) return pathTime >= pathDuration;
-        return sprite.getY() > worldHeight || sprite.getY() < -2f || sprite.getX() < -2f || sprite.getX() > 11f;
+        return sprite.getY() > worldHeight || sprite.getY() < -2f || sprite.getX() + sprite.getWidth() < 0f || sprite.getX() > 9f;
     }
 
     @Override

@@ -47,7 +47,7 @@ public class BasicEnemyBullet implements EnemyBullet {
 
     @Override
     public boolean isOffScreen() {
-        return sprite.getY() < -1f;
+        return sprite.getY() < -1f || sprite.getX() + sprite.getWidth() < 0f || sprite.getX() > 9f;
     }
 
     @Override

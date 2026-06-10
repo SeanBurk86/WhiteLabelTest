@@ -83,7 +83,8 @@ public class WeaponPowerup implements Powerup {
 
     @Override
     public boolean isOffScreen() {
-        return lifeTime >= maxLifeTime;
+        return lifeTime >= maxLifeTime || sprite.getY() < -sprite.getHeight() || sprite.getY() > worldHeight + sprite.getHeight()
+               || sprite.getX() + sprite.getWidth() < 0f || sprite.getX() > worldWidth;
     }
 
     @Override

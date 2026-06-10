@@ -3,11 +3,13 @@ package whitelabeltest;
 import com.badlogic.gdx.ApplicationAdapter;
 import com.badlogic.gdx.Gdx;
 import com.badlogic.gdx.graphics.Color;
+import com.badlogic.gdx.graphics.GL20;
 import com.badlogic.gdx.graphics.g2d.SpriteBatch;
 import com.badlogic.gdx.graphics.glutils.ShapeRenderer;
 import com.badlogic.gdx.math.Rectangle;
+import com.badlogic.gdx.math.Vector3;
 import com.badlogic.gdx.utils.ScreenUtils;
-import com.badlogic.gdx.utils.viewport.FitViewport;
+import com.badlogic.gdx.utils.viewport.ExtendViewport;
 import whitelabeltest.enemy.Enemy;
 import whitelabeltest.enemy.bullets.EnemyBullet;
 import whitelabeltest.gamemanagers.EntityManager;
@@ -20,13 +22,13 @@ public class Main extends ApplicationAdapter {
     private GameController game;
     private SpriteBatch spriteBatch;
     private ShapeRenderer shapeRenderer;
-    private FitViewport viewport;
+    private ExtendViewport viewport;
 
     private final float PLAY_AREA_WIDTH = 9f;
     private final float PLAY_AREA_HEIGHT = 12f;
-//    private final float UI_AREA_WIDTH = 3f;
-//    private final float TOTAL_SCREEN_WIDTH = PLAY_AREA_WIDTH + UI_AREA_WIDTH;
-//    private final float TOTAL_SCREEN_HEIGHT = PLAY_AREA_HEIGHT;
+
+    private final Vector3 scissorBL = new Vector3();
+    private final Vector3 scissorTR = new Vector3();
 
     @Override
     public void create() {
@@ -35,7 +37,7 @@ public class Main extends ApplicationAdapter {
 
         spriteBatch = new SpriteBatch();
         shapeRenderer = new ShapeRenderer();
-        viewport = new FitViewport(PLAY_AREA_WIDTH, PLAY_AREA_HEIGHT);
+        viewport = new ExtendViewport(PLAY_AREA_WIDTH, PLAY_AREA_HEIGHT);
     }
 
     @Override
@@ -46,17 +48,41 @@ public class Main extends ApplicationAdapter {
     }
 
     private void draw() {
-        ScreenUtils.clear(game.isGameOver() ? new Color(0.2f, 0, 0, 1) : Color.BLACK);
+        boolean isGameOver = game.isGameOver();
+        ScreenUtils.clear(isGameOver ? new Color(0.2f, 0, 0, 1) : Color.BLACK);
 
         viewport.apply();
+
+        // leftX is negative when side panels exist (e.g. -6.17 on a 1920x1080 screen)
+        float leftX = PLAY_AREA_WIDTH / 2f - viewport.getWorldWidth() / 2f;
+        float panelWidth = -leftX;
+
+        shapeRenderer.setProjectionMatrix(viewport.getCamera().combined);
+        shapeRenderer.begin(ShapeRenderer.ShapeType.Filled);
+        Color panelColor = isGameOver ? new Color(0.15f, 0f, 0f, 1f) : Color.BLACK;
+        shapeRenderer.setColor(panelColor);
+        shapeRenderer.rect(leftX, 0, panelWidth, PLAY_AREA_HEIGHT);
+        shapeRenderer.rect(PLAY_AREA_WIDTH, 0, panelWidth, PLAY_AREA_HEIGHT);
+        shapeRenderer.end();
+
         spriteBatch.setProjectionMatrix(viewport.getCamera().combined);
         spriteBatch.begin();
 
+        scissorBL.set(0, 0, 0);
+        scissorTR.set(PLAY_AREA_WIDTH, PLAY_AREA_HEIGHT, 0);
+        viewport.getCamera().project(scissorBL, viewport.getScreenX(), viewport.getScreenY(), viewport.getScreenWidth(), viewport.getScreenHeight());
+        viewport.getCamera().project(scissorTR, viewport.getScreenX(), viewport.getScreenY(), viewport.getScreenWidth(), viewport.getScreenHeight());
+        Gdx.gl.glEnable(GL20.GL_SCISSOR_TEST);
+        Gdx.gl.glScissor((int) scissorBL.x, (int) scissorBL.y, (int) (scissorTR.x - scissorBL.x), (int) (scissorTR.y - scissorBL.y));
+
         game.draw(spriteBatch);
 
-        ui.drawHUD(spriteBatch, game.getScore(), game.getEntities().getPlayer(), PLAY_AREA_HEIGHT);
+        spriteBatch.flush();
+        Gdx.gl.glDisable(GL20.GL_SCISSOR_TEST);
 
-        if (game.isGameOver()) {
+        ui.drawHUD(spriteBatch, game.getScore(), game.getEntities().getPlayer(), PLAY_AREA_HEIGHT, leftX);
+
+        if (isGameOver) {
             ui.drawGameOver(spriteBatch, PLAY_AREA_WIDTH, PLAY_AREA_HEIGHT);
         }
         spriteBatch.end();
@@ -102,7 +128,9 @@ public class Main extends ApplicationAdapter {
 
     @Override
     public void resize(int width, int height) {
-        viewport.update(width, height, true);
+        viewport.update(width, height, false);
+        viewport.getCamera().position.set(PLAY_AREA_WIDTH / 2f, PLAY_AREA_HEIGHT / 2f, 0);
+        viewport.getCamera().update();
     }
 
     @Override

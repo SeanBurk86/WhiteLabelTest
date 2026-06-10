@@ -18,15 +18,14 @@ public class UIManager implements Disposable {
         gameOverLayout = new GlyphLayout();
     }
 
-    public void drawHUD(SpriteBatch batch, int score, Player player, float worldHeight) {
+    public void drawHUD(SpriteBatch batch, int score, Player player, float worldHeight, float leftPanelX) {
+        float textX = leftPanelX + 0.2f;
         font.setColor(Color.WHITE);
-        font.draw(batch, "Score: " + score, 0.2f, worldHeight - 0.2f);
-
-        // Weapon levels display using String IDs
-        font.draw(batch, "Basic Lvl: " + player.getWeaponLevel("BasicWeapon"), 0.2f, worldHeight - 0.6f);
-        font.draw(batch, "Fast Lvl: " + player.getWeaponLevel("WaveBlastWeapon"), 0.2f, worldHeight - 1.0f);
-        font.draw(batch, "Wave Lvl: " + player.getWeaponLevel("ThunderWhipWeapon"), 0.2f, worldHeight - 1.4f);
-        font.draw(batch, "Orbit Lvl: " + player.getWeaponLevel("OrbitWeapon"), 0.2f, worldHeight - 1.8f);
+        font.draw(batch, "Score: " + score, textX, worldHeight - 0.2f);
+        font.draw(batch, "Basic Lvl: " + player.getWeaponLevel("BasicWeapon"), textX, worldHeight - 0.6f);
+        font.draw(batch, "Fast Lvl: " + player.getWeaponLevel("WaveBlastWeapon"), textX, worldHeight - 1.0f);
+        font.draw(batch, "Wave Lvl: " + player.getWeaponLevel("ThunderWhipWeapon"), textX, worldHeight - 1.4f);
+        font.draw(batch, "Orbit Lvl: " + player.getWeaponLevel("OrbitWeapon"), textX, worldHeight - 1.8f);
     }
 
     public void drawGameOver(SpriteBatch batch, float worldWidth, float worldHeight) {

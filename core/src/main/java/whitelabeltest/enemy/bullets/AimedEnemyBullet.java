@@ -70,7 +70,7 @@ public class AimedEnemyBullet implements EnemyBullet {
 
     @Override
     public boolean isOffScreen() {
-        return sprite.getY() < -1f || sprite.getY() > 13f || sprite.getX() < -1f || sprite.getX() > 10f;
+        return sprite.getY() < -1f || sprite.getY() > 13f || sprite.getX() + sprite.getWidth() < 0f || sprite.getX() > 9f;
     }
 
     @Override

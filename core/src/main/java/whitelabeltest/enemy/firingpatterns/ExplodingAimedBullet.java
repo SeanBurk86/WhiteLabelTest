@@ -86,7 +86,7 @@ public class ExplodingAimedBullet implements EnemyBullet {
 
     @Override
     public boolean isOffScreen() {
-        return sprite.getY() < -2f || sprite.getY() > 14f || sprite.getX() < -2f || sprite.getX() > 11f;
+        return sprite.getY() < -2f || sprite.getY() > 14f || sprite.getX() + sprite.getWidth() < 0f || sprite.getX() > 9f;
     }
 
     @Override
