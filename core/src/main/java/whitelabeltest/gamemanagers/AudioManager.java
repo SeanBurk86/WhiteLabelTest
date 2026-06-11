@@ -92,7 +92,7 @@ public class AudioManager implements Disposable {
 
     private void disposeSoundsMap(ObjectMap<Integer, Array<Sound>> soundsMap) {
         if (soundsMap != null) {
-            for (int i = 1; i < 5; i++) {
+            for (int i = 1; i <= soundsMap.size; i++) {
                 for (Sound s : soundsMap.get(i)) s.dispose();
             }
         }
