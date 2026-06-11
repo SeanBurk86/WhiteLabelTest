@@ -83,15 +83,19 @@ public class AudioManager implements Disposable {
 
     @Override
     public void dispose() {
-        if (explosionSounds != null) {
-            for(int i = 1; i < 5; i++) {
-                for(Sound s : explosionSounds.get(i)) s.dispose();
+        disposeSoundsMap(explosionSounds);
+        disposeSoundsMap(basicWeaponSounds);
+        disposeSoundsMap(thunderWhipWeaponSounds);
+        disposeSoundsMap(waveBlastWeaponSounds);
+        disposeSoundsMap(homingWeaponSounds);
+        disposeSoundsMap(orbitWeaponSounds);
+    }
+
+    private void disposeSoundsMap(ObjectMap<Integer, Array<Sound>> soundsMap) {
+        if (soundsMap != null) {
+            for (int i = 1; i < 5; i++) {
+                for (Sound s : soundsMap.get(i)) s.dispose();
             }
         }
-        if (basicWeaponSounds != null) {
-            for(int i = 1; i < 5; i++) {
-                for(Sound s : basicWeaponSounds.get(i)) s.dispose();
-            }
-        };
     }
 }
