@@ -183,7 +183,9 @@ public class ThunderWhipWeapon extends BaseWeapon {
     @Override
     public float getFireRate() { return def.baseFireRate - (level - 1) * def.fireRatePerLevel; }
     @Override
-    public void playFireSound(AudioManager audio) {}
+    public void playFireSound(AudioManager audio, int level) {
+        audio.playThunderWhipWeaponSound(level);
+    }
 
     @Override
     public void reset() {

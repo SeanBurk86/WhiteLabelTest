@@ -123,7 +123,9 @@ public class HomingWeapon extends BaseWeapon {
     @Override
     public float getFireRate() { return def.baseFireRate; }
     @Override
-    public void playFireSound(AudioManager audio) {}
+    public void playFireSound(AudioManager audio, int level) {
+        audio.playHomingWeaponSound(level);
+    }
 
     @Override
     public void reset() {

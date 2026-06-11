@@ -25,7 +25,7 @@ public interface Weapon extends Pool.Poolable {
     void spawn(Array<Weapon> activeWeapons, Texture texture, float x, float y, Player player, Array<Enemy> enemies, AssetManager assets);
 
     float getFireRate();
-    void playFireSound(AudioManager audio);
+    void playFireSound(AudioManager audio, int level);
 
     default boolean shouldDestroyOnCollision() { return true; }
 

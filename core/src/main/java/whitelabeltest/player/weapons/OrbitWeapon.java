@@ -102,7 +102,9 @@ public class OrbitWeapon extends BaseWeapon {
     @Override
     public float getFireRate() { return def.baseFireRate; }
     @Override
-    public void playFireSound(AudioManager audio) {}
+    public void playFireSound(AudioManager audio, int level) {
+        audio.playOrbitWeaponSound(level);
+    }
 
     @Override
     public boolean shouldDestroyOnCollision() { return false; }

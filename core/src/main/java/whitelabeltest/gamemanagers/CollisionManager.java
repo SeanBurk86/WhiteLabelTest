@@ -73,7 +73,7 @@ public class CollisionManager {
                         }
 
                         ObjectPools.freeEnemy(enemy);
-                        audio.playDrop();
+                        audio.playExplosion();
                         scoreGained += 10;
                     }
                     if (bullet.shouldDestroyOnCollision()) {

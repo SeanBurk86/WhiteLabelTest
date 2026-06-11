@@ -105,7 +105,7 @@ public class Player {
             Texture bulletTex = resolveActiveTexture(assets);
             Vector2 spawnPoint = getBulletSpawnPoint();
             currentWeapon.spawn(bullets, bulletTex, spawnPoint.x, spawnPoint.y, this, enemies, assets);
-            currentWeapon.playFireSound(audio);
+            currentWeapon.playFireSound(audio, currentWeapon.getLevel());
         }
     }
 

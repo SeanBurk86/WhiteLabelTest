@@ -83,7 +83,7 @@ public class BasicWeapon extends BaseWeapon {
     }
 
     @Override
-    public void playFireSound(AudioManager audio) {
-        audio.playPlasmaShot();
+    public void playFireSound(AudioManager audio, int level) {
+        audio.playBasicWeaponSound(level);
     }
 }
