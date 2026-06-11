@@ -6,7 +6,6 @@ import com.badlogic.gdx.utils.Array;
 import com.badlogic.gdx.utils.Disposable;
 import com.badlogic.gdx.utils.Json;
 import com.badlogic.gdx.utils.ObjectMap;
-import whitelabeltest.player.weapons.SoundType;
 
 public class AudioManager implements Disposable {
     private final ObjectMap<Integer, Array<Sound>> explosionSounds;
