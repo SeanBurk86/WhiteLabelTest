@@ -1,0 +1,106 @@
+package whitelabeltest.enemy.bullets;
+
+import com.badlogic.gdx.graphics.Texture;
+import com.badlogic.gdx.graphics.g2d.Animation;
+import com.badlogic.gdx.graphics.g2d.Sprite;
+import com.badlogic.gdx.graphics.g2d.SpriteBatch;
+import com.badlogic.gdx.graphics.g2d.TextureRegion;
+import com.badlogic.gdx.math.MathUtils;
+import com.badlogic.gdx.math.Rectangle;
+import com.badlogic.gdx.math.Vector2;
+
+public class SineBullet implements EnemyBullet {
+    private Sprite sprite;
+    private final Rectangle rectangle;
+    private final int damage = 1;
+
+    private float spawnX, spawnY;
+    private float amplitude;
+    private float frequency;
+    private float phase;
+    private float speed;
+    private float time;
+
+    private Animation<TextureRegion> animation;
+    private float animationTime;
+
+    public SineBullet() {
+        this.rectangle = new Rectangle();
+    }
+
+    public void init(Texture texture, float x, float y, float amplitude, float frequency, float phase, float speed) {
+        int frameWidth = texture.getWidth() / 3;
+        int frameHeight = texture.getHeight();
+        TextureRegion[][] tmp = TextureRegion.split(texture, frameWidth, frameHeight);
+        TextureRegion[] frames = new TextureRegion[3];
+        System.arraycopy(tmp[0], 0, frames, 0, 3);
+        animation = new Animation<>(0.1f, frames);
+        animation.setPlayMode(Animation.PlayMode.LOOP);
+
+        if (sprite == null) sprite = new Sprite(frames[0]);
+        else sprite.setRegion(frames[0]);
+
+        float aspectRatio = (float) frameHeight / frameWidth;
+        float baseWidth = 0.25f;
+        sprite.setSize(baseWidth, baseWidth * aspectRatio);
+        sprite.setOriginCenter();
+        sprite.setCenterX(x);
+        sprite.setCenterY(y);
+
+        this.spawnX = x;
+        this.spawnY = y;
+        this.amplitude = amplitude;
+        this.frequency = frequency;
+        this.phase = phase;
+        this.speed = speed;
+        this.time = 0;
+        this.animationTime = 0;
+
+        rectangle.set(sprite.getX(), sprite.getY(), sprite.getWidth(), sprite.getHeight());
+    }
+
+    @Override
+    public void update(float delta) {
+        time += delta;
+        animationTime += delta;
+        sprite.setRegion(animation.getKeyFrame(animationTime));
+
+        float newX = spawnX + amplitude * MathUtils.sin(frequency * time + phase);
+        float newY = spawnY - speed * time;
+        sprite.setCenter(newX, newY);
+
+        // Rotate sprite to face its direction of travel
+        float vx = amplitude * frequency * MathUtils.cos(frequency * time + phase);
+        float vy = -speed;
+        sprite.setRotation(new Vector2(vx, vy).angleDeg() - 90);
+
+        rectangle.setPosition(sprite.getX(), sprite.getY());
+    }
+
+    @Override
+    public void draw(SpriteBatch batch) {
+        if (sprite != null) sprite.draw(batch);
+    }
+
+    @Override
+    public boolean isOffScreen() {
+        return sprite.getY() + sprite.getHeight() < -2f || sprite.getY() > 14f
+            || sprite.getX() + sprite.getWidth() < 0f || sprite.getX() > 9f;
+    }
+
+    @Override
+    public Rectangle getRectangle() {
+        return rectangle;
+    }
+
+    @Override
+    public int getDamage() {
+        return damage;
+    }
+
+    @Override
+    public void reset() {
+        time = 0;
+        animationTime = 0;
+    }
+}
