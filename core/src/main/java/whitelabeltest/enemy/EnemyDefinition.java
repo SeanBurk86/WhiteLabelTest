@@ -9,9 +9,12 @@ public class EnemyDefinition {
     public int health;
     public String movementType;
     public float speed;
-    public boolean inverseMovement = false; // Added inverseMovement field
+    public boolean inverseMovement = false;
+    // Legacy single-pattern fields — used when firingPattern is absent
     public String firingType;
     public float fireRate;
+    // Rich pattern definition — supports Sequence and Combined
+    public FiringPatternDef firingPattern;
 
     public EnemyDefinition() {}
 }

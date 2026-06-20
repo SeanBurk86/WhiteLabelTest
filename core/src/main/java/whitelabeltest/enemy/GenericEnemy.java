@@ -14,14 +14,14 @@ import whitelabeltest.enemy.firingpatterns.SelfDestructFiring;
 public class GenericEnemy extends BaseEnemy {
 
     private EnemyDefinition def;
-    private Texture secondaryBulletTexture;
+    private Texture bulletTexture;
 
     public void initWithDefinition(EnemyDefinition def, Texture texture, Texture bulletTexture, float worldWidth, float worldHeight, float startX, float startY) {
         this.def = def;
         this.worldWidth = worldWidth;
         this.worldHeight = worldHeight;
-        this.secondaryBulletTexture = bulletTexture;
-        this.invertMovement = def.inverseMovement; // Apply inversion from definition
+        this.bulletTexture = bulletTexture;
+        this.invertMovement = def.inverseMovement;
 
         int frameWidth = texture.getWidth() / def.frameCount;
         int frameHeight = texture.getHeight();
@@ -56,7 +56,9 @@ public class GenericEnemy extends BaseEnemy {
 
         // Initialize patterns
         this.movement = PatternFactory.createMovement(def.movementType, def.speed, worldWidth, worldHeight);
-        this.firing = PatternFactory.createFiring(def.firingType, def.fireRate);
+        this.firing = def.firingPattern != null
+            ? PatternFactory.createFiring(def.firingPattern)
+            : PatternFactory.createFiring(def.firingType, def.fireRate);
 
         rectangle.set(sprite.getX(), sprite.getY(), sprite.getWidth(), sprite.getHeight());
     }
@@ -69,7 +71,7 @@ public class GenericEnemy extends BaseEnemy {
 
     @Override
     public void update(float delta, Array<EnemyBullet> enemyBullets, Texture bulletTexture, Rectangle playerHitbox) {
-        super.update(delta, enemyBullets, secondaryBulletTexture, playerHitbox);
+        super.update(delta, enemyBullets, this.bulletTexture, playerHitbox);
     }
 
     @Override
@@ -85,7 +87,7 @@ public class GenericEnemy extends BaseEnemy {
     @Override
     public Enemy create(Texture texture, float worldWidth, float worldHeight) {
         GenericEnemy e = ObjectPools.genericEnemyPool.obtain();
-        e.initWithDefinition(this.def, texture, this.secondaryBulletTexture, worldWidth, worldHeight, -1f, worldHeight);
+        e.initWithDefinition(this.def, texture, this.bulletTexture, worldWidth, worldHeight, -1f, worldHeight);
         return e;
     }
 

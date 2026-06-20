@@ -36,9 +36,7 @@ public abstract class BaseEnemy implements Enemy {
     public void init(Texture texture, float worldWidth, float worldHeight, float startX, float startY) {
         this.worldWidth = worldWidth;
         this.worldHeight = worldHeight;
-        this.invertMovement = false; // Default to false
-        // Animation setup and sprite creation will be handled by concrete classes
-        // Initial position will be set by concrete classes based on startX, startY
+        this.invertMovement = false;
     }
 
     @Override
@@ -58,7 +56,7 @@ public abstract class BaseEnemy implements Enemy {
         }
 
         if (movement != null) {
-            movement.update(delta, sprite, rectangle, worldWidth, worldHeight, playerHitbox, invertMovement); // Pass invertMovement
+            movement.update(delta, sprite, rectangle, worldWidth, worldHeight, playerHitbox, invertMovement);
         }
 
         if (firing != null) {

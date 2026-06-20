@@ -1,5 +1,6 @@
 package whitelabeltest.enemy;
 
+import com.badlogic.gdx.utils.Array;
 import whitelabeltest.enemy.movementpatterns.StraightMovement;
 import whitelabeltest.enemy.movementpatterns.MovementPattern;
 import whitelabeltest.enemy.movementpatterns.SeekingMovement;
@@ -27,7 +28,39 @@ public class PatternFactory {
             case "SelfDestruct": return new SelfDestructFiring(3.0f);
             case "ExplodingAimed": return new ExplodingAimedFiring(fireRate);
             case "BurstAimed": return new BurstAimedFiring(fireRate);
+            case "QuarterCircle": return new QuarterCircleFiring(fireRate);
+            case "Sweep": return new SweepFiring(fireRate);
+            case "SineWave": return new SineWaveFiring(fireRate);
+            case "Orbiting": return new OrbitingFiring(fireRate);
             default: return new NoFiring();
+        }
+    }
+
+    public static FiringPattern createFiring(FiringPatternDef def) {
+        if (def == null) return new NoFiring();
+
+        switch (def.type) {
+            case "Sequence": {
+                if (def.patterns == null || def.patterns.size == 0) return new NoFiring();
+                Array<FiringPattern> fps = new Array<>();
+                float[] durations = new float[def.patterns.size];
+                for (int i = 0; i < def.patterns.size; i++) {
+                    FiringPatternDef sub = def.patterns.get(i);
+                    fps.add(createFiring(sub));
+                    durations[i] = sub.duration > 0 ? sub.duration : 3.0f;
+                }
+                return new SequencedFiringPattern(fps, durations);
+            }
+            case "Combined": {
+                if (def.patterns == null || def.patterns.size == 0) return new NoFiring();
+                Array<FiringPattern> fps = new Array<>();
+                for (FiringPatternDef sub : def.patterns) {
+                    fps.add(createFiring(sub));
+                }
+                return new CombinedFiringPattern(fps);
+            }
+            default:
+                return createFiring(def.type, def.fireRate);
         }
     }
 }
