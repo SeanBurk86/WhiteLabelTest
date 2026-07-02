@@ -3,7 +3,6 @@ package whitelabeltest.player.powerups;
 import com.badlogic.gdx.graphics.Texture;
 import com.badlogic.gdx.graphics.g2d.Sprite;
 import com.badlogic.gdx.graphics.g2d.SpriteBatch;
-import com.badlogic.gdx.math.MathUtils;
 import com.badlogic.gdx.math.Rectangle;
 import com.badlogic.gdx.math.Vector2;
 import whitelabeltest.player.Player;
@@ -43,7 +42,7 @@ public class WeaponPowerup implements Powerup {
         this.rectangle.set(sprite.getX(), sprite.getY(), sprite.getWidth(), sprite.getHeight());
 
         if (velocity.isZero()) {
-            velocity.set(0.5f, 0).setAngleDeg(MathUtils.random(0f, 360f));
+            velocity.set(4f, 0).setAngleDeg(-80f);
         }
     }
 

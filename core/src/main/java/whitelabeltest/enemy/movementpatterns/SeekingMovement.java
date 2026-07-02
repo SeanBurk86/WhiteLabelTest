@@ -1,6 +1,7 @@
 package whitelabeltest.enemy.movementpatterns;
 
 import com.badlogic.gdx.graphics.g2d.Sprite;
+import com.badlogic.gdx.math.Circle;
 import com.badlogic.gdx.math.Rectangle;
 import com.badlogic.gdx.math.Vector2;
 
@@ -16,8 +17,8 @@ public class SeekingMovement implements MovementPattern {
     }
 
     @Override
-    public void update(float delta, Sprite sprite, Rectangle rectangle, float worldWidth, float worldHeight, Rectangle playerHitbox, boolean inverseMovement) {
-        Vector2 targetPos = new Vector2(playerHitbox.x + playerHitbox.width / 2, playerHitbox.y + playerHitbox.height / 2);
+    public void update(float delta, Sprite sprite, Rectangle rectangle, float worldWidth, float worldHeight, Circle playerHitbox, boolean inverseMovement) {
+        Vector2 targetPos = new Vector2(playerHitbox.x, playerHitbox.y);
         Vector2 currentPos = new Vector2(sprite.getX() + sprite.getWidth() / 2, sprite.getY() + sprite.getHeight() / 2);
 
         float dist = currentPos.dst(targetPos);

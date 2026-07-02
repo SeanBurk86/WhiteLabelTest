@@ -2,6 +2,7 @@ package whitelabeltest.enemy.firingpatterns;
 
 import com.badlogic.gdx.graphics.Texture;
 import com.badlogic.gdx.graphics.g2d.Sprite;
+import com.badlogic.gdx.math.Circle;
 import com.badlogic.gdx.math.Rectangle;
 import com.badlogic.gdx.math.Vector2;
 import com.badlogic.gdx.utils.Array;
@@ -18,10 +19,10 @@ public class SelfDestructFiring implements FiringPattern {
     }
 
     @Override
-    public void update(float delta, Sprite sprite, Rectangle rectangle, Array<EnemyBullet> enemyBullets, Texture bulletTexture, Rectangle playerHitbox) {
+    public void update(float delta, Sprite sprite, Rectangle rectangle, Array<EnemyBullet> enemyBullets, Texture bulletTexture, Circle playerHitbox) {
         if (triggered) return;
 
-        Vector2 targetPos = new Vector2(playerHitbox.x + playerHitbox.width / 2, playerHitbox.y + playerHitbox.height / 2);
+        Vector2 targetPos = new Vector2(playerHitbox.x, playerHitbox.y);
         Vector2 currentPos = new Vector2(sprite.getX() + sprite.getWidth() / 2, sprite.getY() + sprite.getHeight() / 2);
 
         if (currentPos.dst(targetPos) <= triggerDistance) {

@@ -3,6 +3,7 @@ package whitelabeltest.enemy.firingpatterns;
 import com.badlogic.gdx.graphics.Texture;
 import com.badlogic.gdx.graphics.g2d.Sprite;
 import com.badlogic.gdx.math.MathUtils;
+import com.badlogic.gdx.math.Circle;
 import com.badlogic.gdx.math.Rectangle;
 import com.badlogic.gdx.math.Vector2;
 import com.badlogic.gdx.utils.Array;
@@ -24,15 +25,15 @@ public class OrbitingFiring implements FiringPattern {
     }
 
     @Override
-    public void update(float delta, Sprite sprite, Rectangle rectangle, Array<EnemyBullet> enemyBullets, Texture bulletTexture, Rectangle playerHitbox) {
+    public void update(float delta, Sprite sprite, Rectangle rectangle, Array<EnemyBullet> enemyBullets, Texture bulletTexture, Circle playerHitbox) {
         shootTimer += delta;
         if (shootTimer < fireRate) return;
         shootTimer = 0;
 
         float centerX = sprite.getX() + sprite.getWidth() / 2;
         float centerY = sprite.getY() + sprite.getHeight() / 2;
-        float playerX = playerHitbox.x + playerHitbox.width / 2;
-        float playerY = playerHitbox.y + playerHitbox.height / 2;
+        float playerX = playerHitbox.x;
+        float playerY = playerHitbox.y;
 
         Vector2 vel = new Vector2(playerX - centerX, playerY - centerY).nor().scl(CENTER_SPEED);
 

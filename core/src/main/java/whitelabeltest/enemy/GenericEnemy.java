@@ -5,7 +5,7 @@ import com.badlogic.gdx.graphics.g2d.Animation;
 import com.badlogic.gdx.graphics.g2d.Sprite;
 import com.badlogic.gdx.graphics.g2d.TextureRegion;
 import com.badlogic.gdx.math.MathUtils;
-import com.badlogic.gdx.math.Rectangle;
+import com.badlogic.gdx.math.Circle;
 import com.badlogic.gdx.utils.Array;
 import whitelabeltest.gamemanagers.ObjectPools;
 import whitelabeltest.enemy.bullets.EnemyBullet;
@@ -70,7 +70,7 @@ public class GenericEnemy extends BaseEnemy {
     }
 
     @Override
-    public void update(float delta, Array<EnemyBullet> enemyBullets, Texture bulletTexture, Rectangle playerHitbox) {
+    public void update(float delta, Array<EnemyBullet> enemyBullets, Texture bulletTexture, Circle playerHitbox) {
         super.update(delta, enemyBullets, this.bulletTexture, playerHitbox);
     }
 

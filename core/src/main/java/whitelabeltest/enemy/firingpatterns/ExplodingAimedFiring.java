@@ -2,6 +2,7 @@ package whitelabeltest.enemy.firingpatterns;
 
 import com.badlogic.gdx.graphics.Texture;
 import com.badlogic.gdx.graphics.g2d.Sprite;
+import com.badlogic.gdx.math.Circle;
 import com.badlogic.gdx.math.Rectangle;
 import com.badlogic.gdx.utils.Array;
 import whitelabeltest.enemy.bullets.EnemyBullet;
@@ -11,7 +12,6 @@ public class ExplodingAimedFiring implements FiringPattern {
     private final float fireRate;
     private float shootTimer;
     private final int numRadialBullets = 8;
-    private final float radialSpeed = 4f;
 
     public ExplodingAimedFiring(float fireRate) {
         this.fireRate = fireRate;
@@ -19,7 +19,7 @@ public class ExplodingAimedFiring implements FiringPattern {
     }
 
     @Override
-    public void update(float delta, Sprite sprite, Rectangle rectangle, Array<EnemyBullet> enemyBullets, Texture bulletTexture, Rectangle playerHitbox) {
+    public void update(float delta, Sprite sprite, Rectangle rectangle, Array<EnemyBullet> enemyBullets, Texture bulletTexture, Circle playerHitbox) {
         shootTimer += delta;
         if (shootTimer >= fireRate) {
             shootTimer = 0;

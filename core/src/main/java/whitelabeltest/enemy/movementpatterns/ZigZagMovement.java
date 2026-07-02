@@ -2,6 +2,7 @@ package whitelabeltest.enemy.movementpatterns;
 
 import com.badlogic.gdx.graphics.g2d.Sprite;
 import com.badlogic.gdx.math.MathUtils;
+import com.badlogic.gdx.math.Circle;
 import com.badlogic.gdx.math.Rectangle;
 
 public class ZigZagMovement implements MovementPattern {
@@ -16,7 +17,7 @@ public class ZigZagMovement implements MovementPattern {
     }
 
     @Override
-    public void update(float delta, Sprite sprite, Rectangle rectangle, float worldWidth, float worldHeight, Rectangle playerHitbox, boolean inverseMovement) {
+    public void update(float delta, Sprite sprite, Rectangle rectangle, float worldWidth, float worldHeight, Circle playerHitbox, boolean inverseMovement) {
         if (movingRight) {
             sprite.translateX(speedX * delta);
             if (sprite.getX() > worldWidth - sprite.getWidth()) {

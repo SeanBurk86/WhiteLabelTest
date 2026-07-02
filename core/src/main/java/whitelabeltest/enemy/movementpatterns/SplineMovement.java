@@ -3,6 +3,7 @@ package whitelabeltest.enemy.movementpatterns;
 import com.badlogic.gdx.graphics.g2d.Sprite;
 import com.badlogic.gdx.math.CatmullRomSpline;
 import com.badlogic.gdx.math.MathUtils;
+import com.badlogic.gdx.math.Circle;
 import com.badlogic.gdx.math.Rectangle;
 import com.badlogic.gdx.math.Vector2;
 
@@ -30,7 +31,7 @@ public class SplineMovement implements MovementPattern {
     }
 
     @Override
-    public void update(float delta, Sprite sprite, Rectangle rectangle, float worldWidth, float worldHeight, Rectangle playerHitbox, boolean inverseMovement) {
+    public void update(float delta, Sprite sprite, Rectangle rectangle, float worldWidth, float worldHeight, Circle playerHitbox, boolean inverseMovement) {
         pathTime += delta;
         float t = pathTime / pathDuration;
         if (t > 1f) t = 1f;
@@ -48,8 +49,8 @@ public class SplineMovement implements MovementPattern {
         sprite.setCenterY(finalY);
         rectangle.setPosition(sprite.getX(), sprite.getY());
 
-        float targetX = playerHitbox.x + playerHitbox.width / 2;
-        float targetY = playerHitbox.y + playerHitbox.height / 2;
+        float targetX = playerHitbox.x;
+        float targetY = playerHitbox.y;
         toPlayer.set(targetX - finalX, targetY - finalY); // Use finalX, finalY for rotation
         sprite.setRotation(toPlayer.angleDeg() + 90);
     }

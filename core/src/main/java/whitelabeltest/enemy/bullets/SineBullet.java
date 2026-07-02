@@ -41,7 +41,7 @@ public class SineBullet implements EnemyBullet {
         else sprite.setRegion(frames[0]);
 
         float aspectRatio = (float) frameHeight / frameWidth;
-        float baseWidth = 0.25f;
+        float baseWidth = 0.2f;
         sprite.setSize(baseWidth, baseWidth * aspectRatio);
         sprite.setOriginCenter();
         sprite.setCenterX(x);
@@ -56,7 +56,7 @@ public class SineBullet implements EnemyBullet {
         this.time = 0;
         this.animationTime = 0;
 
-        rectangle.set(sprite.getX(), sprite.getY(), sprite.getWidth(), sprite.getHeight());
+        rectangle.set(sprite.getX() + .036f, sprite.getY() + .036f, sprite.getWidth() * .6f, sprite.getHeight() * .6f);
     }
 
     @Override
@@ -74,7 +74,7 @@ public class SineBullet implements EnemyBullet {
         float vy = -speed;
         sprite.setRotation(new Vector2(vx, vy).angleDeg() - 90);
 
-        rectangle.setPosition(sprite.getX(), sprite.getY());
+        rectangle.setPosition(sprite.getX() + .036f, sprite.getY() + .036f);
     }
 
     @Override

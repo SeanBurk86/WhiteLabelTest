@@ -5,6 +5,7 @@ import com.badlogic.gdx.graphics.g2d.Animation;
 import com.badlogic.gdx.graphics.g2d.Sprite;
 import com.badlogic.gdx.graphics.g2d.SpriteBatch;
 import com.badlogic.gdx.graphics.g2d.TextureRegion;
+import com.badlogic.gdx.math.Circle;
 import com.badlogic.gdx.math.Rectangle;
 import com.badlogic.gdx.math.Vector2;
 import whitelabeltest.enemy.bullets.EnemyBullet;
@@ -22,13 +23,13 @@ public class ExplodingAimedBullet implements EnemyBullet {
     private float stateTime = 0;
     private final float explodeDuration = 0.4f;
     private boolean isAimed = false;
-    private Rectangle playerHitbox; // Reference to track for aiming trigger
+    private Circle playerHitbox; // Reference to track for aiming trigger
 
     public ExplodingAimedBullet() {
         this.rectangle = new Rectangle();
     }
 
-    public void init(Texture texture, float x, float y, float angle, Rectangle playerHitbox) {
+    public void init(Texture texture, float x, float y, float angle, Circle playerHitbox) {
         int frameWidth = texture.getWidth() / 3;
         int frameHeight = texture.getHeight();
         TextureRegion[][] tmp = TextureRegion.split(texture, frameWidth, frameHeight);
@@ -66,8 +67,8 @@ public class ExplodingAimedBullet implements EnemyBullet {
         if (!isAimed && stateTime >= explodeDuration) {
             isAimed = true;
             // Re-aim at player's CURRENT position
-            float targetX = playerHitbox.x + playerHitbox.width / 2;
-            float targetY = playerHitbox.y + playerHitbox.height / 2;
+            float targetX = playerHitbox.x;
+            float targetY = playerHitbox.y;
             float currentX = sprite.getX() + sprite.getWidth() / 2;
             float currentY = sprite.getY() + sprite.getHeight() / 2;
 

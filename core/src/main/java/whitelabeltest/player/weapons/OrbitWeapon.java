@@ -41,6 +41,7 @@ public class OrbitWeapon extends BaseWeapon {
         sprite.setColor(1, 1, 1, 1);
 
         this.damage = def.baseDamage + (level - 1) * def.damagePerLevel;
+        this.chainWindow = def.chainWindow;
         this.animationTime = 0;
     }
 

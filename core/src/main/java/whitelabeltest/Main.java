@@ -68,10 +68,12 @@ public class Main extends ApplicationAdapter {
         spriteBatch.setProjectionMatrix(viewport.getCamera().combined);
         spriteBatch.begin();
 
+        int bbWidth = Gdx.graphics.getBackBufferWidth();
+        int bbHeight = Gdx.graphics.getBackBufferHeight();
         scissorBL.set(0, 0, 0);
         scissorTR.set(PLAY_AREA_WIDTH, PLAY_AREA_HEIGHT, 0);
-        viewport.getCamera().project(scissorBL, viewport.getScreenX(), viewport.getScreenY(), viewport.getScreenWidth(), viewport.getScreenHeight());
-        viewport.getCamera().project(scissorTR, viewport.getScreenX(), viewport.getScreenY(), viewport.getScreenWidth(), viewport.getScreenHeight());
+        viewport.getCamera().project(scissorBL, 0, 0, bbWidth, bbHeight);
+        viewport.getCamera().project(scissorTR, 0, 0, bbWidth, bbHeight);
         Gdx.gl.glEnable(GL20.GL_SCISSOR_TEST);
         Gdx.gl.glScissor((int) scissorBL.x, (int) scissorBL.y, (int) (scissorTR.x - scissorBL.x), (int) (scissorTR.y - scissorBL.y));
 
@@ -80,7 +82,7 @@ public class Main extends ApplicationAdapter {
         spriteBatch.flush();
         Gdx.gl.glDisable(GL20.GL_SCISSOR_TEST);
 
-        ui.drawHUD(spriteBatch, game.getScore(), game.getEntities().getPlayer(), PLAY_AREA_HEIGHT, leftX);
+        ui.drawHUD(spriteBatch, game.getScoreManager(), game.getEntities().getPlayer(), PLAY_AREA_HEIGHT, leftX);
 
         if (isGameOver) {
             ui.drawGameOver(spriteBatch, PLAY_AREA_WIDTH, PLAY_AREA_HEIGHT);
@@ -98,9 +100,10 @@ public class Main extends ApplicationAdapter {
 
         EntityManager em = game.getEntities();
 
+        shapeRenderer.setColor(Color.GREEN);
+        shapeRenderer.circle(em.getPlayer().getGrazeHitbox().x, em.getPlayer().getGrazeHitbox().y, em.getPlayer().getGrazeHitbox().radius, 16);
         shapeRenderer.setColor(Color.BLUE);
-        shapeRenderer.rect(em.getPlayer().getHitbox().x, em.getPlayer().getHitbox().y,
-                          em.getPlayer().getHitbox().width, em.getPlayer().getHitbox().height);
+        shapeRenderer.circle(em.getPlayer().getHitbox().x, em.getPlayer().getHitbox().y, em.getPlayer().getHitbox().radius, 16);
 
         shapeRenderer.setColor(Color.RED);
         for (Enemy enemy : em.getEnemies()) {

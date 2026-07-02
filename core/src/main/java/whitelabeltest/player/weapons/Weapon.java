@@ -28,6 +28,7 @@ public interface Weapon extends Pool.Poolable {
     void playFireSound(AudioManager audio, int level);
 
     default boolean shouldDestroyOnCollision() { return true; }
+    default float getChainWindow() { return 2.0f; }
 
     void setLevel(int level);
     int getLevel();

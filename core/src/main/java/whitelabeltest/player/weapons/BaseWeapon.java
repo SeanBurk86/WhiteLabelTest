@@ -16,6 +16,7 @@ public abstract class BaseWeapon implements Weapon {
     protected Vector2 velocity = new Vector2();
     protected int damage;
     protected int level = 1;
+    protected float chainWindow = 2.0f;
 
     protected Path<Vector2> path;
     protected float pathTime = 0;
@@ -81,6 +82,8 @@ public abstract class BaseWeapon implements Weapon {
     public void setLevel(int level) { this.level = level; }
     @Override
     public int getLevel() { return level; }
+    @Override
+    public float getChainWindow() { return chainWindow; }
 
     @Override
     public void reset() {

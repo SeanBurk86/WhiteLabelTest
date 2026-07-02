@@ -40,6 +40,7 @@ public class HomingWeapon extends BaseWeapon {
         sprite.setY(y);
 
         this.damage = def.baseDamage + (level - 1) * def.damagePerLevel;
+        this.chainWindow = def.chainWindow;
         this.target = initialTarget;
         this.velocity.set(0, def.speed);
         this.animationTime = 0;

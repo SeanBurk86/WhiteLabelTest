@@ -12,6 +12,8 @@ public class WeaponDefinition {
     public float fireRatePerLevel;
     public float speed;
 
+    public float chainWindow = 2.0f;
+
     // Orbit specific
     public float radius;
     public float rotationSpeed;

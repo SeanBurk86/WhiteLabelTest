@@ -5,8 +5,8 @@ import com.badlogic.gdx.graphics.g2d.Animation;
 import com.badlogic.gdx.graphics.g2d.Sprite;
 import com.badlogic.gdx.graphics.g2d.SpriteBatch;
 import com.badlogic.gdx.graphics.g2d.TextureRegion;
+import com.badlogic.gdx.math.Circle;
 import com.badlogic.gdx.math.MathUtils;
-import com.badlogic.gdx.math.Rectangle;
 import com.badlogic.gdx.math.Vector2;
 import com.badlogic.gdx.utils.Array;
 import whitelabeltest.enemy.Enemy;
@@ -17,11 +17,11 @@ import whitelabeltest.player.weapons.*;
 
 public class Player {
     private final Sprite sprite;
-    private final Rectangle hitbox;
+    private final Circle hitbox;
+    private final Circle grazeHitbox;
     private final float movementSpeed = 7.5f;
     private final float worldWidth;
     private final float worldHeight;
-    private final Vector2 direction = new Vector2();
 
     private final Vector2 bulletSpawnOffset = new Vector2(0.25f, 0f);
 
@@ -32,11 +32,19 @@ public class Player {
 
     private Weapon currentWeapon;
     private float shootTimer;
+    private int numBombs;
+    private int numLives;
+    private int grazePoints;
 
     private final Animation<TextureRegion> animation;
     private float animationTime = 0;
 
+    private float invincibleFrameTime = 2f;
+    private float invincibilityTimer = 0f;
+    private boolean isInvincible;
+
     private static final int MAX_WEAPON_LEVEL = 4;
+    private static final float BLINK_INTERVAL = 0.1f;
 
     public Player(AssetManager assets, float worldWidth, float worldHeight) {
         this.worldWidth = worldWidth;
@@ -56,8 +64,10 @@ public class Player {
         sprite.setX(worldWidth / 2f - sprite.getWidth() / 2f);
         sprite.setY(0);
 
-        hitbox = new Rectangle();
+        hitbox = new Circle();
         updateHitbox();
+        grazeHitbox = new Circle();
+        updateGrazeHitbox();
 
         // Initialize weapons using the new dynamic AssetManager
         WeaponDefinition bDef = assets.getWeaponDefinition("BasicWeapon");
@@ -77,6 +87,10 @@ public class Player {
         orbitWeapon.init(oDef, assets.getTexture(oDef.texture), this, 0f);
 
         currentWeapon = basicWeapon;
+        numBombs = 1;
+        numLives = 3;
+        grazePoints = 0;
+        isInvincible = false;
     }
 
     public void update(float delta, InputManager input, AssetManager assets, AudioManager audio, Array<Weapon> bullets, Array<Enemy> enemies) {
@@ -86,6 +100,9 @@ public class Player {
         handleMovement(delta, input.getMoveDirection());
         handleShooting(delta, input.isShooting(), assets, audio, bullets, enemies);
         updateHitbox();
+        updateGrazeHitbox();
+        resolveGrazePoints();
+        resolveInvincibility(delta);
     }
 
     private void handleMovement(float delta, Vector2 moveDirection) {
@@ -120,17 +137,45 @@ public class Player {
     }
 
     private void updateHitbox() {
-        hitbox.set(sprite.getX() + (sprite.getWidth() * 0.2f),
-                   sprite.getY() + (sprite.getHeight() * 0.2f),
-                   sprite.getWidth() * 0.6f,
-                   sprite.getHeight() * 0.6f);
+        hitbox.set(getCenterX(), getCenterY(), Math.min(sprite.getWidth(), sprite.getHeight()) * 0.3f);
     }
 
-    public void draw(SpriteBatch batch) { sprite.draw(batch); }
+    private void updateGrazeHitbox() {
+        grazeHitbox.set(getCenterX(), getCenterY(), Math.min(sprite.getWidth(), sprite.getHeight()) * 1.3f);
+    }
+
+    private void resolveGrazePoints() {
+        if (grazePoints > 100) {
+            grazePoints %= 100;
+            numBombs++;
+        }
+    }
+
+    private void resolveInvincibility(float delta) {
+        if(isInvincible) {
+            invincibilityTimer += delta;
+            if (invincibilityTimer > invincibleFrameTime) {
+                isInvincible = false;
+                invincibilityTimer = 0f;
+            }
+        }
+    }
+
+    public void draw(SpriteBatch batch) {
+        if (isInvincible) {
+            boolean visible = ((int) (invincibilityTimer / BLINK_INTERVAL) % 2) == 0;
+            sprite.setAlpha(visible ? 1f : 0f);
+            sprite.draw(batch);
+            sprite.setAlpha(1f);
+        } else {
+            sprite.draw(batch);
+        }
+    }
 
     public void reset() {
         sprite.setPosition(worldWidth / 2f - sprite.getWidth() / 2f, 0);
         updateHitbox();
+        updateGrazeHitbox();
         basicWeapon.setLevel(1);
         waveBlastWeapon.setLevel(0);
         thunderWhipWeapon.setLevel(0);
@@ -138,20 +183,29 @@ public class Player {
         currentWeapon = basicWeapon;
         shootTimer = 0;
         animationTime = 0;
+        numBombs = 1;
+        numLives = 3;
+        isInvincible = false;
     }
 
-    public Rectangle getHitbox() { return hitbox; }
+    public Circle getHitbox() { return hitbox; }
+    public Circle getGrazeHitbox() { return grazeHitbox; }
+    public int getGrazePoints() { return grazePoints; }
+    public void setGrazePoints(int grazePoints) { this.grazePoints = grazePoints;}
+
     public float getCenterX() { return sprite.getX() + sprite.getWidth() / 2; }
     public float getCenterY() { return sprite.getY() + sprite.getHeight() / 2; }
     public Vector2 getBulletSpawnPoint() { return new Vector2(sprite.getX() + bulletSpawnOffset.x, sprite.getY() + bulletSpawnOffset.y); }
     public Weapon getWeaponPrototype() { return currentWeapon; }
 
     public void levelUpWeapon(String weaponId) {
-        Weapon target = null;
-        if (weaponId.equals("BasicWeapon")) target = basicWeapon;
-        else if (weaponId.equals("WaveBlastWeapon")) target = waveBlastWeapon;
-        else if (weaponId.equals("ThunderWhipWeapon")) target = thunderWhipWeapon;
-        else if (weaponId.equals("OrbitWeapon")) target = orbitWeapon;
+        Weapon target = switch (weaponId) {
+            case "BasicWeapon" -> basicWeapon;
+            case "WaveBlastWeapon" -> waveBlastWeapon;
+            case "ThunderWhipWeapon" -> thunderWhipWeapon;
+            case "OrbitWeapon" -> orbitWeapon;
+            default -> null;
+        };
 
         if (target != null) {
             target.setLevel(Math.min(target.getLevel() + 1, MAX_WEAPON_LEVEL));
@@ -160,10 +214,34 @@ public class Player {
     }
 
     public int getWeaponLevel(String weaponId) {
-        if (weaponId.equals("BasicWeapon")) return basicWeapon.getLevel();
-        if (weaponId.equals("WaveBlastWeapon")) return waveBlastWeapon.getLevel();
-        if (weaponId.equals("ThunderWhipWeapon")) return thunderWhipWeapon.getLevel();
-        if (weaponId.equals("OrbitWeapon")) return orbitWeapon.getLevel();
-        return 0;
+        return switch (weaponId) {
+            case "BasicWeapon" -> basicWeapon.getLevel();
+            case "WaveBlastWeapon" -> waveBlastWeapon.getLevel();
+            case "ThunderWhipWeapon" -> thunderWhipWeapon.getLevel();
+            case "OrbitWeapon" -> orbitWeapon.getLevel();
+            default -> 0;
+        };
+    }
+
+    public void startIFrames() {
+        isInvincible = true;
+    }
+
+    public int getNumBombs() { return numBombs;}
+
+    public void setNumBombs(int numBombs) {
+        this.numBombs = numBombs;
+    }
+
+    public int getNumLives() { return numLives; }
+
+    public void setNumLives(int numLives) { this.numLives = numLives; }
+
+    public boolean isInvincible() {
+        return isInvincible;
+    }
+
+    public void setInvincible(boolean invincible) {
+        isInvincible = invincible;
     }
 }

@@ -2,7 +2,7 @@ package whitelabeltest.enemy.firingpatterns;
 
 import com.badlogic.gdx.graphics.Texture;
 import com.badlogic.gdx.graphics.g2d.Sprite;
-import com.badlogic.gdx.math.MathUtils;
+import com.badlogic.gdx.math.Circle;
 import com.badlogic.gdx.math.Rectangle;
 import com.badlogic.gdx.utils.Array;
 import whitelabeltest.enemy.bullets.EnemyBullet;
@@ -19,11 +19,11 @@ public class SineWaveFiring implements FiringPattern {
 
     public SineWaveFiring(float fireRate) {
         this.fireRate = fireRate;
-        this.shootTimer = fireRate; // fire immediately on first update
+        this.shootTimer = fireRate;
     }
 
     @Override
-    public void update(float delta, Sprite sprite, Rectangle rectangle, Array<EnemyBullet> enemyBullets, Texture bulletTexture, Rectangle playerHitbox) {
+    public void update(float delta, Sprite sprite, Rectangle rectangle, Array<EnemyBullet> enemyBullets, Texture bulletTexture, Circle playerHitbox) {
         shootTimer += delta;
         if (shootTimer < fireRate) return;
         shootTimer = 0;
@@ -32,11 +32,11 @@ public class SineWaveFiring implements FiringPattern {
         float centerY = sprite.getY() + sprite.getHeight() / 2;
 
         SineBullet b1 = ObjectPools.sineBulletPool.obtain();
-        b1.init(bulletTexture, centerX, centerY, AMPLITUDE, FREQUENCY, 0, SPEED);
+        b1.init(bulletTexture, centerX + .35f, centerY, AMPLITUDE, FREQUENCY, 0, SPEED);
         enemyBullets.add(b1);
 
         SineBullet b2 = ObjectPools.sineBulletPool.obtain();
-        b2.init(bulletTexture, centerX, centerY, AMPLITUDE, FREQUENCY, MathUtils.PI, SPEED);
+        b2.init(bulletTexture, centerX - .35f, centerY, AMPLITUDE, FREQUENCY, 0, SPEED);
         enemyBullets.add(b2);
     }
 

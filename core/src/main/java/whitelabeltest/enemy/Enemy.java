@@ -2,6 +2,7 @@ package whitelabeltest.enemy;
 
 import com.badlogic.gdx.graphics.Texture;
 import com.badlogic.gdx.graphics.g2d.SpriteBatch;
+import com.badlogic.gdx.math.Circle;
 import com.badlogic.gdx.math.Rectangle;
 import com.badlogic.gdx.utils.Array;
 import com.badlogic.gdx.utils.Pool;
@@ -9,7 +10,7 @@ import whitelabeltest.enemy.bullets.EnemyBullet;
 
 public interface Enemy extends Pool.Poolable {
     void init(Texture texture, float worldWidth, float worldHeight, float startX, float startY);
-    void update(float delta, Array<EnemyBullet> enemyBullets, Texture bulletTexture, Rectangle playerHitbox);
+    void update(float delta, Array<EnemyBullet> enemyBullets, Texture bulletTexture, Circle playerHitbox);
     void draw(SpriteBatch batch);
     boolean isOffScreen();
     Rectangle getRectangle();
@@ -20,7 +21,7 @@ public interface Enemy extends Pool.Poolable {
     String getGuaranteedPowerup();
 
     // For movement pattern inversion
-    void setInvertMovement(boolean invert); // Added this method
+    void setInvertMovement(boolean invert);
 
     // Prototype methods
     Enemy create(Texture texture, float worldWidth, float worldHeight);

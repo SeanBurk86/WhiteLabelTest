@@ -2,6 +2,7 @@ package whitelabeltest.enemy.firingpatterns;
 
 import com.badlogic.gdx.graphics.Texture;
 import com.badlogic.gdx.graphics.g2d.Sprite;
+import com.badlogic.gdx.math.Circle;
 import com.badlogic.gdx.math.Rectangle;
 import com.badlogic.gdx.math.Vector2;
 import com.badlogic.gdx.utils.Array;
@@ -27,7 +28,7 @@ public class SweepFiring implements FiringPattern {
     }
 
     @Override
-    public void update(float delta, Sprite sprite, Rectangle rectangle, Array<EnemyBullet> enemyBullets, Texture bulletTexture, Rectangle playerHitbox) {
+    public void update(float delta, Sprite sprite, Rectangle rectangle, Array<EnemyBullet> enemyBullets, Texture bulletTexture, Circle playerHitbox) {
         sweepT += sweepDirection * delta / SWEEP_DURATION;
         if (sweepT >= 1f) { sweepT = 1f; sweepDirection = -1f; }
         else if (sweepT <= 0f) { sweepT = 0f; sweepDirection = 1f; }

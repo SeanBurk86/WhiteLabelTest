@@ -36,6 +36,7 @@ public class BasicWeapon extends BaseWeapon {
 
         this.velocity.set(dir).scl(speed);
         this.damage = def.baseDamage + (level - 1) * def.damagePerLevel;
+        this.chainWindow = def.chainWindow;
         this.animationTime = 0;
         this.path = null;
 

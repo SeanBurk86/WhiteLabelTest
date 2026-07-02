@@ -45,6 +45,7 @@ public class ThunderWhipWeapon extends BaseWeapon {
         sprite.setCenterX(x);
         sprite.setY(y);
 
+        this.chainWindow = def.chainWindow;
         for (Vector2 p : history) p.set(x, y);
 
         segments.clear();

@@ -1,6 +1,7 @@
 package whitelabeltest.enemy.movementpatterns;
 
 import com.badlogic.gdx.graphics.g2d.Sprite;
+import com.badlogic.gdx.math.Circle;
 import com.badlogic.gdx.math.Rectangle;
 
 public class StraightMovement implements MovementPattern {
@@ -11,7 +12,7 @@ public class StraightMovement implements MovementPattern {
     }
 
     @Override
-    public void update(float delta, Sprite sprite, Rectangle rectangle, float worldWidth, float worldHeight, Rectangle playerHitbox, boolean inverseMovement) {
+    public void update(float delta, Sprite sprite, Rectangle rectangle, float worldWidth, float worldHeight, Circle playerHitbox, boolean inverseMovement) {
         float currentSpeed = speed;
         if (inverseMovement) {
             currentSpeed = -speed; // Reverse direction
