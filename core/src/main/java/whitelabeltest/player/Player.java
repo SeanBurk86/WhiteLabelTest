@@ -42,6 +42,10 @@ public class Player {
     private final Animation<TextureRegion> deathAnimation;
     private final float deathDrawWidth, deathDrawHeight;
 
+    private final Animation<TextureRegion> haloAnimation;
+    private final float haloDrawWidth, haloDrawHeight;
+    private float haloAnimationTime = 0;
+
     private float invincibleFrameTime = 2f;
     private float invincibilityTimer = 0f;
     private boolean isInvincible;
@@ -50,6 +54,9 @@ public class Player {
     private float deathTimer;
     private float deathX, deathY;
     private static final float DEATH_WAIT = 2f;
+
+    private float grazeFlashTimer;
+    private static final float GRAZE_FLASH_DURATION = 0.12f;
 
     private static final int MAX_WEAPON_LEVEL = 4;
     private static final float BLINK_INTERVAL = 0.1f;
@@ -82,6 +89,17 @@ public class Player {
         deathAnimation.setPlayMode(Animation.PlayMode.NORMAL);
         deathDrawWidth = 3f;
         deathDrawHeight = 3f;
+
+        Texture haloTexture = assets.playerHaloTexture;
+        int haloFrameWidth = haloTexture.getWidth() / 94;
+        int haloFrameHeight = haloTexture.getHeight();
+        TextureRegion[][] haloTmp = TextureRegion.split(haloTexture, haloFrameWidth, haloFrameHeight);
+        TextureRegion[] haloFrames = new TextureRegion[94];
+        System.arraycopy(haloTmp[0], 0, haloFrames, 0, 94);
+        haloAnimation = new Animation<>(1f / 24f, haloFrames);
+        haloAnimation.setPlayMode(Animation.PlayMode.LOOP);
+        haloDrawWidth = 2.225f;
+        haloDrawHeight = 2.225f * ((float) haloFrameHeight / haloFrameWidth);
 
         hitbox = new Circle();
         updateHitbox();
@@ -127,6 +145,8 @@ public class Player {
         }
 
         animationTime += delta;
+        haloAnimationTime += delta;
+        if (grazeFlashTimer > 0) grazeFlashTimer -= delta;
         sprite.setRegion(animation.getKeyFrame(animationTime));
 
         handleMovement(delta, input.getMoveDirection());
@@ -201,12 +221,26 @@ public class Player {
             }
             return;
         }
+
+        // Halo drawn under the player sprite, centered on the player
+        TextureRegion haloFrame = haloAnimation.getKeyFrame(haloAnimationTime);
+        float haloX = sprite.getX() + sprite.getWidth() / 2f - haloDrawWidth / 2f;
+        float haloY = sprite.getY() + sprite.getHeight() / 2f - haloDrawHeight / 2f;
+        boolean grazeFlashing = grazeFlashTimer > 0;
+
         if (isInvincible) {
             boolean visible = ((int) (invincibilityTimer / BLINK_INTERVAL) % 2) == 0;
+            float alpha = visible ? 1f : 0f;
+            batch.setColor(grazeFlashing ? 0.3f : 1f, grazeFlashing ? 0.6f : 1f, 1f, alpha);
+            batch.draw(haloFrame, haloX, haloY, haloDrawWidth, haloDrawHeight);
+            batch.setColor(1f, 1f, 1f, 1f);
             sprite.setAlpha(visible ? 1f : 0f);
             sprite.draw(batch);
             sprite.setAlpha(1f);
         } else {
+            batch.setColor(grazeFlashing ? 0.3f : 1f, grazeFlashing ? 0.6f : 1f, 1f, 1f);
+            batch.draw(haloFrame, haloX, haloY, haloDrawWidth, haloDrawHeight);
+            batch.setColor(1f, 1f, 1f, 1f);
             sprite.draw(batch);
         }
     }
@@ -264,6 +298,14 @@ public class Player {
         };
     }
 
+    public void triggerGrazeFlash() {
+        grazeFlashTimer = GRAZE_FLASH_DURATION;
+    }
+
+    public void disableGrazeHitbox() {
+        grazeHitbox.radius = 0f;
+    }
+
     public void startDeath() {
         deathX = sprite.getX();
         deathY = sprite.getY();
@@ -271,6 +313,7 @@ public class Player {
         deathTimer = 0f;
         isInvincible = false;
         invincibilityTimer = 0f;
+        disableGrazeHitbox();
     }
 
     public boolean isDead() { return isDead; }
