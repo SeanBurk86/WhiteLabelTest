@@ -14,12 +14,18 @@ import whitelabeltest.enemy.Enemy;
 import whitelabeltest.enemy.bullets.EnemyBullet;
 import whitelabeltest.gamemanagers.EntityManager;
 import whitelabeltest.gamemanagers.GameController;
+import whitelabeltest.gamemanagers.InputType;
 import whitelabeltest.gamemanagers.UIManager;
 import whitelabeltest.player.powerups.Powerup;
 
 public class Main extends ApplicationAdapter {
+    private enum AppState { START, PLAYING }
+
+    private AppState state = AppState.START;
+    private StartScreen startScreen;
     private UIManager ui;
     private GameController game;
+
     private SpriteBatch spriteBatch;
     private ShapeRenderer shapeRenderer;
     private ExtendViewport viewport;
@@ -32,22 +38,44 @@ public class Main extends ApplicationAdapter {
 
     @Override
     public void create() {
-        game = new GameController(PLAY_AREA_WIDTH, PLAY_AREA_HEIGHT);
-        ui = new UIManager();
-
         spriteBatch = new SpriteBatch();
         shapeRenderer = new ShapeRenderer();
         viewport = new ExtendViewport(PLAY_AREA_WIDTH, PLAY_AREA_HEIGHT);
+        startScreen = new StartScreen(PLAY_AREA_WIDTH, PLAY_AREA_HEIGHT);
     }
 
     @Override
     public void render() {
         float delta = Gdx.graphics.getDeltaTime();
-        game.update(delta);
-        draw();
+        if (state == AppState.START) {
+            InputType detected = startScreen.update(delta);
+            drawStartScreen();
+            if (detected != null) transitionToGame(detected);
+        } else {
+            game.update(delta);
+            drawGame();
+        }
     }
 
-    private void draw() {
+    private void transitionToGame(InputType inputType) {
+        startScreen.dispose();
+        startScreen = null;
+        game = new GameController(PLAY_AREA_WIDTH, PLAY_AREA_HEIGHT);
+        game.setActiveInput(inputType);
+        ui = new UIManager(inputType);
+        state = AppState.PLAYING;
+    }
+
+    private void drawStartScreen() {
+        ScreenUtils.clear(Color.BLACK);
+        viewport.apply();
+        spriteBatch.setProjectionMatrix(viewport.getCamera().combined);
+        spriteBatch.begin();
+        startScreen.draw(spriteBatch);
+        spriteBatch.end();
+    }
+
+    private void drawGame() {
         boolean isGameOver = game.isGameOver();
         ScreenUtils.clear(isGameOver ? new Color(0.2f, 0, 0, 1) : Color.BLACK);
 
@@ -138,6 +166,7 @@ public class Main extends ApplicationAdapter {
 
     @Override
     public void dispose() {
+        if (startScreen != null) startScreen.dispose();
         if (game != null) game.dispose();
         if (ui != null) ui.dispose();
         if (spriteBatch != null) spriteBatch.dispose();

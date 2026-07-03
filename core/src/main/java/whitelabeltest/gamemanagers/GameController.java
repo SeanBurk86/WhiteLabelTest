@@ -173,6 +173,10 @@ public class GameController implements Disposable {
         background.dispose();
     }
 
+    public void setActiveInput(InputType inputType) {
+        input.setActiveInput(inputType);
+    }
+
     public int getScore() { return scoreManager.getScore(); }
     public int getHighScore() { return scoreManager.getHighScore(); }
     public ScoreManager getScoreManager() { return scoreManager; }

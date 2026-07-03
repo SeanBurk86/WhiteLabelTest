@@ -13,8 +13,10 @@ public class UIManager implements Disposable {
     private final BitmapFont font;
     private final GlyphLayout gameOverLayout;
     private final Texture whitePixel;
+    private final InputType inputType;
 
-    public UIManager() {
+    public UIManager(InputType inputType) {
+        this.inputType = inputType;
         font = new BitmapFont();
         font.setUseIntegerPositions(false);
         font.getData().setScale(0.02f);
@@ -83,7 +85,8 @@ public class UIManager implements Disposable {
 
     public void drawGameOver(SpriteBatch batch, float worldWidth, float worldHeight) {
         font.setColor(Color.RED);
-        gameOverLayout.setText(font, "GAME OVER\nPress R to Restart\nPress Q to Quit");
+        if (inputType == InputType.KEYBOARD) {gameOverLayout.setText(font, "GAME OVER\nPress R to Restart\nPress Q to Quit");}
+        else gameOverLayout.setText(font, "GAME OVER\nPress Start to Restart\nPress Select to Quit");
         font.draw(batch, gameOverLayout, (worldWidth - gameOverLayout.width) / 2, (worldHeight + gameOverLayout.height) / 2);
         font.setColor(Color.WHITE);
     }

@@ -14,8 +14,13 @@ public class InputManager {
     private boolean quitJustPressed;
     private boolean debugToggleJustPressed;
 
+    private InputType activeInput = InputType.KEYBOARD;
+
+    public void setActiveInput(InputType type) {
+        this.activeInput = type;
+    }
+
     public void update() {
-        // Reset state
         moveDirection.set(0, 0);
         isShooting = false;
         bombJustPressed = false;
@@ -23,44 +28,43 @@ public class InputManager {
         quitJustPressed = false;
         debugToggleJustPressed = false;
 
-        // Keyboard Movement
-        if (Gdx.input.isKeyPressed(Input.Keys.LEFT)) moveDirection.x -= 1;
-        if (Gdx.input.isKeyPressed(Input.Keys.RIGHT)) moveDirection.x += 1;
-        if (Gdx.input.isKeyPressed(Input.Keys.UP)) moveDirection.y += 1;
-        if (Gdx.input.isKeyPressed(Input.Keys.DOWN)) moveDirection.y -= 1;
+        if (activeInput == InputType.KEYBOARD) {
+            if (Gdx.input.isKeyPressed(Input.Keys.LEFT)) moveDirection.x -= 1;
+            if (Gdx.input.isKeyPressed(Input.Keys.RIGHT)) moveDirection.x += 1;
+            if (Gdx.input.isKeyPressed(Input.Keys.UP)) moveDirection.y += 1;
+            if (Gdx.input.isKeyPressed(Input.Keys.DOWN)) moveDirection.y -= 1;
 
-        // Keyboard Actions
-        isShooting = Gdx.input.isKeyPressed(Input.Keys.SPACE);
-        bombJustPressed = Gdx.input.isKeyJustPressed(Input.Keys.SHIFT_LEFT);
-        restartJustPressed = Gdx.input.isKeyJustPressed(Input.Keys.R);
-        quitJustPressed = Gdx.input.isKeyJustPressed(Input.Keys.Q);
-        debugToggleJustPressed = Gdx.input.isKeyJustPressed(Input.Keys.F12);
-
-        // Gamepad Input
-        Controller controller = Controllers.getCurrent();
-        if (controller != null) {
-            // Analog sticks
-            float axisX = controller.getAxis(controller.getMapping().axisLeftX);
-            float axisY = controller.getAxis(controller.getMapping().axisLeftY);
-
-            if (Math.abs(axisX) > 0.2f) moveDirection.x += axisX;
-            if (Math.abs(axisY) > 0.2f) moveDirection.y -= axisY;
-
-            // D-Pad Support
-            if (controller.getButton(controller.getMapping().buttonDpadLeft)) moveDirection.x -= 1;
-            if (controller.getButton(controller.getMapping().buttonDpadRight)) moveDirection.x += 1;
-            if (controller.getButton(controller.getMapping().buttonDpadUp)) moveDirection.y += 1;
-            if (controller.getButton(controller.getMapping().buttonDpadDown)) moveDirection.y -= 1;
-
-            // Buttons
-            isShooting |= controller.getButton(controller.getMapping().buttonA);
-            isShooting |= controller.getButton(controller.getMapping().buttonR1);
-
-            if (controller.getButton(controller.getMapping().buttonB)) bombJustPressed = true;
-
-            if (controller.getButton(controller.getMapping().buttonStart)) restartJustPressed = true;
-            if (controller.getButton(controller.getMapping().buttonBack)) quitJustPressed = true;
+            isShooting = Gdx.input.isKeyPressed(Input.Keys.SPACE);
+            bombJustPressed = Gdx.input.isKeyJustPressed(Input.Keys.SHIFT_LEFT);
+            restartJustPressed = Gdx.input.isKeyJustPressed(Input.Keys.R);
+            quitJustPressed = Gdx.input.isKeyJustPressed(Input.Keys.Q);
         }
+
+        if (activeInput == InputType.GAMEPAD) {
+            Controller controller = Controllers.getCurrent();
+            if (controller != null) {
+                float axisX = controller.getAxis(controller.getMapping().axisLeftX);
+                float axisY = controller.getAxis(controller.getMapping().axisLeftY);
+
+                if (Math.abs(axisX) > 0.2f) moveDirection.x += axisX;
+                if (Math.abs(axisY) > 0.2f) moveDirection.y -= axisY;
+
+                if (controller.getButton(controller.getMapping().buttonDpadLeft)) moveDirection.x -= 1;
+                if (controller.getButton(controller.getMapping().buttonDpadRight)) moveDirection.x += 1;
+                if (controller.getButton(controller.getMapping().buttonDpadUp)) moveDirection.y += 1;
+                if (controller.getButton(controller.getMapping().buttonDpadDown)) moveDirection.y -= 1;
+
+                isShooting |= controller.getButton(controller.getMapping().buttonA);
+                isShooting |= controller.getButton(controller.getMapping().buttonR1);
+
+                if (controller.getButton(controller.getMapping().buttonB)) bombJustPressed = true;
+                if (controller.getButton(controller.getMapping().buttonStart)) restartJustPressed = true;
+                if (controller.getButton(controller.getMapping().buttonBack)) quitJustPressed = true;
+            }
+        }
+
+        // Debug toggle always available regardless of input mode
+        debugToggleJustPressed = Gdx.input.isKeyJustPressed(Input.Keys.F12);
 
         if (moveDirection.len() > 1.0f) {
             moveDirection.nor();
@@ -69,7 +73,7 @@ public class InputManager {
 
     public Vector2 getMoveDirection() { return moveDirection; }
     public boolean isShooting() { return isShooting; }
-    public boolean isBombJustPressed() {return bombJustPressed; }
+    public boolean isBombJustPressed() { return bombJustPressed; }
     public boolean isRestartJustPressed() { return restartJustPressed; }
     public boolean isQuitJustPressed() { return quitJustPressed; }
     public boolean isDebugToggleJustPressed() { return debugToggleJustPressed; }
