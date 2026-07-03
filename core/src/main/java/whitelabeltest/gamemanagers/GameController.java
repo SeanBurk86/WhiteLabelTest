@@ -19,6 +19,7 @@ public class GameController implements Disposable {
 
     private final ScoreManager scoreManager;
     private boolean gameOver;
+    private boolean levelComplete;
     private boolean debugMode;
     private final float worldWidth, worldHeight;
 
@@ -55,7 +56,7 @@ public class GameController implements Disposable {
             handleBomb();
         }
 
-        if (gameOver) {
+        if (gameOver || levelComplete) {
             handleGameOverInput();
             return;
         }
@@ -63,6 +64,11 @@ public class GameController implements Disposable {
         background.update();
         entities.update(delta, input, assets, audio);
         spawnScheduler.update(delta, entities);
+
+        if (entities.consumeBossKilled()) {
+            levelComplete = true;
+            return;
+        }
 
         if (!entities.getPlayer().isInvincible() && !entities.getPlayer().isDead()) {
             if (collisionManager.checkPlayerEnemyCollisions(entities.getPlayer(), entities.getEnemies()) ||
@@ -115,6 +121,7 @@ public class GameController implements Disposable {
     }
 
     public static int destroyEnemy(Array<Enemy> enemies, AudioManager audio, EntityManager entityManager, AssetManager assets, float worldWidth, float worldHeight, Enemy enemy) {
+        boolean wasBoss = enemy.isBoss();
         enemies.removeValue(enemy, false);
 
         float centerX = enemy.getRectangle().x + enemy.getRectangle().width / 2;
@@ -131,7 +138,8 @@ public class GameController implements Disposable {
 
         ObjectPools.freeEnemy(enemy);
         audio.playExplosion();
-        return 10;
+        if (wasBoss) entityManager.notifyBossKilled();
+        return wasBoss ? 1000 : 10;
     }
 
     public static void spawnPowerup(Array<Powerup> powerups, AssetManager assets, float x, float y, float worldWidth, float worldHeight, String forcedType) {
@@ -163,6 +171,7 @@ public class GameController implements Disposable {
     public void reset() {
         scoreManager.reset();
         gameOver = false;
+        levelComplete = false;
         entities.reset();
         collisionManager.reset();
         background.reset();
@@ -184,6 +193,7 @@ public class GameController implements Disposable {
     public int getHighScore() { return scoreManager.getHighScore(); }
     public ScoreManager getScoreManager() { return scoreManager; }
     public boolean isGameOver() { return gameOver; }
+    public boolean isLevelComplete() { return levelComplete; }
     public boolean isDebugMode() { return debugMode; }
     public EntityManager getEntities() { return entities; }
     public CollisionManager getCollisionManager() { return collisionManager; }

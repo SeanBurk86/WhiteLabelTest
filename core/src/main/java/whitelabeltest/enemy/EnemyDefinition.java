@@ -10,6 +10,7 @@ public class EnemyDefinition {
     public String movementType;
     public float speed;
     public boolean inverseMovement = false;
+    public boolean isBoss = false;
     // Legacy single-pattern fields — used when firingPattern is absent
     public String firingType;
     public float fireRate;

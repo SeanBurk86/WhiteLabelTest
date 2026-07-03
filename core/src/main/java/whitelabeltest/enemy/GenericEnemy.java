@@ -92,5 +92,8 @@ public class GenericEnemy extends BaseEnemy {
     }
 
     @Override
+    public boolean isBoss() { return def != null && def.isBoss; }
+
+    @Override
     public float getSpawnRate() { return 1.0f; }
 }

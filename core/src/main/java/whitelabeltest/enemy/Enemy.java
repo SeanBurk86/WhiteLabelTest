@@ -15,6 +15,7 @@ public interface Enemy extends Pool.Poolable {
     boolean isOffScreen();
     Rectangle getRectangle();
     boolean takeDamage(int amount); // Returns true if destroyed
+    default boolean isBoss() { return false; }
 
     // Powerup drop logic
     void setGuaranteedPowerup(String powerupType);

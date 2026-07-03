@@ -26,6 +26,7 @@ public class EntityManager {
     private final float bombDrawWidth, bombDrawHeight;
     private float bombAnimationTime;
     private boolean bombActive;
+    private boolean bossKilled;
 
     public EntityManager(AssetManager assets, float worldWidth, float worldHeight) {
         this.worldWidth = worldWidth;
@@ -176,6 +177,9 @@ public class EntityManager {
             ObjectPools.freeEnemyBullet(b);
         }
     }
+
+    public void notifyBossKilled() { bossKilled = true; }
+    public boolean consumeBossKilled() { boolean v = bossKilled; bossKilled = false; return v; }
 
     public Player getPlayer() { return player; }
     public Array<Enemy> getEnemies() { return enemies; }
