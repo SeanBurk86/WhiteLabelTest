@@ -1,6 +1,9 @@
 package whitelabeltest.gamemanagers;
 
+import com.badlogic.gdx.graphics.GL20;
+import com.badlogic.gdx.graphics.g2d.Animation;
 import com.badlogic.gdx.graphics.g2d.SpriteBatch;
+import com.badlogic.gdx.graphics.g2d.TextureRegion;
 import com.badlogic.gdx.utils.Array;
 import whitelabeltest.enemy.Enemy;
 import whitelabeltest.enemy.bullets.EnemyBullet;
@@ -19,9 +22,33 @@ public class EntityManager {
     private final float worldWidth;
     private final float worldHeight;
 
+    private final Animation<TextureRegion> bombAnimation;
+    private final float bombDrawWidth, bombDrawHeight;
+    private float bombAnimationTime;
+    private boolean bombActive;
+
     public EntityManager(AssetManager assets, float worldWidth, float worldHeight) {
         this.worldWidth = worldWidth;
         this.worldHeight = worldHeight;
+
+        // Frame size is 480×480; sprite is exported as a grid (e.g. 13 cols × 8 rows)
+        // so that the texture width stays within GPU max-texture-size limits.
+        int bombFrameWidth  = 480;
+        int bombFrameHeight = 480;
+        TextureRegion[][] bombGrid   = TextureRegion.split(assets.bombSpriteTexture, bombFrameWidth, bombFrameHeight);
+        TextureRegion[]   bombFrames = new TextureRegion[104];
+        int bombIdx = 0;
+        outer:
+        for (TextureRegion[] row : bombGrid)
+            for (TextureRegion cell : row) {
+                if (bombIdx >= 104) break outer;
+                bombFrames[bombIdx++] = cell;
+            }
+        bombAnimation = new Animation<>(1f / 60f, bombFrames);
+        bombAnimation.setPlayMode(Animation.PlayMode.NORMAL);
+        bombDrawWidth = worldWidth;
+        bombDrawHeight = worldWidth * ((float) bombFrameHeight / bombFrameWidth);
+
         this.player = new Player(assets, worldWidth, worldHeight);
         this.enemies = new Array<>();
         this.bullets = new Array<>();
@@ -30,7 +57,16 @@ public class EntityManager {
         this.explosions = new Array<>();
     }
 
+    public void triggerBombEffect() {
+        bombActive = true;
+        bombAnimationTime = 0f;
+    }
+
     public void update(float delta, InputManager input, AssetManager assets, AudioManager audio) {
+        if (bombActive) {
+            bombAnimationTime += delta;
+            if (bombAnimation.isAnimationFinished(bombAnimationTime)) bombActive = false;
+        }
         player.update(delta, input, assets, audio, bullets, enemies);
 
         updateCollections(delta, assets);
@@ -95,6 +131,18 @@ public class EntityManager {
         // Powerups and particles
         for (Powerup p : powerups) p.draw(batch);
         for (ExplosionEffect e : explosions) e.draw(batch);
+
+        // Bomb effect: additive blend so the black background of the VFX sprite is transparent.
+        if (bombActive) {
+            TextureRegion frame = bombAnimation.getKeyFrame(bombAnimationTime);
+            float bx = worldWidth / 2f - bombDrawWidth / 2f;
+            float by = worldHeight / 2f - bombDrawHeight / 2f;
+            batch.setColor(1f, 1f, 1f, 1f);
+            batch.setBlendFunction(GL20.GL_ONE, GL20.GL_ONE);
+            batch.draw(frame, bx, by, bombDrawWidth, bombDrawHeight);
+            batch.flush();
+            batch.setBlendFunction(GL20.GL_SRC_ALPHA, GL20.GL_ONE_MINUS_SRC_ALPHA);
+        }
 
         // Player drawn on very top
         player.draw(batch);

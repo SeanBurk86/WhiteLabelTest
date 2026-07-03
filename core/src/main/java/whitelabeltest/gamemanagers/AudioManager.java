@@ -9,6 +9,7 @@ import com.badlogic.gdx.utils.ObjectMap;
 
 public class AudioManager implements Disposable {
     private final Sound playerDeathSound;
+    private final Sound bombSound;
     private final ObjectMap<Integer, Array<Sound>> explosionSounds;
     private final ObjectMap<Integer, Array<Sound>> basicWeaponSounds;
     private final ObjectMap<Integer, Array<Sound>> thunderWhipWeaponSounds;
@@ -18,6 +19,7 @@ public class AudioManager implements Disposable {
 
     public AudioManager() {
         playerDeathSound = Gdx.audio.newSound(Gdx.files.internal("playerdeath.mp3"));
+        bombSound = Gdx.audio.newSound(Gdx.files.internal("bombsound.mp3"));
         Json json = new Json();
         basicWeaponSounds = new ObjectMap<>();
         thunderWhipWeaponSounds = new ObjectMap<>();
@@ -62,6 +64,10 @@ public class AudioManager implements Disposable {
         playerDeathSound.play();
     }
 
+    public void playBomb() {
+        bombSound.play();
+    }
+
     public void playExplosion() {
         if (explosionSounds != null) explosionSounds.get(1).random().play();
     }
@@ -89,6 +95,7 @@ public class AudioManager implements Disposable {
     @Override
     public void dispose() {
         playerDeathSound.dispose();
+        bombSound.dispose();
         disposeSoundsMap(explosionSounds);
         disposeSoundsMap(basicWeaponSounds);
         disposeSoundsMap(thunderWhipWeaponSounds);

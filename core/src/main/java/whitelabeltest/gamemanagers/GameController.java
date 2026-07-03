@@ -96,12 +96,12 @@ public class GameController implements Disposable {
     }
 
     private void handleBomb() {
-
-        // check if bomb is ready
         if (entities.getPlayer().getNumBombs() > 0 && !gameOver) {
             sufferBombDamage(50, entities.getEnemies());
             entities.destroyAllEnemyBullets();
             entities.getPlayer().setNumBombs(entities.getPlayer().getNumBombs() - 1);
+            entities.triggerBombEffect();
+            audio.playBomb();
         }
     }
 

@@ -19,6 +19,7 @@ public class AssetManager implements Disposable {
     public final Texture playerTexture;
     public final Texture playerDeathTexture;
     public final Texture playerHaloTexture;
+    public final Texture bombSpriteTexture;
     public final Texture bulletTexture;
     public final Texture[] explosionTextures;
     public final Texture powerup1, powerup2, powerup3, powerup4;
@@ -50,6 +51,7 @@ public class AssetManager implements Disposable {
         playerTexture = new Texture("PlayerSprite.png");
         playerDeathTexture = new Texture("PlayerSpriteDeath.png");
         playerHaloTexture = new Texture("PlayerSpriteHalo.png");
+        bombSpriteTexture = new Texture("BombSprite.png");
 
         explosionTextures = new Texture[5];
         for (int i = 0; i < 5; i++) {
@@ -96,6 +98,7 @@ public class AssetManager implements Disposable {
         playerTexture.dispose();
         playerDeathTexture.dispose();
         playerHaloTexture.dispose();
+        bombSpriteTexture.dispose();
         bulletTexture.dispose();
         for (Texture t : explosionTextures) t.dispose();
         powerup1.dispose();
