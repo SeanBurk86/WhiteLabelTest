@@ -15,6 +15,7 @@ public class InputManager {
     private boolean debugToggleJustPressed;
 
     private InputType activeInput = InputType.KEYBOARD;
+    private boolean prevBombButton;
 
     public void setActiveInput(InputType type) {
         this.activeInput = type;
@@ -57,7 +58,9 @@ public class InputManager {
                 isShooting |= controller.getButton(controller.getMapping().buttonA);
                 isShooting |= controller.getButton(controller.getMapping().buttonR1);
 
-                if (controller.getButton(controller.getMapping().buttonB)) bombJustPressed = true;
+                boolean bombButton = controller.getButton(controller.getMapping().buttonB);
+                if (bombButton && !prevBombButton) bombJustPressed = true;
+                prevBombButton = bombButton;
                 if (controller.getButton(controller.getMapping().buttonStart)) restartJustPressed = true;
                 if (controller.getButton(controller.getMapping().buttonBack)) quitJustPressed = true;
             }
