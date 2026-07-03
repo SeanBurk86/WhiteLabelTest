@@ -29,6 +29,7 @@ public interface Weapon extends Pool.Poolable {
 
     default boolean shouldDestroyOnCollision() { return true; }
     default float getChainWindow() { return 2.0f; }
+    default float getShootSpeedMultiplier() { return 0.75f; }
 
     void setLevel(int level);
     int getLevel();

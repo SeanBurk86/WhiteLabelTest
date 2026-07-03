@@ -46,6 +46,7 @@ public class ThunderWhipWeapon extends BaseWeapon {
         sprite.setY(y);
 
         this.chainWindow = def.chainWindow;
+        this.shootSpeedMultiplier = def.shootSpeedMultiplier;
         for (Vector2 p : history) p.set(x, y);
 
         segments.clear();

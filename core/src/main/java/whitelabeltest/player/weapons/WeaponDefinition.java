@@ -13,6 +13,7 @@ public class WeaponDefinition {
     public float speed;
 
     public float chainWindow = 2.0f;
+    public float shootSpeedMultiplier = 0.75f;
 
     // Orbit specific
     public float radius;

@@ -149,7 +149,7 @@ public class Player {
         if (grazeFlashTimer > 0) grazeFlashTimer -= delta;
         sprite.setRegion(animation.getKeyFrame(animationTime));
 
-        handleMovement(delta, input.getMoveDirection());
+        handleMovement(delta, input.getMoveDirection(), input.isShooting());
         handleShooting(delta, input.isShooting(), assets, audio, bullets, enemies);
         updateHitbox();
         updateGrazeHitbox();
@@ -157,10 +157,11 @@ public class Player {
         resolveInvincibility(delta);
     }
 
-    private void handleMovement(float delta, Vector2 moveDirection) {
+    private void handleMovement(float delta, Vector2 moveDirection, boolean isShooting) {
+        float speed = isShooting ? movementSpeed * currentWeapon.getShootSpeedMultiplier() : movementSpeed;
         if (moveDirection.x != 0 || moveDirection.y != 0) {
-            sprite.translateX(moveDirection.x * movementSpeed * delta);
-            sprite.translateY(moveDirection.y * movementSpeed * delta);
+            sprite.translateX(moveDirection.x * speed * delta);
+            sprite.translateY(moveDirection.y * speed * delta);
         }
         sprite.setX(MathUtils.clamp(sprite.getX(), 0, worldWidth - sprite.getWidth()));
         sprite.setY(MathUtils.clamp(sprite.getY(), 0, worldHeight - sprite.getHeight()));
