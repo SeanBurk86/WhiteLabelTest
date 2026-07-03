@@ -39,9 +39,17 @@ public class Player {
     private final Animation<TextureRegion> animation;
     private float animationTime = 0;
 
+    private final Animation<TextureRegion> deathAnimation;
+    private final float deathDrawWidth, deathDrawHeight;
+
     private float invincibleFrameTime = 2f;
     private float invincibilityTimer = 0f;
     private boolean isInvincible;
+
+    private boolean isDead;
+    private float deathTimer;
+    private float deathX, deathY;
+    private static final float DEATH_WAIT = 2f;
 
     private static final int MAX_WEAPON_LEVEL = 4;
     private static final float BLINK_INTERVAL = 0.1f;
@@ -63,6 +71,17 @@ public class Player {
         sprite.setSize(0.5f, 0.5f * ((float) frameHeight / frameWidth));
         sprite.setX(worldWidth / 2f - sprite.getWidth() / 2f);
         sprite.setY(0);
+
+        Texture deathTexture = assets.playerDeathTexture;
+        int deathFrameWidth = deathTexture.getWidth() / 30;
+        int deathFrameHeight = deathTexture.getHeight();
+        TextureRegion[][] deathTmp = TextureRegion.split(deathTexture, deathFrameWidth, deathFrameHeight);
+        TextureRegion[] deathFrames = new TextureRegion[30];
+        System.arraycopy(deathTmp[0], 0, deathFrames, 0, 30);
+        deathAnimation = new Animation<>(1f / 30f, deathFrames);
+        deathAnimation.setPlayMode(Animation.PlayMode.NORMAL);
+        deathDrawWidth = 3f;
+        deathDrawHeight = 3f;
 
         hitbox = new Circle();
         updateHitbox();
@@ -94,6 +113,19 @@ public class Player {
     }
 
     public void update(float delta, InputManager input, AssetManager assets, AudioManager audio, Array<Weapon> bullets, Array<Enemy> enemies) {
+        if (isDead) {
+            deathTimer += delta;
+            if (deathTimer >= DEATH_WAIT) {
+                isDead = false;
+                deathTimer = 0f;
+                sprite.setPosition(deathX, deathY);
+                updateHitbox();
+                updateGrazeHitbox();
+                startIFrames();
+            }
+            return;
+        }
+
         animationTime += delta;
         sprite.setRegion(animation.getKeyFrame(animationTime));
 
@@ -162,6 +194,13 @@ public class Player {
     }
 
     public void draw(SpriteBatch batch) {
+        if (isDead) {
+            if (!deathAnimation.isAnimationFinished(deathTimer)) {
+                TextureRegion frame = deathAnimation.getKeyFrame(deathTimer);
+                batch.draw(frame, sprite.getX() - (deathDrawWidth/2.5f), sprite.getY()  - (deathDrawHeight/2.5f), deathDrawWidth, deathDrawHeight);
+            }
+            return;
+        }
         if (isInvincible) {
             boolean visible = ((int) (invincibilityTimer / BLINK_INTERVAL) % 2) == 0;
             sprite.setAlpha(visible ? 1f : 0f);
@@ -186,6 +225,8 @@ public class Player {
         numBombs = 1;
         numLives = 3;
         isInvincible = false;
+        isDead = false;
+        deathTimer = 0f;
     }
 
     public Circle getHitbox() { return hitbox; }
@@ -222,6 +263,17 @@ public class Player {
             default -> 0;
         };
     }
+
+    public void startDeath() {
+        deathX = sprite.getX();
+        deathY = sprite.getY();
+        isDead = true;
+        deathTimer = 0f;
+        isInvincible = false;
+        invincibilityTimer = 0f;
+    }
+
+    public boolean isDead() { return isDead; }
 
     public void startIFrames() {
         isInvincible = true;

@@ -51,7 +51,7 @@ public class GameController implements Disposable {
             debugMode = !debugMode;
         }
 
-        if (input.isBombJustPressed()) {
+        if (input.isBombJustPressed() && !entities.getPlayer().isDead()) {
             handleBomb();
         }
 
@@ -64,13 +64,15 @@ public class GameController implements Disposable {
         entities.update(delta, input, assets, audio);
         spawnScheduler.update(delta, entities);
 
-        if (!entities.getPlayer().isInvincible()) {
+        if (!entities.getPlayer().isInvincible() && !entities.getPlayer().isDead()) {
             if (collisionManager.checkPlayerEnemyCollisions(entities.getPlayer(), entities.getEnemies()) ||
                 collisionManager.checkPlayerBulletCollisions(entities.getPlayer(), entities.getEnemyBullets())) {
                 if (entities.getPlayer().getNumLives() <= 0) gameOver = true;
                 else {
                     entities.getPlayer().setNumLives(entities.getPlayer().getNumLives() - 1);
-                    entities.getPlayer().startIFrames();
+                    entities.getPlayer().startDeath();
+                    audio.playPlayerDeath();
+                    entities.destroyAllPlayerBullets();
                 }
             }
         }

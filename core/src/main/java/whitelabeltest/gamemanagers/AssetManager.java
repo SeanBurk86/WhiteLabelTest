@@ -17,6 +17,7 @@ public class AssetManager implements Disposable {
     private final ObjectMap<String, EnemyDefinition> enemyDefinitions = new ObjectMap<>();
 
     public final Texture playerTexture;
+    public final Texture playerDeathTexture;
     public final Texture bulletTexture;
     public final Texture[] explosionTextures;
     public final Texture powerup1, powerup2, powerup3, powerup4;
@@ -46,6 +47,7 @@ public class AssetManager implements Disposable {
 
         // Setup common fixed assets
         playerTexture = new Texture("PlayerSprite.png");
+        playerDeathTexture = new Texture("PlayerSpriteDeath.png");
 
         explosionTextures = new Texture[5];
         for (int i = 0; i < 5; i++) {
@@ -90,6 +92,7 @@ public class AssetManager implements Disposable {
     public void dispose() {
         for (Texture t : textures.values()) t.dispose();
         playerTexture.dispose();
+        playerDeathTexture.dispose();
         bulletTexture.dispose();
         for (Texture t : explosionTextures) t.dispose();
         powerup1.dispose();

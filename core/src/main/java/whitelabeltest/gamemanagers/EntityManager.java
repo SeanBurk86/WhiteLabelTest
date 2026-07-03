@@ -114,6 +114,13 @@ public class EntityManager {
         player.reset();
     }
 
+    public void destroyAllPlayerBullets() {
+        for (int i = bullets.size - 1; i >= 0; i--) {
+            ObjectPools.freeWeapon(bullets.get(i));
+        }
+        bullets.clear();
+    }
+
     public void destroyAllEnemyBullets() {
         for (int i = enemyBullets.size - 1; i >= 0; i--) {
             EnemyBullet b = enemyBullets.get(i);
