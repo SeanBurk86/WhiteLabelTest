@@ -10,6 +10,8 @@ import com.badlogic.gdx.utils.ObjectMap;
 public class AudioManager implements Disposable {
     private final Sound playerDeathSound;
     private final Sound bombSound;
+    private final Sound gameOverSound;
+    private final Sound powerupSound;
     private final ObjectMap<Integer, Array<Sound>> explosionSounds;
     private final ObjectMap<Integer, Array<Sound>> basicWeaponSounds;
     private final ObjectMap<Integer, Array<Sound>> thunderWhipWeaponSounds;
@@ -20,6 +22,8 @@ public class AudioManager implements Disposable {
     public AudioManager() {
         playerDeathSound = Gdx.audio.newSound(Gdx.files.internal("playerdeath.mp3"));
         bombSound = Gdx.audio.newSound(Gdx.files.internal("bombsound.mp3"));
+        gameOverSound = Gdx.audio.newSound(Gdx.files.internal("gameover.mp3"));
+        powerupSound = Gdx.audio.newSound(Gdx.files.internal("powerup.mp3"));
         Json json = new Json();
         basicWeaponSounds = new ObjectMap<>();
         thunderWhipWeaponSounds = new ObjectMap<>();
@@ -68,6 +72,14 @@ public class AudioManager implements Disposable {
         bombSound.play();
     }
 
+    public void playGameOver() {
+        gameOverSound.play();
+    }
+
+    public void playPowerup() {
+        powerupSound.play();
+    }
+
     public void playExplosion() {
         if (explosionSounds != null) explosionSounds.get(1).random().play();
     }
@@ -96,6 +108,8 @@ public class AudioManager implements Disposable {
     public void dispose() {
         playerDeathSound.dispose();
         bombSound.dispose();
+        gameOverSound.dispose();
+        powerupSound.dispose();
         disposeSoundsMap(explosionSounds);
         disposeSoundsMap(basicWeaponSounds);
         disposeSoundsMap(thunderWhipWeaponSounds);

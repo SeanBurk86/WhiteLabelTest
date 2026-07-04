@@ -24,7 +24,7 @@ public class StartScreen implements Disposable {
     private enum Phase { SELECTING, FADING, DONE }
 
     private static final float FADE_DURATION = 0.7f;
-    private static final String CONFIRM_SOUND = "bgaregga-073.wav";
+    private static final String CONFIRM_SOUND = "pentest.mp3";
 
     private static final int[] KEYBOARD_DETECT_KEYS = {
         Input.Keys.SPACE, Input.Keys.ENTER, Input.Keys.Z, Input.Keys.X,
@@ -78,7 +78,6 @@ public class StartScreen implements Disposable {
         pm.dispose();
     }
 
-    /** Returns the chosen InputType once the fade and sound cue finish, null otherwise. */
     public InputType update(float delta) {
         videoPlayer.update();
 
@@ -99,8 +98,6 @@ public class StartScreen implements Disposable {
             case FADING:
                 fadeTimer += delta;
                 if (fadeTimer >= FADE_DURATION) {
-                    // Sound plays while game initialises; kept in a field (not disposed here)
-                    // so it isn't cut off the moment this screen is torn down. See getConfirmSound().
                     confirmSound = Gdx.audio.newSound(Gdx.files.internal(CONFIRM_SOUND));
                     confirmSound.play();
                     phase = Phase.DONE;

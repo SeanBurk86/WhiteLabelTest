@@ -10,6 +10,7 @@ public class ScrollingBackground {
     private VideoPlayer videoPlayer;
     private final float worldWidth;
     private final float worldHeight;
+    private boolean stopped;
 
     public ScrollingBackground(float worldWidth, float worldHeight) {
         this.worldWidth = worldWidth;
@@ -31,14 +32,22 @@ public class ScrollingBackground {
         }
     }
 
+    /** Stops the background video (e.g. on game over) until reset() restarts it. */
+    public void stop() {
+        if (videoPlayer != null && !stopped) {
+            videoPlayer.stop();
+            stopped = true;
+        }
+    }
+
     public void update() {
-        if (videoPlayer != null) {
+        if (videoPlayer != null && !stopped) {
             videoPlayer.update();
         }
     }
 
     public void draw(SpriteBatch batch) {
-        if (videoPlayer != null) {
+        if (videoPlayer != null && !stopped) {
             Texture frame = videoPlayer.getTexture();
             if (frame != null) {
                 batch.draw(frame, 0, 0, worldWidth, worldHeight);
@@ -47,6 +56,7 @@ public class ScrollingBackground {
     }
 
     public void reset() {
+        stopped = false;
         startVideo();
     }
 

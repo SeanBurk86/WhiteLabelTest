@@ -49,11 +49,12 @@ public class CollisionManager {
         return false;
     }
 
-    public void checkPlayerPowerupCollisions(Player player, Array<Powerup> powerups) {
+    public void checkPlayerPowerupCollisions(Player player, Array<Powerup> powerups, AudioManager audio) {
         for (int i = powerups.size - 1; i >= 0; i--) {
             Powerup p = powerups.get(i);
             if (Intersector.overlaps(player.getHitbox(), p.getRectangle())) {
                 p.apply(player);
+                audio.playPowerup();
                 powerups.removeIndex(i);
                 ObjectPools.freePowerup(p);
             }

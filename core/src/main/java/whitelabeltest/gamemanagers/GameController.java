@@ -75,8 +75,11 @@ public class GameController implements Disposable {
         if (!entities.getPlayer().isInvincible() && !entities.getPlayer().isDead()) {
             if (collisionManager.checkPlayerEnemyCollisions(entities.getPlayer(), entities.getEnemies()) ||
                 collisionManager.checkPlayerBulletCollisions(entities.getPlayer(), entities.getEnemyBullets())) {
-                if (entities.getPlayer().getNumLives() <= 0) gameOver = true;
-                else {
+                if (entities.getPlayer().getNumLives() <= 0) {
+                    gameOver = true;
+                    background.stop();
+                    audio.playGameOver();
+                } else {
                     entities.getPlayer().setNumLives(entities.getPlayer().getNumLives() - 1);
                     entities.getPlayer().startDeath();
                     audio.playPlayerDeath();
@@ -90,7 +93,7 @@ public class GameController implements Disposable {
             entities.getPlayer().triggerGrazeFlash();
         }
 
-        collisionManager.checkPlayerPowerupCollisions(entities.getPlayer(), entities.getPowerups());
+        collisionManager.checkPlayerPowerupCollisions(entities.getPlayer(), entities.getPowerups(), audio);
 
         collisionManager.checkBulletEnemyCollisions(entities.getBullets(), entities.getEnemies(), audio, entities, assets, worldWidth, worldHeight, scoreManager);
     }
