@@ -9,6 +9,7 @@ import com.badlogic.gdx.math.Circle;
 import com.badlogic.gdx.math.Rectangle;
 import com.badlogic.gdx.math.Vector2;
 import whitelabeltest.enemy.bullets.EnemyBullet;
+import whitelabeltest.gamemanagers.AnimationCache;
 
 public class ExplodingAimedBullet implements EnemyBullet {
     private Sprite sprite;
@@ -30,13 +31,11 @@ public class ExplodingAimedBullet implements EnemyBullet {
     }
 
     public void init(Texture texture, float x, float y, float angle, Circle playerHitbox) {
-        int frameWidth = texture.getWidth() / 3;
         int frameHeight = texture.getHeight();
-        TextureRegion[][] tmp = TextureRegion.split(texture, frameWidth, frameHeight);
-        TextureRegion[] frames = new TextureRegion[3];
-        System.arraycopy(tmp[0], 0, frames, 0, 3);
-        animation = new Animation<>(0.1f, frames);
-        animation.setPlayMode(Animation.PlayMode.LOOP);
+        int frameWidth = texture.getWidth() / 3;
+
+        animation = AnimationCache.get(texture, 3, 0.1f, Animation.PlayMode.LOOP);
+        TextureRegion[] frames = animation.getKeyFrames();
 
         if (sprite == null) sprite = new Sprite(frames[0]);
         else sprite.setRegion(frames[0]);

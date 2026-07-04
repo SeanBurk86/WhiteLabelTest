@@ -7,6 +7,7 @@ import com.badlogic.gdx.graphics.g2d.SpriteBatch;
 import com.badlogic.gdx.graphics.g2d.TextureRegion;
 import com.badlogic.gdx.math.Rectangle;
 import com.badlogic.gdx.math.Vector2;
+import whitelabeltest.gamemanagers.AnimationCache;
 
 public class DrifterBullet implements EnemyBullet {
     private Sprite sprite;
@@ -23,14 +24,11 @@ public class DrifterBullet implements EnemyBullet {
     }
 
     public void init(Texture texture, float x, float y, float vx, float vy) {
-        int frameWidth = texture.getWidth() / 2;
         int frameHeight = texture.getHeight();
-        TextureRegion[][] tmp = TextureRegion.split(texture, frameWidth, frameHeight);
-        TextureRegion[] frames = new TextureRegion[2];
-        frames[0] = tmp[0][0];
-        frames[1] = tmp[0][1];
-        animation = new Animation<>(0.1f, frames);
-        animation.setPlayMode(Animation.PlayMode.LOOP);
+        int frameWidth = texture.getWidth() / 2;
+
+        animation = AnimationCache.get(texture, 2, 0.1f, Animation.PlayMode.LOOP);
+        TextureRegion[] frames = animation.getKeyFrames();
 
         if (sprite == null) sprite = new Sprite(frames[0]);
         else sprite.setRegion(frames[0]);

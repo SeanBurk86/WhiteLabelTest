@@ -2,6 +2,7 @@ package whitelabeltest;
 
 import com.badlogic.gdx.ApplicationAdapter;
 import com.badlogic.gdx.Gdx;
+import com.badlogic.gdx.audio.Sound;
 import com.badlogic.gdx.graphics.Color;
 import com.badlogic.gdx.graphics.GL20;
 import com.badlogic.gdx.graphics.g2d.SpriteBatch;
@@ -25,6 +26,7 @@ public class Main extends ApplicationAdapter {
     private StartScreen startScreen;
     private UIManager ui;
     private GameController game;
+    private Sound startScreenConfirmSound;
 
     private SpriteBatch spriteBatch;
     private ShapeRenderer shapeRenderer;
@@ -58,6 +60,7 @@ public class Main extends ApplicationAdapter {
     }
 
     private void transitionToGame(InputType inputType) {
+        startScreenConfirmSound = startScreen.getConfirmSound();
         startScreen.dispose();
         startScreen = null;
         game = new GameController(PLAY_AREA_WIDTH, PLAY_AREA_HEIGHT);
@@ -167,6 +170,7 @@ public class Main extends ApplicationAdapter {
     @Override
     public void dispose() {
         if (startScreen != null) startScreen.dispose();
+        if (startScreenConfirmSound != null) startScreenConfirmSound.dispose();
         if (game != null) game.dispose();
         if (ui != null) ui.dispose();
         if (spriteBatch != null) spriteBatch.dispose();

@@ -7,6 +7,7 @@ import com.badlogic.gdx.graphics.g2d.TextureRegion;
 import com.badlogic.gdx.math.MathUtils;
 import com.badlogic.gdx.math.Circle;
 import com.badlogic.gdx.utils.Array;
+import whitelabeltest.gamemanagers.AnimationCache;
 import whitelabeltest.gamemanagers.ObjectPools;
 import whitelabeltest.enemy.bullets.EnemyBullet;
 import whitelabeltest.enemy.firingpatterns.SelfDestructFiring;
@@ -23,14 +24,8 @@ public class GenericEnemy extends BaseEnemy {
         this.bulletTexture = bulletTexture;
         this.invertMovement = def.inverseMovement;
 
-        int frameWidth = texture.getWidth() / def.frameCount;
-        int frameHeight = texture.getHeight();
-        TextureRegion[][] tmp = TextureRegion.split(texture, frameWidth, frameHeight);
-        TextureRegion[] frames = new TextureRegion[def.frameCount];
-        System.arraycopy(tmp[0], 0, frames, 0, def.frameCount);
-
-        this.animation = new Animation<>(0.1f, frames);
-        this.animation.setPlayMode(Animation.PlayMode.LOOP);
+        this.animation = AnimationCache.get(texture, def.frameCount, 0.1f, Animation.PlayMode.LOOP);
+        TextureRegion[] frames = animation.getKeyFrames();
 
         if (sprite == null) sprite = new Sprite(frames[0]);
         else sprite.setRegion(frames[0]);

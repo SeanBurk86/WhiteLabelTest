@@ -19,23 +19,24 @@ public class ExplosionEffect implements Pool.Poolable {
         Animation<TextureRegion> anim;
     }
 
+    // Particle objects are kept across pool reuse cycles and overwritten in place by init(),
+    // rather than reallocated on every explosion (this effect is obtained from a pool on every enemy kill).
     private final Array<Particle> particles = new Array<>();
     private final int particleCount = 8;
 
     public void init(Texture[] textures, float originX, float originY, float baseSize) {
         for (int i = 0; i < particleCount; i++) {
-            Particle p = new Particle();
+            Particle p;
+            if (i < particles.size) {
+                p = particles.get(i);
+            } else {
+                p = new Particle();
+                particles.add(p);
+            }
 
-            // Randomly select one of the explosion textures
+            // Randomly select one of the explosion textures (11 frames each)
             Texture tex = textures[MathUtils.random(0, textures.length - 1)];
-
-            // Setup Animation for this specific particle (11 frames)
-            int frameWidth = tex.getWidth() / 11;
-            int frameHeight = tex.getHeight();
-            TextureRegion[][] tmp = TextureRegion.split(tex, frameWidth, frameHeight);
-            TextureRegion[] frames = new TextureRegion[11];
-            System.arraycopy(tmp[0], 0, frames, 0, 11);
-            p.anim = new Animation<>(0.05f, frames);
+            p.anim = AnimationCache.get(tex, 11, 0.05f, Animation.PlayMode.NORMAL);
 
             p.x = originX;
             p.y = originY;
@@ -45,8 +46,6 @@ public class ExplosionEffect implements Pool.Poolable {
             float angle = MathUtils.random(0f, 360f);
             float speed = MathUtils.random(2f, 5f);
             p.velocity.set(speed, 0).setAngleDeg(angle);
-
-            particles.add(p);
         }
     }
 
@@ -75,6 +74,7 @@ public class ExplosionEffect implements Pool.Poolable {
 
     @Override
     public void reset() {
-        particles.clear();
+        // Particle objects are intentionally kept (not cleared) so init() can reuse them
+        // on the next obtain() instead of reallocating; init() overwrites every field.
     }
 }

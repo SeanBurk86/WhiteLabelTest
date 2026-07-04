@@ -8,6 +8,7 @@ import com.badlogic.gdx.math.CatmullRomSpline;
 import com.badlogic.gdx.math.Vector2;
 import com.badlogic.gdx.utils.Array;
 import whitelabeltest.enemy.Enemy;
+import whitelabeltest.gamemanagers.AnimationCache;
 import whitelabeltest.gamemanagers.AssetManager;
 import whitelabeltest.gamemanagers.AudioManager;
 import whitelabeltest.gamemanagers.ObjectPools;
@@ -28,14 +29,11 @@ public class ThunderWhipWeapon extends BaseWeapon {
 
     private void setupBase(WeaponDefinition def, Texture texture, float x, float y) {
         this.def = def;
-        int frameWidth = texture.getWidth() / def.frameCount;
         int frameHeight = texture.getHeight();
-        TextureRegion[][] tmp = TextureRegion.split(texture, frameWidth, frameHeight);
-        TextureRegion[] frames = new TextureRegion[def.frameCount];
-        System.arraycopy(tmp[0], 0, frames, 0, def.frameCount);
+        int frameWidth = texture.getWidth() / def.frameCount;
 
-        this.animation = new Animation<>(0.08f, frames);
-        this.animation.setPlayMode(Animation.PlayMode.LOOP);
+        this.animation = AnimationCache.get(texture, def.frameCount, 0.08f, Animation.PlayMode.LOOP);
+        TextureRegion[] frames = animation.getKeyFrames();
 
         if (sprite == null) sprite = new Sprite(frames[0]);
         else sprite.setRegion(frames[0]);
@@ -49,16 +47,22 @@ public class ThunderWhipWeapon extends BaseWeapon {
         this.shootSpeedMultiplier = def.shootSpeedMultiplier;
         for (Vector2 p : history) p.set(x, y);
 
-        segments.clear();
+        // Reuse existing segment sprites across re-inits (this weapon is pool-recycled on every spawn)
+        // instead of reallocating NUM_SEGMENTS Sprite objects every time.
         for (int i = 0; i < NUM_SEGMENTS; i++) {
-            Sprite s = new Sprite(frames[0]);
+            Sprite s;
+            if (i < segments.size) {
+                s = segments.get(i);
+                s.setRegion(frames[0]);
+            } else {
+                s = new Sprite(frames[0]);
+                segments.add(s);
+            }
             s.setSize(sprite.getWidth(), sprite.getHeight());
             s.setOrigin(s.getWidth() / 2, 0);
 
             float alpha = 1.0f - ((float) i / NUM_SEGMENTS);
             s.setAlpha(alpha);
-
-            segments.add(s);
         }
     }
 

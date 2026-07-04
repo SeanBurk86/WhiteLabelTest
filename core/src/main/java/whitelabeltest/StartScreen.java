@@ -2,6 +2,7 @@ package whitelabeltest;
 
 import com.badlogic.gdx.Gdx;
 import com.badlogic.gdx.Input;
+import com.badlogic.gdx.audio.Sound;
 import com.badlogic.gdx.controllers.Controller;
 import com.badlogic.gdx.controllers.Controllers;
 import com.badlogic.gdx.graphics.Color;
@@ -40,6 +41,10 @@ public class StartScreen implements Disposable {
     private Phase phase = Phase.SELECTING;
     private float fadeTimer;
     private boolean prevAnyButtonDown;
+
+    // Kept alive after this screen is disposed (see getConfirmSound()) so the cue can keep
+    // playing while GameController loads; the caller is responsible for disposing it eventually.
+    private Sound confirmSound;
 
     public StartScreen(float worldWidth, float worldHeight) {
         this.worldWidth = worldWidth;
@@ -87,8 +92,10 @@ public class StartScreen implements Disposable {
             case FADING:
                 fadeTimer += delta;
                 if (fadeTimer >= FADE_DURATION) {
-                    // Fire-and-forget: sound plays while game initialises in the background
-                    Gdx.audio.newSound(Gdx.files.internal(CONFIRM_SOUND)).play();
+                    // Sound plays while game initialises; kept in a field (not disposed here)
+                    // so it isn't cut off the moment this screen is torn down. See getConfirmSound().
+                    confirmSound = Gdx.audio.newSound(Gdx.files.internal(CONFIRM_SOUND));
+                    confirmSound.play();
                     phase = Phase.DONE;
                 }
                 break;
@@ -150,6 +157,13 @@ public class StartScreen implements Disposable {
         boolean justPressed = !prevAnyButtonDown && anyDown;
         prevAnyButtonDown = anyDown;
         return justPressed;
+    }
+
+    /** Returns the fire-and-forget confirm sound so the caller can dispose it once it's safe to
+     * cut off (e.g. at app shutdown). Never disposed here, since this screen is torn down while
+     * the sound is still meant to be playing. May be null if the fade never completed. */
+    public Sound getConfirmSound() {
+        return confirmSound;
     }
 
     @Override

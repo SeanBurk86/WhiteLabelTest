@@ -10,6 +10,7 @@ import com.badlogic.gdx.graphics.g2d.Sprite;
 import com.badlogic.gdx.graphics.g2d.TextureRegion;
 import com.badlogic.gdx.utils.Array;
 import whitelabeltest.enemy.Enemy;
+import whitelabeltest.gamemanagers.AnimationCache;
 import whitelabeltest.gamemanagers.AssetManager;
 import whitelabeltest.gamemanagers.AudioManager;
 import whitelabeltest.gamemanagers.ObjectPools;
@@ -25,13 +26,11 @@ public class OrbitWeapon extends BaseWeapon {
         this.player = player;
         this.angle = initialAngle;
 
-        int frameWidth = texture.getWidth() / def.frameCount;
         int frameHeight = texture.getHeight();
-        TextureRegion[][] tmp = TextureRegion.split(texture, frameWidth, frameHeight);
-        TextureRegion[] frames = new TextureRegion[def.frameCount];
-        System.arraycopy(tmp[0], 0, frames, 0, def.frameCount);
-        animation = new Animation<>(0.08f, frames);
-        animation.setPlayMode(Animation.PlayMode.LOOP);
+        int frameWidth = texture.getWidth() / def.frameCount;
+
+        animation = AnimationCache.get(texture, def.frameCount, 0.08f, Animation.PlayMode.LOOP);
+        TextureRegion[] frames = animation.getKeyFrames();
 
         if (sprite == null) sprite = new Sprite(frames[0]);
         else sprite.setRegion(frames[0]);
