@@ -11,6 +11,8 @@ import com.badlogic.gdx.graphics.Texture;
 import com.badlogic.gdx.graphics.g2d.BitmapFont;
 import com.badlogic.gdx.graphics.g2d.GlyphLayout;
 import com.badlogic.gdx.graphics.g2d.SpriteBatch;
+import com.badlogic.gdx.graphics.g2d.freetype.FreeTypeFontGenerator;
+import com.badlogic.gdx.graphics.g2d.freetype.FreeTypeFontGenerator.FreeTypeFontParameter;
 import com.badlogic.gdx.utils.Disposable;
 import com.badlogic.gdx.video.VideoPlayer;
 import com.badlogic.gdx.video.VideoPlayerCreator;
@@ -59,9 +61,14 @@ public class StartScreen implements Disposable {
             Gdx.app.error("StartScreen", "Could not open openingscreen.webm", e);
         }
 
-        font = new BitmapFont();
+        FreeTypeFontGenerator generator = new FreeTypeFontGenerator(Gdx.files.internal("VT323-Regular.ttf"));
+        FreeTypeFontParameter fontParams = new FreeTypeFontParameter();
+        fontParams.size = 32;
+        font = generator.generateFont(fontParams);
+        generator.dispose();
+
         font.setUseIntegerPositions(false);
-        font.getData().setScale(0.025f);
+        font.getData().setScale(0.01171875f); // matches the on-screen size the old default font had at 0.025f
         layout = new GlyphLayout();
 
         Pixmap pm = new Pixmap(1, 1, Pixmap.Format.RGBA8888);

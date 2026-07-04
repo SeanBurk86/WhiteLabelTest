@@ -115,8 +115,12 @@ public class Main extends ApplicationAdapter {
 
         ui.drawHUD(spriteBatch, game.getScoreManager(), game.getEntities().getPlayer(), PLAY_AREA_HEIGHT, leftX);
 
+        ui.drawLevelStartAesthetics(spriteBatch, PLAY_AREA_WIDTH, PLAY_AREA_HEIGHT, game.getLevelStartTimer());
+
         if (isGameOver) {
             ui.drawGameOver(spriteBatch, PLAY_AREA_WIDTH, PLAY_AREA_HEIGHT);
+        } else if (game.isLevelComplete()) {
+            ui.drawLevelComplete(spriteBatch, PLAY_AREA_WIDTH, PLAY_AREA_HEIGHT, game.getScore());
         }
         spriteBatch.end();
 

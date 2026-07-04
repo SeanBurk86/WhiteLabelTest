@@ -1,26 +1,40 @@
 package whitelabeltest.gamemanagers;
 
+import com.badlogic.gdx.Gdx;
 import com.badlogic.gdx.graphics.Color;
 import com.badlogic.gdx.graphics.Pixmap;
 import com.badlogic.gdx.graphics.Texture;
 import com.badlogic.gdx.graphics.g2d.BitmapFont;
 import com.badlogic.gdx.graphics.g2d.GlyphLayout;
 import com.badlogic.gdx.graphics.g2d.SpriteBatch;
+import com.badlogic.gdx.graphics.g2d.freetype.FreeTypeFontGenerator;
+import com.badlogic.gdx.graphics.g2d.freetype.FreeTypeFontGenerator.FreeTypeFontParameter;
+import com.badlogic.gdx.math.MathUtils;
 import com.badlogic.gdx.utils.Disposable;
 import whitelabeltest.player.Player;
 
 public class UIManager implements Disposable {
     private final BitmapFont font;
     private final GlyphLayout gameOverLayout;
+    private final GlyphLayout levelCompleteLayout;
+    private final GlyphLayout destroyIceLayout;
     private final Texture whitePixel;
     private final InputType inputType;
 
     public UIManager(InputType inputType) {
         this.inputType = inputType;
-        font = new BitmapFont();
+
+        FreeTypeFontGenerator generator = new FreeTypeFontGenerator(Gdx.files.internal("VT323-Regular.ttf"));
+        FreeTypeFontParameter fontParams = new FreeTypeFontParameter();
+        fontParams.size = 32;
+        font = generator.generateFont(fontParams);
+        generator.dispose();
+
         font.setUseIntegerPositions(false);
-        font.getData().setScale(0.02f);
+        font.getData().setScale(0.009375f);
         gameOverLayout = new GlyphLayout();
+        levelCompleteLayout = new GlyphLayout();
+        destroyIceLayout = new GlyphLayout();
 
         Pixmap pixmap = new Pixmap(1, 1, Pixmap.Format.RGBA8888);
         pixmap.setColor(Color.WHITE);
@@ -89,6 +103,63 @@ public class UIManager implements Disposable {
         else gameOverLayout.setText(font, "GAME OVER\nPress Start to Restart\nPress Select to Quit");
         font.draw(batch, gameOverLayout, (worldWidth - gameOverLayout.width) / 2, (worldHeight + gameOverLayout.height) / 2);
         font.setColor(Color.WHITE);
+    }
+
+    public void drawLevelComplete(SpriteBatch batch, float worldWidth, float worldHeight, int score) {
+        font.setColor(Color.RED);
+        if (inputType == InputType.KEYBOARD) {
+            levelCompleteLayout.setText(font, "LEVEL COMPLETE\nYour Score: " + score + "\nPress R to Restart\nPress Q to Quit");
+        } else {
+            levelCompleteLayout.setText(font, "LEVEL COMPLETE\nYour Score: " + score + "\nPress Start to Restart\nPress Select to Quit");
+        }
+        font.draw(batch, levelCompleteLayout, (worldWidth - levelCompleteLayout.width) / 2, (worldHeight + levelCompleteLayout.height) / 2);
+        font.setColor(Color.WHITE);
+    }
+
+    private static final String LEVEL_START_LINE_1 = "Accessing secure node...\nExecuting penetration protocol...\nNode ICE detected...\nDaemon loaded...\nDaemon temp: BURNING HOT";
+    private static final String DESTROY_ICE_WARNING = "DESTROY ICE";
+    private static final float LEVEL_START_DURATION = 15f;
+    private static final float LEVEL_START_LINE_DURATION = LEVEL_START_DURATION / 2f;
+    private static final float LEVEL_START_CHARS_PER_SECOND = 30f;
+    private static final float DESTROY_ICE_SCALE_MULTIPLIER = 5f;
+    private static final float DESTROY_ICE_BLINKS_PER_SECOND = 4f;
+
+    public void drawLevelStartAesthetics(SpriteBatch batch, float worldWidth, float worldHeight, float elapsedTime) {
+        if (elapsedTime >= LEVEL_START_DURATION) return;
+
+        font.setColor(Color.RED);
+        float x = 0.3f;
+        float y = worldHeight - 0.3f;
+        if (elapsedTime < LEVEL_START_LINE_DURATION) {
+            drawTypewriter(batch, LEVEL_START_LINE_1, x, y, elapsedTime, LEVEL_START_CHARS_PER_SECOND);
+        } else {
+            float originalScaleX = font.getData().scaleX;
+            float originalScaleY = font.getData().scaleY;
+            font.getData().setScale(originalScaleX * DESTROY_ICE_SCALE_MULTIPLIER, originalScaleY * DESTROY_ICE_SCALE_MULTIPLIER);
+
+            destroyIceLayout.setText(font, DESTROY_ICE_WARNING);
+            float bigX = (worldWidth - destroyIceLayout.width) / 2f;
+            float bigY = (worldHeight + destroyIceLayout.height) / 2f;
+            drawBlinking(batch, DESTROY_ICE_WARNING, bigX, bigY, elapsedTime - LEVEL_START_LINE_DURATION, DESTROY_ICE_BLINKS_PER_SECOND);
+
+            font.getData().setScale(originalScaleX, originalScaleY);
+        }
+        font.setColor(Color.WHITE);
+    }
+
+    public boolean drawTypewriter(SpriteBatch batch, String text, float x, float y, float elapsedTime, float charsPerSecond) {
+        int totalChars = text.length();
+        int visibleChars = MathUtils.clamp((int) (elapsedTime * charsPerSecond), 0, totalChars);
+        font.draw(batch, text.substring(0, visibleChars), x, y);
+        return visibleChars >= totalChars;
+    }
+
+    public boolean drawBlinking(SpriteBatch batch, String text, float x, float y, float elapsedTime, float blinksPerSecond) {
+        boolean visible = ((int) (elapsedTime * blinksPerSecond * 2f)) % 2 == 0;
+        if (visible) {
+            font.draw(batch, text, x, y);
+        }
+        return visible;
     }
 
     @Override

@@ -21,6 +21,7 @@ public class GameController implements Disposable {
     private boolean gameOver;
     private boolean levelComplete;
     private boolean debugMode;
+    private float levelStartTimer;
     private final float worldWidth, worldHeight;
 
     public GameController(float worldWidth, float worldHeight) {
@@ -46,6 +47,7 @@ public class GameController implements Disposable {
 
     public void update(float delta) {
         scoreManager.update(delta);
+        levelStartTimer += delta;
         input.update();
 
         if (input.isDebugToggleJustPressed()) {
@@ -172,6 +174,7 @@ public class GameController implements Disposable {
         scoreManager.reset();
         gameOver = false;
         levelComplete = false;
+        levelStartTimer = 0f;
         entities.reset();
         collisionManager.reset();
         background.reset();
@@ -195,6 +198,7 @@ public class GameController implements Disposable {
     public boolean isGameOver() { return gameOver; }
     public boolean isLevelComplete() { return levelComplete; }
     public boolean isDebugMode() { return debugMode; }
+    public float getLevelStartTimer() { return levelStartTimer; }
     public EntityManager getEntities() { return entities; }
     public CollisionManager getCollisionManager() { return collisionManager; }
 }
