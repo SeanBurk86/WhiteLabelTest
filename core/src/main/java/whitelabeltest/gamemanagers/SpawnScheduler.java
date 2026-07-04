@@ -85,12 +85,14 @@ public class SpawnScheduler {
 
         Texture tex = assets.getTexture(def.texture);
         Texture bulletTex = assets.getTexture(def.bulletTexture);
+        Texture spawnTex = def.spawnTexture != null ? assets.getTexture(def.spawnTexture) : null;
+        Texture deathTex = def.deathTexture != null ? assets.getTexture(def.deathTexture) : null;
 
         GenericEnemy enemy = ObjectPools.genericEnemyPool.obtain();
 
         def.inverseMovement = event.inverseMovement;
 
-        enemy.initWithDefinition(def, tex, bulletTex, worldWidth, worldHeight, event.x, event.y);
+        enemy.initWithDefinition(def, tex, bulletTex, spawnTex, deathTex, worldWidth, worldHeight, event.x, event.y);
 
         if (event.powerup != null) enemy.setGuaranteedPowerup(event.powerup);
         entityManager.getEnemies().add(enemy);

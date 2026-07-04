@@ -45,6 +45,8 @@ public class AssetManager implements Disposable {
             enemyDefinitions.put(def.id, def);
             loadTexture(def.texture);
             if (def.bulletTexture != null) loadTexture(def.bulletTexture);
+            if (def.spawnTexture != null) loadTexture(def.spawnTexture);
+            if (def.deathTexture != null) loadTexture(def.deathTexture);
         }
 
         // Setup common fixed assets

@@ -13,6 +13,8 @@ import whitelabeltest.enemy.firingpatterns.FiringPattern;
 import whitelabeltest.enemy.movementpatterns.MovementPattern;
 
 public abstract class BaseEnemy implements Enemy {
+    protected enum LifecycleState { ENTERING, ACTIVE, DYING }
+
     protected Sprite sprite;
     protected Rectangle rectangle;
     protected int health;
@@ -29,6 +31,17 @@ public abstract class BaseEnemy implements Enemy {
     protected MovementPattern movement;
     protected FiringPattern firing;
 
+    // Entrance/death animations are optional; when null, updateSpawnAnimation()/updateDeathAnimation()
+    // fall back to a plain alpha fade using the enemy's normal sprite so the feature works without
+    // requiring dedicated art per enemy type.
+    protected Animation<TextureRegion> spawnAnimation;
+    protected float spawnDuration = 0.4f;
+    protected Animation<TextureRegion> deathAnimation;
+    protected float deathDuration = 0.4f;
+
+    protected LifecycleState lifecycleState = LifecycleState.ACTIVE;
+    protected float lifecycleTime = 0f;
+
     public BaseEnemy() {
         this.rectangle = new Rectangle();
     }
@@ -40,9 +53,53 @@ public abstract class BaseEnemy implements Enemy {
         this.invertMovement = false;
     }
 
+    /** Call once the sprite/animation are fully set up, to kick off the entrance state. */
+    protected void beginEntrance() {
+        lifecycleTime = 0f;
+        if (spawnDuration > 0f) {
+            lifecycleState = LifecycleState.ENTERING;
+            if (sprite != null) sprite.setColor(1, 1, 1, spawnAnimation != null ? 1f : 0f);
+        } else {
+            lifecycleState = LifecycleState.ACTIVE;
+            if (sprite != null) sprite.setColor(1, 1, 1, 1);
+        }
+    }
+
+    protected void startDeath() {
+        lifecycleState = LifecycleState.DYING;
+        lifecycleTime = 0f;
+        if (sprite != null) sprite.setColor(1, 1, 1, 1);
+    }
+
+    @Override
+    public boolean isActive() { return lifecycleState == LifecycleState.ACTIVE; }
+
+    @Override
+    public boolean isDying() { return lifecycleState == LifecycleState.DYING; }
+
     @Override
     public void update(float delta, Array<EnemyBullet> enemyBullets, Texture bulletTexture, Circle playerHitbox) {
         if (sprite == null) return;
+
+        lifecycleTime += delta;
+
+        if (lifecycleState == LifecycleState.DYING) {
+            updateDeathAnimation();
+            return;
+        }
+
+        if (lifecycleState == LifecycleState.ENTERING) {
+            updateSpawnAnimation();
+            if (movement != null) {
+                movement.update(delta, sprite, rectangle, worldWidth, worldHeight, playerHitbox, invertMovement);
+            }
+            if (lifecycleTime >= spawnDuration) {
+                lifecycleState = LifecycleState.ACTIVE;
+                lifecycleTime = 0f;
+                sprite.setColor(1, 1, 1, 1);
+            }
+            return;
+        }
 
         animationTime += delta;
         if (animation != null) {
@@ -65,6 +122,29 @@ public abstract class BaseEnemy implements Enemy {
         }
     }
 
+    private void updateSpawnAnimation() {
+        if (spawnAnimation != null) {
+            sprite.setRegion(spawnAnimation.getKeyFrame(lifecycleTime, false));
+        } else {
+            float t = Math.min(1f, lifecycleTime / spawnDuration);
+            sprite.setColor(1, 1, 1, t);
+        }
+    }
+
+    private void updateDeathAnimation() {
+        if (deathAnimation != null) {
+            sprite.setRegion(deathAnimation.getKeyFrame(lifecycleTime, false));
+        } else {
+            float t = 1f - Math.min(1f, lifecycleTime / deathDuration);
+            sprite.setColor(1, 1, 1, t);
+        }
+    }
+
+    /** True once the death animation (dedicated or fallback fade) has finished playing. */
+    protected boolean isDeathAnimationFinished() {
+        return deathAnimation != null ? deathAnimation.isAnimationFinished(lifecycleTime) : lifecycleTime >= deathDuration;
+    }
+
     @Override
     public void draw(SpriteBatch batch) {
         if (sprite != null && !isOffScreen()) {
@@ -79,9 +159,14 @@ public abstract class BaseEnemy implements Enemy {
 
     @Override
     public boolean takeDamage(int amount) {
+        if (lifecycleState != LifecycleState.ACTIVE) return false; // invulnerable while entering/already dying
         health -= amount;
         damageFlashTimer = flashDuration;
-        return health <= 0;
+        if (health <= 0) {
+            startDeath();
+            return true;
+        }
+        return false;
     }
 
     @Override
@@ -105,6 +190,8 @@ public abstract class BaseEnemy implements Enemy {
         damageFlashTimer = 0;
         guaranteedPowerup = null;
         invertMovement = false; // Reset on pool
+        lifecycleState = LifecycleState.ACTIVE;
+        lifecycleTime = 0f;
         if (sprite != null) {
             sprite.setRotation(0);
             sprite.setColor(1, 1, 1, 1);

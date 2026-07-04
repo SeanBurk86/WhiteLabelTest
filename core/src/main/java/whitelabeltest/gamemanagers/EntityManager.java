@@ -97,6 +97,10 @@ public class EntityManager {
             e.update(delta, enemyBullets, assets.enemyBulletTexture, player.getHitbox());
 
             if (e.isOffScreen()) {
+                // Only notify boss-killed once the boss has actually finished its death animation
+                // and is about to be reaped, so levelComplete doesn't freeze it mid-animation
+                // (GameController stops calling update() once levelComplete is true).
+                if (e.isBoss() && e.isDying()) notifyBossKilled();
                 enemies.removeIndex(i);
                 ObjectPools.freeEnemy(e);
             }

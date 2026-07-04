@@ -17,5 +17,17 @@ public class EnemyDefinition {
     // Rich pattern definition — supports Sequence and Combined
     public FiringPatternDef firingPattern;
 
+    // Optional entrance animation. If spawnTexture is omitted, the enemy fades in using its
+    // normal texture instead. Set spawnDuration to 0 to disable the entrance state entirely.
+    public String spawnTexture;
+    public int spawnFrameCount;
+    public float spawnDuration = 0.4f;
+
+    // Optional destruction animation. If deathTexture is omitted, the enemy fades out using its
+    // normal texture instead. Set deathDuration to 0 to skip straight to removal.
+    public String deathTexture;
+    public int deathFrameCount;
+    public float deathDuration = 0.4f;
+
     public EnemyDefinition() {}
 }

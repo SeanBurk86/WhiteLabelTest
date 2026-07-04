@@ -16,12 +16,18 @@ public class GenericEnemy extends BaseEnemy {
 
     private EnemyDefinition def;
     private Texture bulletTexture;
+    private Texture spawnTexture;
+    private Texture deathTexture;
 
-    public void initWithDefinition(EnemyDefinition def, Texture texture, Texture bulletTexture, float worldWidth, float worldHeight, float startX, float startY) {
+    public void initWithDefinition(EnemyDefinition def, Texture texture, Texture bulletTexture,
+                                    Texture spawnTexture, Texture deathTexture,
+                                    float worldWidth, float worldHeight, float startX, float startY) {
         this.def = def;
         this.worldWidth = worldWidth;
         this.worldHeight = worldHeight;
         this.bulletTexture = bulletTexture;
+        this.spawnTexture = spawnTexture;
+        this.deathTexture = deathTexture;
         this.invertMovement = def.inverseMovement;
 
         this.animation = AnimationCache.get(texture, def.frameCount, 0.1f, Animation.PlayMode.LOOP);
@@ -55,13 +61,25 @@ public class GenericEnemy extends BaseEnemy {
             ? PatternFactory.createFiring(def.firingPattern)
             : PatternFactory.createFiring(def.firingType, def.fireRate);
 
+        this.spawnDuration = def.spawnDuration;
+        this.spawnAnimation = (spawnTexture != null && def.spawnFrameCount > 0)
+            ? AnimationCache.get(spawnTexture, def.spawnFrameCount, 0.05f, Animation.PlayMode.NORMAL)
+            : null;
+
+        this.deathDuration = def.deathDuration;
+        this.deathAnimation = (deathTexture != null && def.deathFrameCount > 0)
+            ? AnimationCache.get(deathTexture, def.deathFrameCount, 0.05f, Animation.PlayMode.NORMAL)
+            : null;
+
         rectangle.set(sprite.getX(), sprite.getY(), sprite.getWidth(), sprite.getHeight());
+
+        beginEntrance();
     }
 
     @Override
     public void init(Texture texture, float worldWidth, float worldHeight, float startX, float startY) {
         // Fallback or random initialization if initWithDefinition isn't used
-        initWithDefinition(null, texture, null, worldWidth, worldHeight, startX, startY);
+        initWithDefinition(null, texture, null, null, null, worldWidth, worldHeight, startX, startY);
     }
 
     @Override
@@ -71,6 +89,9 @@ public class GenericEnemy extends BaseEnemy {
 
     @Override
     public boolean isOffScreen() {
+        // While dying, only the death animation controls when this enemy is actually reaped.
+        if (lifecycleState == LifecycleState.DYING) return isDeathAnimationFinished();
+
         if (firing instanceof SelfDestructFiring && ((SelfDestructFiring)firing).isTriggered()) return true;
         if (movement != null && movement.isFinished()) return true;
 
@@ -82,7 +103,7 @@ public class GenericEnemy extends BaseEnemy {
     @Override
     public Enemy create(Texture texture, float worldWidth, float worldHeight) {
         GenericEnemy e = ObjectPools.genericEnemyPool.obtain();
-        e.initWithDefinition(this.def, texture, this.bulletTexture, worldWidth, worldHeight, -1f, worldHeight);
+        e.initWithDefinition(this.def, texture, this.bulletTexture, this.spawnTexture, this.deathTexture, worldWidth, worldHeight, -1f, worldHeight);
         return e;
     }
 

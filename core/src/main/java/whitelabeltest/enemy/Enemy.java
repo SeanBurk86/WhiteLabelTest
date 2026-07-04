@@ -17,6 +17,11 @@ public interface Enemy extends Pool.Poolable {
     boolean takeDamage(int amount); // Returns true if destroyed
     default boolean isBoss() { return false; }
 
+    // Lifecycle: false while playing an entrance or death animation. Used to keep enemies
+    // invulnerable/non-colliding during those transitions.
+    default boolean isActive() { return true; }
+    default boolean isDying() { return false; }
+
     // Powerup drop logic
     void setGuaranteedPowerup(String powerupType);
     String getGuaranteedPowerup();

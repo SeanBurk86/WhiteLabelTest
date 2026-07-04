@@ -115,14 +115,16 @@ public class GameController implements Disposable {
         for (int i = enemies.size - 1; i >= 0; i--) {
             Enemy e = enemies.get(i);
             if (e.takeDamage(damage)) {
-                scoreManager.addScore(destroyEnemy(enemies, audio, entities, assets, worldWidth, worldHeight, e));
+                scoreManager.addScore(destroyEnemy(audio, entities, assets, worldWidth, worldHeight, e));
             }
         }
     }
 
-    public static int destroyEnemy(Array<Enemy> enemies, AudioManager audio, EntityManager entityManager, AssetManager assets, float worldWidth, float worldHeight, Enemy enemy) {
+    public static int destroyEnemy(AudioManager audio, EntityManager entityManager, AssetManager assets, float worldWidth, float worldHeight, Enemy enemy) {
+        // The enemy is NOT removed/freed here: takeDamage() already moved it into its DYING
+        // lifecycle state, so it stays in the array playing its death animation and gets reaped
+        // by EntityManager's normal off-screen cleanup once that animation finishes.
         boolean wasBoss = enemy.isBoss();
-        enemies.removeValue(enemy, false);
 
         float centerX = enemy.getRectangle().x + enemy.getRectangle().width / 2;
         float centerY = enemy.getRectangle().y + enemy.getRectangle().height / 2;
@@ -136,9 +138,7 @@ public class GameController implements Disposable {
             spawnPowerup(entityManager.getPowerups(), assets, enemy.getRectangle().x, enemy.getRectangle().y, worldWidth, worldHeight, guaranteed);
         }
 
-        ObjectPools.freeEnemy(enemy);
         audio.playExplosion();
-        if (wasBoss) entityManager.notifyBossKilled();
         return wasBoss ? 1000 : 10;
     }
 
