@@ -1,6 +1,7 @@
 package whitelabeltest.gamemanagers;
 
 import com.badlogic.gdx.Gdx;
+import com.badlogic.gdx.audio.Music;
 import com.badlogic.gdx.audio.Sound;
 import com.badlogic.gdx.utils.Array;
 import com.badlogic.gdx.utils.Disposable;
@@ -12,6 +13,8 @@ public class AudioManager implements Disposable {
     private final Sound bombSound;
     private final Sound gameOverSound;
     private final Sound powerupSound;
+    private final Music victoryFanfare;
+    private final Music victoryLoop;
     private final ObjectMap<Integer, Array<Sound>> explosionSounds;
     private final ObjectMap<Integer, Array<Sound>> basicWeaponSounds;
     private final ObjectMap<Integer, Array<Sound>> thunderWhipWeaponSounds;
@@ -24,6 +27,10 @@ public class AudioManager implements Disposable {
         bombSound = Gdx.audio.newSound(Gdx.files.internal("bombsound.mp3"));
         gameOverSound = Gdx.audio.newSound(Gdx.files.internal("gameover.mp3"));
         powerupSound = Gdx.audio.newSound(Gdx.files.internal("powerup.mp3"));
+        victoryFanfare = Gdx.audio.newMusic(Gdx.files.internal("victoryfanfare.mp3"));
+        victoryLoop = Gdx.audio.newMusic(Gdx.files.internal("victory.mp3"));
+        victoryLoop.setLooping(true);
+        victoryFanfare.setOnCompletionListener(music -> victoryLoop.play());
         Json json = new Json();
         basicWeaponSounds = new ObjectMap<>();
         thunderWhipWeaponSounds = new ObjectMap<>();
@@ -80,6 +87,15 @@ public class AudioManager implements Disposable {
         powerupSound.play();
     }
 
+    public void playVictory() {
+        victoryFanfare.play();
+    }
+
+    public void stopVictory() {
+        victoryFanfare.stop();
+        victoryLoop.stop();
+    }
+
     public void playExplosion() {
         if (explosionSounds != null) explosionSounds.get(1).random().play();
     }
@@ -110,6 +126,8 @@ public class AudioManager implements Disposable {
         bombSound.dispose();
         gameOverSound.dispose();
         powerupSound.dispose();
+        victoryFanfare.dispose();
+        victoryLoop.dispose();
         disposeSoundsMap(explosionSounds);
         disposeSoundsMap(basicWeaponSounds);
         disposeSoundsMap(thunderWhipWeaponSounds);

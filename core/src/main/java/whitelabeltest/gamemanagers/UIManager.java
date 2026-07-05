@@ -116,7 +116,7 @@ public class UIManager implements Disposable {
         font.setColor(Color.WHITE);
     }
 
-    private static final String LEVEL_START_LINE_1 = "Accessing secure node...\nExecuting penetration protocol...\nNode ICE detected...\nDaemon loaded...\nDaemon temp: BURNING HOT";
+    private static final String LEVEL_START_LINE_1 = "Accessing secure node...\nExecuting penetration protocol...\nNode ICE detected...\nDaemon loaded...\nDaemon temp: FLAMING HOT!!!";
     private static final String DESTROY_ICE_WARNING = "DESTROY ICE";
     private static final float LEVEL_START_DURATION = 15f;
     private static final float LEVEL_START_LINE_DURATION = LEVEL_START_DURATION / 2f;

@@ -69,6 +69,8 @@ public class GameController implements Disposable {
 
         if (entities.consumeBossKilled()) {
             levelComplete = true;
+            background.stop();
+            audio.playVictory();
             return;
         }
 
@@ -139,7 +141,7 @@ public class GameController implements Disposable {
         entityManager.getExplosions().add(explosion);
 
         String guaranteed = enemy.getGuaranteedPowerup();
-        if (guaranteed != null || com.badlogic.gdx.math.MathUtils.random() < 0.20f) {
+        if (guaranteed != null) {
             spawnPowerup(entityManager.getPowerups(), assets, enemy.getRectangle().x, enemy.getRectangle().y, worldWidth, worldHeight, guaranteed);
         }
 
@@ -150,7 +152,7 @@ public class GameController implements Disposable {
     public static void spawnPowerup(Array<Powerup> powerups, AssetManager assets, float x, float y, float worldWidth, float worldHeight, String forcedType) {
         WeaponPowerup wp = ObjectPools.weaponPowerupPool.obtain();
         Texture tex;
-        String weaponId; // Changed to String
+        String weaponId;
         int choice;
         if (forcedType != null) {
             if (forcedType.equals("BasicWeapon")) choice = 0;
@@ -164,7 +166,7 @@ public class GameController implements Disposable {
         else if (choice == 1) { tex = assets.powerup2; weaponId = "WaveBlastWeapon"; }
         else if (choice == 2) { tex = assets.powerup3; weaponId = "ThunderWhipWeapon"; }
         else { tex = assets.powerup4; weaponId = "OrbitWeapon"; }
-        wp.initWithType(tex, weaponId, x, y, worldWidth, worldHeight); // Pass weaponId (String)
+        wp.initWithType(tex, weaponId, x, y, worldWidth, worldHeight);
         powerups.add(wp);
     }
 
@@ -178,6 +180,7 @@ public class GameController implements Disposable {
         gameOver = false;
         levelComplete = false;
         levelStartTimer = 0f;
+        audio.stopVictory();
         entities.reset();
         collisionManager.reset();
         background.reset();

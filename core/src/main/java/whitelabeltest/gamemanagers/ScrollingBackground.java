@@ -23,7 +23,7 @@ public class ScrollingBackground {
 
         videoPlayer = VideoPlayerCreator.createVideoPlayer();
         try {
-            String videoFile = "try1.webm";
+            String videoFile = "level1.webm";
             videoPlayer.load(Gdx.files.internal(videoFile));
             videoPlayer.setLooping(true);
             videoPlayer.play();
