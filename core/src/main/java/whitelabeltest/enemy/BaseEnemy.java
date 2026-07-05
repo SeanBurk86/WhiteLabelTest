@@ -31,9 +31,6 @@ public abstract class BaseEnemy implements Enemy {
     protected MovementPattern movement;
     protected FiringPattern firing;
 
-    // Entrance/death animations are optional; when null, updateSpawnAnimation()/updateDeathAnimation()
-    // fall back to a plain alpha fade using the enemy's normal sprite so the feature works without
-    // requiring dedicated art per enemy type.
     protected Animation<TextureRegion> spawnAnimation;
     protected float spawnDuration = 0.4f;
     protected Animation<TextureRegion> deathAnimation;
@@ -53,7 +50,6 @@ public abstract class BaseEnemy implements Enemy {
         this.invertMovement = false;
     }
 
-    /** Call once the sprite/animation are fully set up, to kick off the entrance state. */
     protected void beginEntrance() {
         lifecycleTime = 0f;
         if (spawnDuration > 0f) {

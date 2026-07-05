@@ -128,16 +128,13 @@ public class GameController implements Disposable {
     }
 
     public static int destroyEnemy(AudioManager audio, EntityManager entityManager, AssetManager assets, float worldWidth, float worldHeight, Enemy enemy) {
-        // The enemy is NOT removed/freed here: takeDamage() already moved it into its DYING
-        // lifecycle state, so it stays in the array playing its death animation and gets reaped
-        // by EntityManager's normal off-screen cleanup once that animation finishes.
         boolean wasBoss = enemy.isBoss();
 
         float centerX = enemy.getRectangle().x + enemy.getRectangle().width / 2;
         float centerY = enemy.getRectangle().y + enemy.getRectangle().height / 2;
 
         ExplosionEffect explosion = ObjectPools.explosionPool.obtain();
-        explosion.init(assets.explosionTextures, centerX, centerY, enemy.getRectangle().width);
+        explosion.init(assets.explosionTextures, centerX, centerY, enemy.getRectangle().width * 2);
         entityManager.getExplosions().add(explosion);
 
         String guaranteed = enemy.getGuaranteedPowerup();

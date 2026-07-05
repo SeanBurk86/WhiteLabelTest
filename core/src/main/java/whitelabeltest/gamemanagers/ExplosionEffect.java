@@ -34,9 +34,8 @@ public class ExplosionEffect implements Pool.Poolable {
                 particles.add(p);
             }
 
-            // Randomly select one of the explosion textures (11 frames each)
             Texture tex = textures[MathUtils.random(0, textures.length - 1)];
-            p.anim = AnimationCache.get(tex, 11, 0.05f, Animation.PlayMode.NORMAL);
+            p.anim = AnimationCache.get(tex, 3, 3, 9, 0.1f, Animation.PlayMode.NORMAL);
 
             p.x = originX;
             p.y = originY;
