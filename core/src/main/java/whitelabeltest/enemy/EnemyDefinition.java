@@ -5,6 +5,10 @@ public class EnemyDefinition {
     public String texture;
     public String bulletTexture;
     public int frameCount;
+    // Sprite sheet layout for `texture`. columns=0 means "single row of frameCount frames".
+    public int columns = 0;
+    public int rows = 1;
+    public float frameDuration = 0.1f;
     public float size;
     public int health;
     public String movementType;
@@ -21,12 +25,16 @@ public class EnemyDefinition {
     // normal texture instead. Set spawnDuration to 0 to disable the entrance state entirely.
     public String spawnTexture;
     public int spawnFrameCount;
+    public int spawnColumns = 0;
+    public int spawnRows = 1;
     public float spawnDuration = 0.4f;
 
     // Optional destruction animation. If deathTexture is omitted, the enemy fades out using its
     // normal texture instead. Set deathDuration to 0 to skip straight to removal.
     public String deathTexture;
     public int deathFrameCount;
+    public int deathColumns = 0;
+    public int deathRows = 1;
     public float deathDuration = 0.4f;
 
     public EnemyDefinition() {}

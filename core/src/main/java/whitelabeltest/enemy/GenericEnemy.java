@@ -30,20 +30,25 @@ public class GenericEnemy extends BaseEnemy {
         this.deathTexture = deathTexture;
         this.invertMovement = def.inverseMovement;
 
-        this.animation = AnimationCache.get(texture, def.frameCount, 0.1f, Animation.PlayMode.LOOP);
+        this.animation = AnimationCache.get(texture, def.columns > 0 ? def.columns : def.frameCount, def.rows, def.frameCount, def.frameDuration, Animation.PlayMode.LOOP);
         TextureRegion[] frames = animation.getKeyFrames();
 
         if (sprite == null) sprite = new Sprite(frames[0]);
         else sprite.setRegion(frames[0]);
 
-        sprite.setSize(def.size, def.size);
+        float aspect = frames[0].getRegionWidth() / (float) frames[0].getRegionHeight();
+        if (aspect >= 1f) {
+            sprite.setSize(def.size, def.size / aspect);
+        } else {
+            sprite.setSize(def.size * aspect, def.size);
+        }
         sprite.setOriginCenter();
 
         // Use provided startX, or random if -1 was passed
         if (startX >= 0) {
             sprite.setX(startX);
         } else {
-            sprite.setX(MathUtils.random(0.5f, worldWidth - (def.size + 0.5f)));
+            sprite.setX(MathUtils.random(0.5f, worldWidth - (sprite.getWidth() + 0.5f)));
         }
 
         if (startY >= 0) {
@@ -63,12 +68,12 @@ public class GenericEnemy extends BaseEnemy {
 
         this.spawnDuration = def.spawnDuration;
         this.spawnAnimation = (spawnTexture != null && def.spawnFrameCount > 0)
-            ? AnimationCache.get(spawnTexture, def.spawnFrameCount, 0.05f, Animation.PlayMode.NORMAL)
+            ? AnimationCache.get(spawnTexture, def.spawnColumns > 0 ? def.spawnColumns : def.spawnFrameCount, def.spawnRows, def.spawnFrameCount, 0.05f, Animation.PlayMode.NORMAL)
             : null;
 
         this.deathDuration = def.deathDuration;
         this.deathAnimation = (deathTexture != null && def.deathFrameCount > 0)
-            ? AnimationCache.get(deathTexture, def.deathFrameCount, 0.05f, Animation.PlayMode.NORMAL)
+            ? AnimationCache.get(deathTexture, def.deathColumns > 0 ? def.deathColumns : def.deathFrameCount, def.deathRows, def.deathFrameCount, 0.05f, Animation.PlayMode.NORMAL)
             : null;
 
         rectangle.set(sprite.getX(), sprite.getY(), sprite.getWidth(), sprite.getHeight());

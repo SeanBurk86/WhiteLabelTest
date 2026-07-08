@@ -13,7 +13,7 @@ public class ZigZagMovement implements MovementPattern {
     public ZigZagMovement(float speedX, float speedY) {
         this.speedX = speedX;
         this.speedY = speedY;
-        this.movingRight = MathUtils.randomBoolean();
+        this.movingRight = true;
     }
 
     @Override
@@ -36,8 +36,7 @@ public class ZigZagMovement implements MovementPattern {
         }
         sprite.translateY(-currentSpeedY * delta);
 
-        if (movingRight && !sprite.isFlipX()) sprite.flip(true, false);
-        else if (!movingRight && sprite.isFlipX()) sprite.flip(true, false);
+        sprite.setFlip(!movingRight, false);
 
         rectangle.setPosition(sprite.getX(), sprite.getY());
     }
