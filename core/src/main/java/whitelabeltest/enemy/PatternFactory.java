@@ -14,14 +14,16 @@ import whitelabeltest.gamemanagers.AnimationCache;
 import whitelabeltest.gamemanagers.EnemySpawnRegistry;
 
 public class PatternFactory {
-    public static MovementPattern createMovement(String type, float speed, float worldWidth, float worldHeight) {
-        if (type == null) return new StraightMovement(speed);
+    /** @param spawnCenterX the enemy's actual spawn center-X (as dictated by the spawn schedule);
+     *  used to anchor Spline's path instead of picking a random lane. */
+    public static MovementPattern createMovement(String type, float speed, float worldHeight, float movementAngle, float spawnCenterX) {
+        if (type == null) return new StraightMovement(speed, movementAngle);
 
         switch (type) {
-            case "ZigZag": return new ZigZagMovement(speed * 1.5f, speed);
-            case "Seeking": return new SeekingMovement(speed, 3.0f);
-            case "Spline": return new SplineMovement(worldWidth, worldHeight, 6.0f);
-            default: return new StraightMovement(speed);
+            case "ZigZag": return new ZigZagMovement(speed * 1.5f, speed, movementAngle);
+            case "Seeking": return new SeekingMovement(speed, 3.0f, movementAngle);
+            case "Spline": return new SplineMovement(worldHeight, 6.0f, movementAngle, spawnCenterX);
+            default: return new StraightMovement(speed, movementAngle);
         }
     }
 

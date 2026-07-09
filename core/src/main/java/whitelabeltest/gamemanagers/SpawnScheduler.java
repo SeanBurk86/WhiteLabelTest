@@ -15,8 +15,11 @@ public class SpawnScheduler {
     public static class SpawnEvent {
         public float time;
         public String type;
-        public float x;
-        public float y;
+        // NaN (the default when omitted from spawn_schedule.json) means "pick a default spawn
+        // position"; any finite value is used literally, including negative or beyond the world
+        // bounds so enemies can spawn off either edge of the screen (not just above/below it).
+        public float x = Float.NaN;
+        public float y = Float.NaN;
         public String powerup;
         public boolean inverseMovement = false;
         public boolean spawned = false;

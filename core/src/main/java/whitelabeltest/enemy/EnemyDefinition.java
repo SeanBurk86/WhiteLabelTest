@@ -1,5 +1,7 @@
 package whitelabeltest.enemy;
 
+import whitelabeltest.enemy.movementpatterns.MovementPattern;
+
 public class EnemyDefinition {
     public String id;
     public String texture;
@@ -20,6 +22,11 @@ public class EnemyDefinition {
     public int health;
     public String movementType;
     public float speed;
+    // Rotates this enemy's movementType away from its original orientation, in degrees (standard
+    // math convention: 0 = right, 90 = up). The default (270, straight down) reproduces each
+    // pattern's original, unrotated behavior: Straight/ZigZag/Spline treat it as an absolute
+    // heading; Seeking treats it as an offset from aiming straight at the player.
+    public float movementAngle = MovementPattern.DEFAULT_ANGLE_DEG;
     public boolean inverseMovement = false;
     public boolean isBoss = false;
     // Legacy single-pattern fields — used when firingPattern is absent

@@ -2,7 +2,6 @@ package whitelabeltest.enemy.movementpatterns;
 
 import com.badlogic.gdx.graphics.g2d.Sprite;
 import com.badlogic.gdx.math.CatmullRomSpline;
-import com.badlogic.gdx.math.MathUtils;
 import com.badlogic.gdx.math.Circle;
 import com.badlogic.gdx.math.Rectangle;
 import com.badlogic.gdx.math.Vector2;
@@ -14,19 +13,34 @@ public class SplineMovement implements MovementPattern {
     private final Vector2 tempPos = new Vector2();
     private final Vector2 toPlayer = new Vector2();
 
-    public SplineMovement(float worldWidth, float worldHeight, float duration) {
+    public SplineMovement(float worldHeight, float duration, float spawnCenterX) {
+        this(worldHeight, duration, DEFAULT_ANGLE_DEG, spawnCenterX);
+    }
+
+    /** @param angleDeg rotates the whole path around its starting point;
+     *  DEFAULT_ANGLE_DEG keeps the original top-to-bottom S-curve.
+     *  @param spawnCenterX the lane this enemy spawns in (its spawn center-X), as dictated by
+     *  the spawn schedule; the path's horizontal shape is anchored here instead of being random. */
+    public SplineMovement(float worldHeight, float duration, float angleDeg, float spawnCenterX) {
         this.pathDuration = duration;
 
-        // Initial path generation (can be inverted later)
-        float startX = MathUtils.random(1f, worldWidth - 1f);
+        float startY = worldHeight + 1;
         Vector2[] points = new Vector2[] {
-            new Vector2(startX, worldHeight + 1),
-            new Vector2(startX, worldHeight),
-            new Vector2(startX - 2f, worldHeight - 3f),
-            new Vector2(startX + 2f, worldHeight - 6f),
-            new Vector2(startX, -1f),
-            new Vector2(startX, -2f)
+            new Vector2(spawnCenterX, startY),
+            new Vector2(spawnCenterX, worldHeight),
+            new Vector2(spawnCenterX - 2f, worldHeight - 3f),
+            new Vector2(spawnCenterX + 2f, worldHeight - 6f),
+            new Vector2(spawnCenterX, -1f),
+            new Vector2(spawnCenterX, -2f)
         };
+
+        float rotationOffset = angleDeg - DEFAULT_ANGLE_DEG;
+        if (rotationOffset != 0f) {
+            for (Vector2 p : points) {
+                p.sub(spawnCenterX, startY).rotateDeg(rotationOffset).add(spawnCenterX, startY);
+            }
+        }
+
         this.path = new CatmullRomSpline<>(points, false);
     }
 

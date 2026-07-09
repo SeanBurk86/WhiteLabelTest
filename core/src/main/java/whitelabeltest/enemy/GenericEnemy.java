@@ -45,14 +45,15 @@ public class GenericEnemy extends BaseEnemy {
         }
         sprite.setOriginCenter();
 
-        // Use provided startX, or random if -1 was passed
-        if (startX >= 0) {
+        // NaN means "not specified" -> pick a default. Any finite value is used as-is, including
+        // negative or beyond world bounds, so enemies can spawn off either edge of the screen.
+        if (!Float.isNaN(startX)) {
             sprite.setX(startX);
         } else {
             sprite.setX(MathUtils.random(0.5f, worldWidth - (sprite.getWidth() + 0.5f)));
         }
 
-        if (startY >= 0) {
+        if (!Float.isNaN(startY)) {
             sprite.setY(startY);
         } else {
             sprite.setY(worldHeight + 1.0f); // Default to spawning above screen
@@ -62,7 +63,7 @@ public class GenericEnemy extends BaseEnemy {
         this.animationTime = 0;
 
         // Initialize patterns
-        this.movement = PatternFactory.createMovement(def.movementType, def.speed, worldWidth, worldHeight);
+        this.movement = PatternFactory.createMovement(def.movementType, def.speed, worldHeight, def.movementAngle, sprite.getX() + sprite.getWidth() / 2f);
         this.firing = def.firingPattern != null
             ? PatternFactory.createFiring(def, def.firingPattern)
             : PatternFactory.createFiring(def.firingType, def.fireRate, def.bulletSize, def.bulletSpeed);
@@ -96,15 +97,17 @@ public class GenericEnemy extends BaseEnemy {
         if (firing instanceof SelfDestructFiring && ((SelfDestructFiring)firing).isTriggered()) return true;
         if (movement != null && movement.isFinished()) return true;
 
-        // Bounds checking that handles movement in any direction
+        // Bounds checking that handles movement in any direction. A margin equal to twice the
+        // sprite's own size on each edge (matching the Y check) lets enemies spawn off either
+        // side of the screen and stay alive long enough to move on-screen.
         return sprite.getY() < -sprite.getHeight() * 2f || sprite.getY() > worldHeight + sprite.getHeight() * 2f ||
-               sprite.getX() + sprite.getWidth() < 0f || sprite.getX() > worldWidth;
+               sprite.getX() + sprite.getWidth() < -sprite.getWidth() * 2f || sprite.getX() > worldWidth + sprite.getWidth() * 2f;
     }
 
     @Override
     public Enemy create(Texture texture, float worldWidth, float worldHeight) {
         GenericEnemy e = ObjectPools.genericEnemyPool.obtain();
-        e.initWithDefinition(this.def, texture, this.bulletTexture, this.spawnTexture, this.deathTexture, worldWidth, worldHeight, -1f, worldHeight);
+        e.initWithDefinition(this.def, texture, this.bulletTexture, this.spawnTexture, this.deathTexture, worldWidth, worldHeight, Float.NaN, worldHeight);
         return e;
     }
 

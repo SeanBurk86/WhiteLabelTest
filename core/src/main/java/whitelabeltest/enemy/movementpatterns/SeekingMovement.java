@@ -8,12 +8,20 @@ import com.badlogic.gdx.math.Vector2;
 public class SeekingMovement implements MovementPattern {
     private final float speed;
     private final float stopDistance;
+    private final float angleOffsetDeg;
     private boolean finished = false;
     private final Vector2 tempDir = new Vector2();
 
     public SeekingMovement(float speed, float stopDistance) {
+        this(speed, stopDistance, DEFAULT_ANGLE_DEG);
+    }
+
+    /** @param angleDeg rotates the approach away from a direct line to the player;
+     *  DEFAULT_ANGLE_DEG means "aim straight at the player" (the original behavior). */
+    public SeekingMovement(float speed, float stopDistance, float angleDeg) {
         this.speed = speed;
         this.stopDistance = stopDistance;
+        this.angleOffsetDeg = angleDeg - DEFAULT_ANGLE_DEG;
     }
 
     @Override
@@ -27,6 +35,7 @@ public class SeekingMovement implements MovementPattern {
             finished = true;
         } else {
             tempDir.set(targetPos).sub(currentPos).nor();
+            tempDir.rotateDeg(angleOffsetDeg);
             if (inverseMovement) {
                 tempDir.scl(-1); // Move away from player
             }
