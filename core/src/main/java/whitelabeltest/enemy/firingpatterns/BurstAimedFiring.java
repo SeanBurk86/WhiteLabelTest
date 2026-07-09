@@ -1,7 +1,8 @@
 package whitelabeltest.enemy.firingpatterns;
 
-import com.badlogic.gdx.graphics.Texture;
+import com.badlogic.gdx.graphics.g2d.Animation;
 import com.badlogic.gdx.graphics.g2d.Sprite;
+import com.badlogic.gdx.graphics.g2d.TextureRegion;
 import com.badlogic.gdx.math.Circle;
 import com.badlogic.gdx.math.Rectangle;
 import com.badlogic.gdx.utils.Array;
@@ -11,6 +12,8 @@ import whitelabeltest.gamemanagers.ObjectPools;
 
 public class BurstAimedFiring implements FiringPattern {
     private final float fireRate;
+    private final float bulletSize;
+    private final float bulletSpeed;
     private float shootTimer;
 
     private final int burstCount = 5;
@@ -19,13 +22,32 @@ public class BurstAimedFiring implements FiringPattern {
     private float burstTimer = 0;
     private boolean isBursting = false;
 
+    private final Animation<TextureRegion> spriteOverride;
+    private static final float DEFAULT_SPEED = 5f;
+
     public BurstAimedFiring(float fireRate) {
+        this(fireRate, 0.25f, DEFAULT_SPEED, null);
+    }
+
+    public BurstAimedFiring(float fireRate, float bulletSize) {
+        this(fireRate, bulletSize, DEFAULT_SPEED, null);
+    }
+
+    public BurstAimedFiring(float fireRate, float bulletSize, float bulletSpeed) {
+        this(fireRate, bulletSize, bulletSpeed, null);
+    }
+
+    /** @param spriteOverride pass null to use the enemy's default bullet animation */
+    public BurstAimedFiring(float fireRate, float bulletSize, float bulletSpeed, Animation<TextureRegion> spriteOverride) {
         this.fireRate = fireRate;
+        this.bulletSize = bulletSize;
+        this.bulletSpeed = bulletSpeed;
+        this.spriteOverride = spriteOverride;
         this.shootTimer = 0;
     }
 
     @Override
-    public void update(float delta, Sprite sprite, Rectangle rectangle, Array<EnemyBullet> enemyBullets, Texture bulletTexture, Circle playerHitbox) {
+    public void update(float delta, Sprite sprite, Rectangle rectangle, Array<EnemyBullet> enemyBullets, Animation<TextureRegion> bulletAnimation, Circle playerHitbox) {
         if (!isBursting) {
             shootTimer += delta;
             if (shootTimer >= fireRate) {
@@ -40,7 +62,7 @@ public class BurstAimedFiring implements FiringPattern {
             burstTimer += delta;
             if (burstTimer >= burstInterval) {
                 burstTimer = 0;
-                fireAimedShot(sprite, enemyBullets, bulletTexture, playerHitbox);
+                fireAimedShot(sprite, enemyBullets, spriteOverride != null ? spriteOverride : bulletAnimation, playerHitbox);
                 currentBurstShot++;
 
                 if (currentBurstShot >= burstCount) {
@@ -50,14 +72,14 @@ public class BurstAimedFiring implements FiringPattern {
         }
     }
 
-    private void fireAimedShot(Sprite sprite, Array<EnemyBullet> enemyBullets, Texture bulletTexture, Circle playerHitbox) {
+    private void fireAimedShot(Sprite sprite, Array<EnemyBullet> enemyBullets, Animation<TextureRegion> bulletAnimation, Circle playerHitbox) {
         float centerX = sprite.getX() + sprite.getWidth() / 2;
         float centerY = sprite.getY() + sprite.getHeight() / 2;
         float targetX = playerHitbox.x;
         float targetY = playerHitbox.y;
 
         AimedEnemyBullet b = ObjectPools.aimedBulletPool.obtain();
-        b.init(bulletTexture, centerX, centerY, targetX, targetY);
+        b.init(bulletAnimation, centerX, centerY, targetX, targetY, bulletSize, bulletSpeed);
         enemyBullets.add(b);
     }
 

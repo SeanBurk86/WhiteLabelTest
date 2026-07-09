@@ -10,7 +10,7 @@ import whitelabeltest.enemy.bullets.EnemyBullet;
 
 public interface Enemy extends Pool.Poolable {
     void init(Texture texture, float worldWidth, float worldHeight, float startX, float startY);
-    void update(float delta, Array<EnemyBullet> enemyBullets, Texture bulletTexture, Circle playerHitbox);
+    void update(float delta, Array<EnemyBullet> enemyBullets, Circle playerHitbox);
     void draw(SpriteBatch batch);
     boolean isOffScreen();
     Rectangle getRectangle();

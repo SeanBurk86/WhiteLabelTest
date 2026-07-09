@@ -1,6 +1,5 @@
 package whitelabeltest.enemy.firingpatterns;
 
-import com.badlogic.gdx.graphics.Texture;
 import com.badlogic.gdx.graphics.g2d.Animation;
 import com.badlogic.gdx.graphics.g2d.Sprite;
 import com.badlogic.gdx.graphics.g2d.SpriteBatch;
@@ -9,13 +8,12 @@ import com.badlogic.gdx.math.Circle;
 import com.badlogic.gdx.math.Rectangle;
 import com.badlogic.gdx.math.Vector2;
 import whitelabeltest.enemy.bullets.EnemyBullet;
-import whitelabeltest.gamemanagers.AnimationCache;
 
 public class ExplodingAimedBullet implements EnemyBullet {
     private Sprite sprite;
     private final Rectangle rectangle;
     private final Vector2 velocity = new Vector2();
-    private final float speed = 6f;
+    private float speed;
     private final int damage = 1;
 
     private Animation<TextureRegion> animation;
@@ -30,22 +28,20 @@ public class ExplodingAimedBullet implements EnemyBullet {
         this.rectangle = new Rectangle();
     }
 
-    public void init(Texture texture, float x, float y, float angle, Circle playerHitbox) {
-        int frameHeight = texture.getHeight();
-        int frameWidth = texture.getWidth() / 3;
-
-        animation = AnimationCache.get(texture, 3, 0.1f, Animation.PlayMode.LOOP);
+    public void init(Animation<TextureRegion> animation, float x, float y, float angle, Circle playerHitbox, float size, float speed) {
+        this.animation = animation;
         TextureRegion[] frames = animation.getKeyFrames();
 
         if (sprite == null) sprite = new Sprite(frames[0]);
         else sprite.setRegion(frames[0]);
 
-        float aspectRatio = (float) frameHeight / frameWidth;
-        sprite.setSize(0.25f, 0.25f * aspectRatio);
+        float aspectRatio = (float) frames[0].getRegionHeight() / frames[0].getRegionWidth();
+        sprite.setSize(size, size * aspectRatio);
         sprite.setOriginCenter();
         sprite.setCenterX(x);
         sprite.setCenterY(y);
 
+        this.speed = speed;
         // Initial radial velocity
         velocity.set(1, 0).setAngleDeg(angle).scl(speed);
         sprite.setRotation(angle - 90);

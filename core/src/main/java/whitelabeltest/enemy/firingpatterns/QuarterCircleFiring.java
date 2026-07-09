@@ -1,7 +1,8 @@
 package whitelabeltest.enemy.firingpatterns;
 
-import com.badlogic.gdx.graphics.Texture;
+import com.badlogic.gdx.graphics.g2d.Animation;
 import com.badlogic.gdx.graphics.g2d.Sprite;
+import com.badlogic.gdx.graphics.g2d.TextureRegion;
 import com.badlogic.gdx.math.Circle;
 import com.badlogic.gdx.math.Rectangle;
 import com.badlogic.gdx.math.Vector2;
@@ -12,17 +13,48 @@ import whitelabeltest.gamemanagers.ObjectPools;
 
 public class QuarterCircleFiring implements FiringPattern {
     private final float fireRate;
+    private final float bulletSize;
+    private final float bulletSpeed;
+    private final float spreadDegrees;
+    private final int numBullets;
     private float shootTimer;
-    private static final int NUM_BULLETS = 5;
-    private static final float SPREAD_DEGREES = 90f;
+    private static final int DEFAULT_NUM_BULLETS = 9;
+    private static final float DEFAULT_SPREAD_DEGREES = 90f;
+    private static final float DEFAULT_SPEED = 5f;
+    private final Animation<TextureRegion> spriteOverride;
 
     public QuarterCircleFiring(float fireRate) {
+        this(fireRate, 0.25f, DEFAULT_SPEED, null);
+    }
+
+    public QuarterCircleFiring(float fireRate, float bulletSize) {
+        this(fireRate, bulletSize, DEFAULT_SPEED, null);
+    }
+
+    public QuarterCircleFiring(float fireRate, float bulletSize, float bulletSpeed) {
+        this(fireRate, bulletSize, bulletSpeed, null);
+    }
+
+    /** @param spriteOverride pass null to use the enemy's default bullet animation */
+    public QuarterCircleFiring(float fireRate, float bulletSize, float bulletSpeed, Animation<TextureRegion> spriteOverride) {
+        this(fireRate, bulletSize, bulletSpeed, spriteOverride, DEFAULT_SPREAD_DEGREES, DEFAULT_NUM_BULLETS);
+    }
+
+    /** @param spriteOverride pass null to use the enemy's default bullet animation
+     *  @param spreadDegrees total angular width of the fan, centered on the aim direction
+     *  @param numBullets how many bullets make up the fan (must be >= 2) */
+    public QuarterCircleFiring(float fireRate, float bulletSize, float bulletSpeed, Animation<TextureRegion> spriteOverride, float spreadDegrees, int numBullets) {
         this.fireRate = fireRate;
+        this.bulletSize = bulletSize;
+        this.bulletSpeed = bulletSpeed;
+        this.spriteOverride = spriteOverride;
+        this.spreadDegrees = spreadDegrees;
+        this.numBullets = numBullets;
         this.shootTimer = 0;
     }
 
     @Override
-    public void update(float delta, Sprite sprite, Rectangle rectangle, Array<EnemyBullet> enemyBullets, Texture bulletTexture, Circle playerHitbox) {
+    public void update(float delta, Sprite sprite, Rectangle rectangle, Array<EnemyBullet> enemyBullets, Animation<TextureRegion> bulletAnimation, Circle playerHitbox) {
         shootTimer += delta;
         if (shootTimer < fireRate) return;
         shootTimer = 0;
@@ -31,16 +63,17 @@ public class QuarterCircleFiring implements FiringPattern {
         float centerY = sprite.getY() + sprite.getHeight() / 2;
         float playerX = playerHitbox.x;
         float playerY = playerHitbox.y;
+        Animation<TextureRegion> animation = spriteOverride != null ? spriteOverride : bulletAnimation;
 
         float aimAngle = new Vector2(playerX - centerX, playerY - centerY).angleDeg();
-        float startAngle = aimAngle - SPREAD_DEGREES / 2;
-        float step = SPREAD_DEGREES / (NUM_BULLETS - 1);
+        float startAngle = numBullets > 1 ? aimAngle - spreadDegrees / 2 : aimAngle;
+        float step = numBullets > 1 ? spreadDegrees / (numBullets - 1) : 0f;
 
-        for (int i = 0; i < NUM_BULLETS; i++) {
+        for (int i = 0; i < numBullets; i++) {
             float angle = startAngle + i * step;
             Vector2 dir = new Vector2(1, 0).setAngleDeg(angle);
             AimedEnemyBullet b = ObjectPools.aimedBulletPool.obtain();
-            b.init(bulletTexture, centerX, centerY, centerX + dir.x, centerY + dir.y);
+            b.init(animation, centerX, centerY, centerX + dir.x, centerY + dir.y, bulletSize, bulletSpeed);
             enemyBullets.add(b);
         }
     }

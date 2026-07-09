@@ -1,7 +1,8 @@
 package whitelabeltest.enemy.firingpatterns;
 
-import com.badlogic.gdx.graphics.Texture;
+import com.badlogic.gdx.graphics.g2d.Animation;
 import com.badlogic.gdx.graphics.g2d.Sprite;
+import com.badlogic.gdx.graphics.g2d.TextureRegion;
 import com.badlogic.gdx.math.Circle;
 import com.badlogic.gdx.math.Rectangle;
 import com.badlogic.gdx.math.Vector2;
@@ -12,23 +13,44 @@ import whitelabeltest.gamemanagers.ObjectPools;
 
 public class SweepFiring implements FiringPattern {
     private final float bulletInterval;
+    private final float bulletSize;
+    private final float bulletSpeed;
     private static final float SWEEP_DURATION = 2.0f;
     private static final float SWEEP_START_ANGLE = 225f; // down-left
     private static final float SWEEP_END_ANGLE = 315f;   // down-right
+    private static final float DEFAULT_SPEED = 5f;
 
     private float bulletTimer;
     private float sweepT;         // 0 = left edge, 1 = right edge
     private float sweepDirection; // +1 = left→right, -1 = right→left
 
+    private final Animation<TextureRegion> spriteOverride;
+
     public SweepFiring(float fireRate) {
+        this(fireRate, 0.25f, DEFAULT_SPEED, null);
+    }
+
+    public SweepFiring(float fireRate, float bulletSize) {
+        this(fireRate, bulletSize, DEFAULT_SPEED, null);
+    }
+
+    public SweepFiring(float fireRate, float bulletSize, float bulletSpeed) {
+        this(fireRate, bulletSize, bulletSpeed, null);
+    }
+
+    /** @param spriteOverride pass null to use the enemy's default bullet animation */
+    public SweepFiring(float fireRate, float bulletSize, float bulletSpeed, Animation<TextureRegion> spriteOverride) {
         this.bulletInterval = fireRate;
+        this.bulletSize = bulletSize;
+        this.bulletSpeed = bulletSpeed;
+        this.spriteOverride = spriteOverride;
         this.bulletTimer = bulletInterval; // fire immediately on first update
         this.sweepT = 0f;
         this.sweepDirection = 1f;
     }
 
     @Override
-    public void update(float delta, Sprite sprite, Rectangle rectangle, Array<EnemyBullet> enemyBullets, Texture bulletTexture, Circle playerHitbox) {
+    public void update(float delta, Sprite sprite, Rectangle rectangle, Array<EnemyBullet> enemyBullets, Animation<TextureRegion> bulletAnimation, Circle playerHitbox) {
         sweepT += sweepDirection * delta / SWEEP_DURATION;
         if (sweepT >= 1f) { sweepT = 1f; sweepDirection = -1f; }
         else if (sweepT <= 0f) { sweepT = 0f; sweepDirection = 1f; }
@@ -41,9 +63,10 @@ public class SweepFiring implements FiringPattern {
         Vector2 dir = new Vector2(1, 0).setAngleDeg(angle);
         float centerX = sprite.getX() + sprite.getWidth() / 2;
         float centerY = sprite.getY() + sprite.getHeight() / 2;
+        Animation<TextureRegion> animation = spriteOverride != null ? spriteOverride : bulletAnimation;
 
         AimedEnemyBullet b = ObjectPools.aimedBulletPool.obtain();
-        b.init(bulletTexture, centerX, centerY, centerX + dir.x, centerY + dir.y);
+        b.init(animation, centerX, centerY, centerX + dir.x, centerY + dir.y, bulletSize, bulletSpeed);
         enemyBullets.add(b);
     }
 

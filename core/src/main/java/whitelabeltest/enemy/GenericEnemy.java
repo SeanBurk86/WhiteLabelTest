@@ -5,11 +5,8 @@ import com.badlogic.gdx.graphics.g2d.Animation;
 import com.badlogic.gdx.graphics.g2d.Sprite;
 import com.badlogic.gdx.graphics.g2d.TextureRegion;
 import com.badlogic.gdx.math.MathUtils;
-import com.badlogic.gdx.math.Circle;
-import com.badlogic.gdx.utils.Array;
 import whitelabeltest.gamemanagers.AnimationCache;
 import whitelabeltest.gamemanagers.ObjectPools;
-import whitelabeltest.enemy.bullets.EnemyBullet;
 import whitelabeltest.enemy.firingpatterns.SelfDestructFiring;
 
 public class GenericEnemy extends BaseEnemy {
@@ -32,6 +29,10 @@ public class GenericEnemy extends BaseEnemy {
 
         this.animation = AnimationCache.get(texture, def.columns > 0 ? def.columns : def.frameCount, def.rows, def.frameCount, def.frameDuration, Animation.PlayMode.LOOP);
         TextureRegion[] frames = animation.getKeyFrames();
+
+        this.bulletAnimation = (bulletTexture != null)
+            ? AnimationCache.get(bulletTexture, def.bulletColumns > 0 ? def.bulletColumns : def.bulletFrameCount, def.bulletRows, def.bulletFrameCount, def.bulletFrameDuration, Animation.PlayMode.LOOP)
+            : null;
 
         if (sprite == null) sprite = new Sprite(frames[0]);
         else sprite.setRegion(frames[0]);
@@ -63,8 +64,8 @@ public class GenericEnemy extends BaseEnemy {
         // Initialize patterns
         this.movement = PatternFactory.createMovement(def.movementType, def.speed, worldWidth, worldHeight);
         this.firing = def.firingPattern != null
-            ? PatternFactory.createFiring(def.firingPattern)
-            : PatternFactory.createFiring(def.firingType, def.fireRate);
+            ? PatternFactory.createFiring(def, def.firingPattern)
+            : PatternFactory.createFiring(def.firingType, def.fireRate, def.bulletSize, def.bulletSpeed);
 
         this.spawnDuration = def.spawnDuration;
         this.spawnAnimation = (spawnTexture != null && def.spawnFrameCount > 0)
@@ -85,11 +86,6 @@ public class GenericEnemy extends BaseEnemy {
     public void init(Texture texture, float worldWidth, float worldHeight, float startX, float startY) {
         // Fallback or random initialization if initWithDefinition isn't used
         initWithDefinition(null, texture, null, null, null, worldWidth, worldHeight, startX, startY);
-    }
-
-    @Override
-    public void update(float delta, Array<EnemyBullet> enemyBullets, Texture bulletTexture, Circle playerHitbox) {
-        super.update(delta, enemyBullets, this.bulletTexture, playerHitbox);
     }
 
     @Override

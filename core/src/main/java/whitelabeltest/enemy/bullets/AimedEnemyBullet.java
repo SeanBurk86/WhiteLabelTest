@@ -1,19 +1,16 @@
 package whitelabeltest.enemy.bullets;
 
-import com.badlogic.gdx.graphics.Texture;
 import com.badlogic.gdx.graphics.g2d.Animation;
 import com.badlogic.gdx.graphics.g2d.Sprite;
 import com.badlogic.gdx.graphics.g2d.SpriteBatch;
 import com.badlogic.gdx.graphics.g2d.TextureRegion;
 import com.badlogic.gdx.math.Rectangle;
 import com.badlogic.gdx.math.Vector2;
-import whitelabeltest.gamemanagers.AnimationCache;
 
 public class AimedEnemyBullet implements EnemyBullet {
     private Sprite sprite;
     private final Rectangle rectangle;
     private final Vector2 velocity = new Vector2();
-    private final float speed = 5f;
     private final int damage = 1;
 
     private Animation<TextureRegion> animation;
@@ -23,24 +20,20 @@ public class AimedEnemyBullet implements EnemyBullet {
         this.rectangle = new Rectangle();
     }
 
-    public AimedEnemyBullet(Texture texture, float x, float y, float targetX, float targetY) {
+    public AimedEnemyBullet(Animation<TextureRegion> animation, float x, float y, float targetX, float targetY, float size, float speed) {
         this();
-        init(texture, x, y, targetX, targetY);
+        init(animation, x, y, targetX, targetY, size, speed);
     }
 
-    public void init(Texture texture, float x, float y, float targetX, float targetY) {
-        int frameHeight = texture.getHeight();
-        int frameWidth = texture.getWidth() / 3;
-
-        animation = AnimationCache.get(texture, 3, 0.1f, Animation.PlayMode.LOOP);
+    public void init(Animation<TextureRegion> animation, float x, float y, float targetX, float targetY, float size, float speed) {
+        this.animation = animation;
         TextureRegion[] frames = animation.getKeyFrames();
 
         if (sprite == null) sprite = new Sprite(frames[0]);
         else sprite.setRegion(frames[0]);
 
-        float aspectRatio = (float) frameHeight / frameWidth;
-        float baseWidth = 0.25f;
-        sprite.setSize(baseWidth, baseWidth * aspectRatio);
+        float aspectRatio = (float) frames[0].getRegionHeight() / frames[0].getRegionWidth();
+        sprite.setSize(size, size * aspectRatio);
         sprite.setOriginCenter();
         sprite.setCenterX(x);
         sprite.setCenterY(y);

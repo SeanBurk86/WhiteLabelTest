@@ -25,6 +25,8 @@ public abstract class BaseEnemy implements Enemy {
     protected Animation<TextureRegion> animation;
     protected float animationTime = 0;
 
+    protected Animation<TextureRegion> bulletAnimation;
+
     protected float damageFlashTimer = 0;
     protected final float flashDuration = 0.05f;
 
@@ -74,7 +76,7 @@ public abstract class BaseEnemy implements Enemy {
     public boolean isDying() { return lifecycleState == LifecycleState.DYING; }
 
     @Override
-    public void update(float delta, Array<EnemyBullet> enemyBullets, Texture bulletTexture, Circle playerHitbox) {
+    public void update(float delta, Array<EnemyBullet> enemyBullets, Circle playerHitbox) {
         if (sprite == null) return;
 
         lifecycleTime += delta;
@@ -114,7 +116,7 @@ public abstract class BaseEnemy implements Enemy {
         }
 
         if (firing != null) {
-            firing.update(delta, sprite, rectangle, enemyBullets, bulletTexture, playerHitbox);
+            firing.update(delta, sprite, rectangle, enemyBullets, bulletAnimation, playerHitbox);
         }
     }
 

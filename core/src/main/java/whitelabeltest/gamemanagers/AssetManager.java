@@ -9,6 +9,7 @@ import com.badlogic.gdx.utils.Disposable;
 import com.badlogic.gdx.utils.Json;
 import com.badlogic.gdx.utils.ObjectMap;
 import whitelabeltest.enemy.EnemyDefinition;
+import whitelabeltest.enemy.FiringPatternDef;
 import whitelabeltest.player.weapons.WeaponDefinition;
 
 public class AssetManager implements Disposable {
@@ -23,10 +24,6 @@ public class AssetManager implements Disposable {
     public final Texture bulletTexture;
     public final Texture[] explosionTextures;
     public final Texture powerup1, powerup2, powerup3, powerup4;
-
-    // Explicit textures required by legacy code or specific logic
-    public Texture enemyBulletTexture;
-    public Texture iceDrifterBulletTexture;
 
     public AssetManager() {
         Json json = new Json();
@@ -47,6 +44,7 @@ public class AssetManager implements Disposable {
             if (def.bulletTexture != null) loadTexture(def.bulletTexture);
             if (def.spawnTexture != null) loadTexture(def.spawnTexture);
             if (def.deathTexture != null) loadTexture(def.deathTexture);
+            loadFiringPatternTextures(def.firingPattern);
         }
 
         // Setup common fixed assets
@@ -70,10 +68,14 @@ public class AssetManager implements Disposable {
         pixmap.fill();
         bulletTexture = new Texture(pixmap);
         pixmap.dispose();
+    }
 
-        // Map common specific textures for backward compatibility
-        enemyBulletTexture = getTexture("enemybullet.png");
-        iceDrifterBulletTexture = getTexture("icedrifterbullet.png");
+    private void loadFiringPatternTextures(FiringPatternDef def) {
+        if (def == null) return;
+        if (def.bulletTexture != null) loadTexture(def.bulletTexture);
+        if (def.patterns != null) {
+            for (FiringPatternDef sub : def.patterns) loadFiringPatternTextures(sub);
+        }
     }
 
     private void loadTexture(String path) {

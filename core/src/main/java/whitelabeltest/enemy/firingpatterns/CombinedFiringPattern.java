@@ -1,7 +1,8 @@
 package whitelabeltest.enemy.firingpatterns;
 
-import com.badlogic.gdx.graphics.Texture;
+import com.badlogic.gdx.graphics.g2d.Animation;
 import com.badlogic.gdx.graphics.g2d.Sprite;
+import com.badlogic.gdx.graphics.g2d.TextureRegion;
 import com.badlogic.gdx.math.Circle;
 import com.badlogic.gdx.math.Rectangle;
 import com.badlogic.gdx.utils.Array;
@@ -15,9 +16,9 @@ public class CombinedFiringPattern implements FiringPattern {
     }
 
     @Override
-    public void update(float delta, Sprite sprite, Rectangle rectangle, Array<EnemyBullet> enemyBullets, Texture bulletTexture, Circle playerHitbox) {
+    public void update(float delta, Sprite sprite, Rectangle rectangle, Array<EnemyBullet> enemyBullets, Animation<TextureRegion> bulletAnimation, Circle playerHitbox) {
         for (FiringPattern p : patterns) {
-            p.update(delta, sprite, rectangle, enemyBullets, bulletTexture, playerHitbox);
+            p.update(delta, sprite, rectangle, enemyBullets, bulletAnimation, playerHitbox);
         }
     }
 

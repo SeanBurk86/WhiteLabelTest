@@ -1,7 +1,8 @@
 package whitelabeltest.enemy.firingpatterns;
 
-import com.badlogic.gdx.graphics.Texture;
+import com.badlogic.gdx.graphics.g2d.Animation;
 import com.badlogic.gdx.graphics.g2d.Sprite;
+import com.badlogic.gdx.graphics.g2d.TextureRegion;
 import com.badlogic.gdx.math.Circle;
 import com.badlogic.gdx.math.Rectangle;
 import com.badlogic.gdx.utils.Array;
@@ -10,26 +11,47 @@ import whitelabeltest.gamemanagers.ObjectPools;
 
 public class ExplodingAimedFiring implements FiringPattern {
     private final float fireRate;
+    private final float bulletSize;
+    private final float bulletSpeed;
     private float shootTimer;
     private final int numRadialBullets = 8;
+    private final Animation<TextureRegion> spriteOverride;
+    private static final float DEFAULT_SPEED = 6f;
 
     public ExplodingAimedFiring(float fireRate) {
+        this(fireRate, 0.25f, DEFAULT_SPEED, null);
+    }
+
+    public ExplodingAimedFiring(float fireRate, float bulletSize) {
+        this(fireRate, bulletSize, DEFAULT_SPEED, null);
+    }
+
+    public ExplodingAimedFiring(float fireRate, float bulletSize, float bulletSpeed) {
+        this(fireRate, bulletSize, bulletSpeed, null);
+    }
+
+    /** @param spriteOverride pass null to use the enemy's default bullet animation */
+    public ExplodingAimedFiring(float fireRate, float bulletSize, float bulletSpeed, Animation<TextureRegion> spriteOverride) {
         this.fireRate = fireRate;
+        this.bulletSize = bulletSize;
+        this.bulletSpeed = bulletSpeed;
+        this.spriteOverride = spriteOverride;
         this.shootTimer = 0;
     }
 
     @Override
-    public void update(float delta, Sprite sprite, Rectangle rectangle, Array<EnemyBullet> enemyBullets, Texture bulletTexture, Circle playerHitbox) {
+    public void update(float delta, Sprite sprite, Rectangle rectangle, Array<EnemyBullet> enemyBullets, Animation<TextureRegion> bulletAnimation, Circle playerHitbox) {
         shootTimer += delta;
         if (shootTimer >= fireRate) {
             shootTimer = 0;
             float centerX = sprite.getX() + sprite.getWidth() / 2;
             float centerY = sprite.getY() + sprite.getHeight() / 2;
+            Animation<TextureRegion> animation = spriteOverride != null ? spriteOverride : bulletAnimation;
 
             for (int i = 0; i < numRadialBullets; i++) {
                 float angle = i * (360f / numRadialBullets);
                 ExplodingAimedBullet b = ObjectPools.explodingAimedBulletPool.obtain();
-                b.init(bulletTexture, centerX, centerY, angle, playerHitbox);
+                b.init(animation, centerX, centerY, angle, playerHitbox, bulletSize, bulletSpeed);
                 enemyBullets.add(b);
             }
         }

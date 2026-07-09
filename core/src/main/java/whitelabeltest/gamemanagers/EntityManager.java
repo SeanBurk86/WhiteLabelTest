@@ -56,6 +56,8 @@ public class EntityManager {
         this.enemyBullets = new Array<>();
         this.powerups = new Array<>();
         this.explosions = new Array<>();
+
+        EnemySpawnRegistry.init(assets, enemies, worldWidth, worldHeight);
     }
 
     public void triggerBombEffect() {
@@ -94,7 +96,7 @@ public class EntityManager {
 
         for (int i = enemies.size - 1; i >= 0; i--) {
             Enemy e = enemies.get(i);
-            e.update(delta, enemyBullets, assets.enemyBulletTexture, player.getHitbox());
+            e.update(delta, enemyBullets, player.getHitbox());
 
             if (e.isOffScreen()) {
                 if (e.isBoss() && e.isDying()) notifyBossKilled();
