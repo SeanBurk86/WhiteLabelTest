@@ -125,18 +125,10 @@ public class EntityManager {
     }
 
     public void draw(SpriteBatch batch) {
-        // Z-order: Weapons (bullets) drawn behind everything else
-        for (Weapon b : bullets) b.draw(batch);
-
-        // Enemies and their bullets
-        for (Enemy e : enemies) e.draw(batch);
-        for (EnemyBullet eb : enemyBullets) eb.draw(batch);
-
-        // Powerups and particles
-        for (Powerup p : powerups) p.draw(batch);
         for (ExplosionEffect e : explosions) e.draw(batch);
+        for (Weapon b : bullets) b.draw(batch);
+        for (Powerup p : powerups) p.draw(batch);
 
-        // Bomb effect: additive blend so the black background of the VFX sprite is transparent.
         if (bombActive) {
             TextureRegion frame = bombAnimation.getKeyFrame(bombAnimationTime);
             float bx = worldWidth / 2f - bombDrawWidth / 2f;
@@ -147,6 +139,8 @@ public class EntityManager {
             batch.flush();
             batch.setBlendFunction(GL20.GL_SRC_ALPHA, GL20.GL_ONE_MINUS_SRC_ALPHA);
         }
+        for (Enemy e : enemies) e.draw(batch);
+        for (EnemyBullet eb : enemyBullets) eb.draw(batch);
 
         player.draw(batch);
     }

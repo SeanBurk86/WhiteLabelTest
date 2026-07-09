@@ -133,8 +133,7 @@ public abstract class BaseEnemy implements Enemy {
         if (deathAnimation != null) {
             sprite.setRegion(deathAnimation.getKeyFrame(lifecycleTime, false));
         } else {
-            float t = 1f - Math.min(1f, lifecycleTime / deathDuration);
-            sprite.setColor(1, 1, 1, t);
+            sprite.setColor(1, 1, 1, 0);
         }
     }
 
