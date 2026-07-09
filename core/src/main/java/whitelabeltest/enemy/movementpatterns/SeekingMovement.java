@@ -40,6 +40,7 @@ public class SeekingMovement implements MovementPattern {
                 tempDir.scl(-1); // Move away from player
             }
             sprite.translate(tempDir.x * speed * delta, tempDir.y * speed * delta);
+            sprite.setRotation(tempDir.angleDeg() + 90f);
             rectangle.setPosition(sprite.getX(), sprite.getY());
         }
     }

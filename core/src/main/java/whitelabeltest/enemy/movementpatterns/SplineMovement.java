@@ -11,7 +11,7 @@ public class SplineMovement implements MovementPattern {
     private float pathTime = 0;
     private final float pathDuration;
     private final Vector2 tempPos = new Vector2();
-    private final Vector2 toPlayer = new Vector2();
+    private final Vector2 tempVel = new Vector2();
 
     public SplineMovement(float worldHeight, float duration, float spawnCenterX) {
         this(worldHeight, duration, DEFAULT_ANGLE_DEG, spawnCenterX);
@@ -51,22 +51,22 @@ public class SplineMovement implements MovementPattern {
         if (t > 1f) t = 1f;
 
         path.valueAt(tempPos, t);
+        path.derivativeAt(tempVel, t);
 
-        // Apply inverse movement by inverting Y position relative to world center
+        // Apply inverse movement by inverting Y position (and its corresponding velocity
+        // component) relative to world center
         float finalX = tempPos.x;
         float finalY = tempPos.y;
         if (inverseMovement) {
             finalY = worldHeight - tempPos.y; // Invert Y position
+            tempVel.y = -tempVel.y;
         }
 
         sprite.setCenterX(finalX);
         sprite.setCenterY(finalY);
         rectangle.setPosition(sprite.getX(), sprite.getY());
 
-        float targetX = playerHitbox.x;
-        float targetY = playerHitbox.y;
-        toPlayer.set(targetX - finalX, targetY - finalY); // Use finalX, finalY for rotation
-        sprite.setRotation(toPlayer.angleDeg() + 90);
+        sprite.setRotation(tempVel.angleDeg() + 90f);
     }
 
     @Override

@@ -54,7 +54,7 @@ public class ZigZagMovement implements MovementPattern {
         tempDelta.rotateDeg(angleDeg - DEFAULT_ANGLE_DEG);
 
         sprite.translate(tempDelta.x, tempDelta.y);
-        sprite.setFlip(!movingRight, false);
+        sprite.setRotation(tempDelta.angleDeg() + 90f);
 
         rectangle.setPosition(sprite.getX(), sprite.getY());
     }
