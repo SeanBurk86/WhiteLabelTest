@@ -139,6 +139,12 @@ public class PatternFactory {
             }
             case "SpawnEnemy":
                 return new SpawnEnemyFiring(def.spawnType, def.fireRate, def.offsetX, def.offsetY);
+            case "Laser": {
+                Animation<TextureRegion> spriteOverride = buildBulletAnimation(enemyDef, def);
+                float thickness = resolve(def.bulletSize, 0.3f);
+                float length = def.length > 0 ? def.length : LaserFiring.DEFAULT_LENGTH;
+                return new LaserFiring(def.fireRate, thickness, length, def.angularSpeed, def.fireAngle, def.duration, spriteOverride, def.offsetX, def.offsetY);
+            }
             default:
                 Animation<TextureRegion> spriteOverride = buildBulletAnimation(enemyDef, def);
                 return createFiring(def.type, def.fireRate, def.bulletSize, def.bulletSpeed, spriteOverride, def.spreadDegrees, def.numBullets, def.offsetX, def.offsetY);

@@ -7,24 +7,23 @@ import com.badlogic.gdx.utils.JsonValue;
 public class FiringPatternDef implements Json.Serializable {
     public String type = "None";
     public float fireRate = 0;
-    public float duration = 3.0f; // used by parent Sequence to know how long to run this pattern
-    public String spawnType; // enemy type id to spawn, used when type == "SpawnEnemy"
-    public float bulletSize = -1f; // -1 means "use this pattern's own default"
-    public float bulletSpeed = -1f; // -1 means "use this pattern's own default"
-    public String bulletTexture; // optional override; null means "use the enemy's default bulletTexture"
-    // Sprite sheet layout for `bulletTexture`, only meaningful when bulletTexture is set.
-    // -1 (or -1f) means "use the enemy definition's bullet* value".
+    public float duration = 3.0f;
+    public String spawnType;
+    public float bulletSize = -1f;
+    public float bulletSpeed = -1f;
+    public String bulletTexture;
     public int bulletFrameCount = -1;
     public int bulletColumns = -1;
     public int bulletRows = -1;
     public float bulletFrameDuration = -1f;
-    public float spreadDegrees = -1f; // -1 means "use this pattern's own default" (e.g. QuarterCircle's fan width)
-    public int numBullets = -1; // -1 means "use this pattern's own default" (e.g. QuarterCircle's bullet count)
-    // Emission point offset from the sprite's center, in world units — lets multi-gun enemies
-    // fire from off-center mount points instead of dead center.
+    public float spreadDegrees = -1f;
+    public int numBullets = -1;
     public float offsetX = 0f;
     public float offsetY = 0f;
-    public Array<FiringPatternDef> patterns; // sub-patterns for Sequence / Combined
+    public float length = -1f;
+    public float angularSpeed = 0f;
+    public float fireAngle = Float.NaN;
+    public Array<FiringPatternDef> patterns;
 
     public FiringPatternDef() {}
 
@@ -45,6 +44,9 @@ public class FiringPatternDef implements Json.Serializable {
         if (numBullets > 0) json.writeValue("numBullets", numBullets);
         if (offsetX != 0f) json.writeValue("offsetX", offsetX);
         if (offsetY != 0f) json.writeValue("offsetY", offsetY);
+        if (length > 0) json.writeValue("length", length);
+        if (angularSpeed != 0f) json.writeValue("angularSpeed", angularSpeed);
+        if (!Float.isNaN(fireAngle)) json.writeValue("fireAngle", fireAngle);
         if (patterns != null) json.writeValue("patterns", patterns);
     }
 
@@ -65,6 +67,9 @@ public class FiringPatternDef implements Json.Serializable {
         numBullets = data.getInt("numBullets", -1);
         offsetX = data.getFloat("offsetX", 0f);
         offsetY = data.getFloat("offsetY", 0f);
+        length = data.getFloat("length", -1f);
+        angularSpeed = data.getFloat("angularSpeed", 0f);
+        fireAngle = data.getFloat("fireAngle", Float.NaN);
         JsonValue patternsData = data.get("patterns");
         if (patternsData != null) {
             patterns = new Array<>();

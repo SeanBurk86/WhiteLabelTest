@@ -147,7 +147,11 @@ public class Main extends ApplicationAdapter {
 
         shapeRenderer.setColor(Color.ORANGE);
         for (EnemyBullet bullet : em.getEnemyBullets()) {
-            shapeRenderer.rect(bullet.getRectangle().x, bullet.getRectangle().y, bullet.getRectangle().width, bullet.getRectangle().height);
+            Rectangle r = bullet.getRectangle();
+            // getRotation() is 0 for ordinary bullets (a no-op rotation below); bullets like
+            // LaserBullet whose hitbox rotates without resizing report their real sweep angle,
+            // rotated around the box's bottom-center per EnemyBullet.getRotation()'s contract.
+            shapeRenderer.rect(r.x, r.y, r.width / 2f, 0f, r.width, r.height, 1f, 1f, bullet.getRotation());
         }
 
         shapeRenderer.setColor(Color.GREEN);

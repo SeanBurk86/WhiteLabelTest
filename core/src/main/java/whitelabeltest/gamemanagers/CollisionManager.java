@@ -1,6 +1,8 @@
 package whitelabeltest.gamemanagers;
 
+import com.badlogic.gdx.math.Circle;
 import com.badlogic.gdx.math.Intersector;
+import com.badlogic.gdx.math.MathUtils;
 import com.badlogic.gdx.math.Rectangle;
 import com.badlogic.gdx.utils.Array;
 import whitelabeltest.enemy.Enemy;
@@ -31,7 +33,7 @@ public class CollisionManager {
     public boolean checkPlayerBulletCollisions(Player player, Array<EnemyBullet> enemyBullets) {
         for (int i = enemyBullets.size - 1; i >= 0; i--) {
             EnemyBullet bullet = enemyBullets.get(i);
-            if (Intersector.overlaps(player.getHitbox(), bullet.getRectangle())) {
+            if (overlaps(player.getHitbox(), bullet)) {
                 collisionHighlight.set(bullet.getRectangle());
                 return true;
             }
@@ -42,11 +44,40 @@ public class CollisionManager {
     public boolean checkGrazeCollisions(Player player, Array<EnemyBullet> enemyBullets) {
         for (int i = enemyBullets.size - 1; i >= 0; i--) {
             EnemyBullet bullet = enemyBullets.get(i);
-            if (Intersector.overlaps(player.getGrazeHitbox(), bullet.getRectangle())) {
+            if (overlaps(player.getGrazeHitbox(), bullet)) {
                 return true;
             }
         }
         return false;
+    }
+
+    /** Most bullets report getRotation() == 0, so this is a plain Circle-vs-AABB check; bullets
+     *  like LaserBullet whose hitbox is rotated (but not resized) get an exact rotated-rect check
+     *  instead, by testing the circle against the rectangle in the rectangle's own local frame. */
+    private boolean overlaps(Circle circle, EnemyBullet bullet) {
+        Rectangle rect = bullet.getRectangle();
+        float rotation = bullet.getRotation();
+        if (rotation == 0f) return Intersector.overlaps(circle, rect);
+
+        float pivotX = rect.x + rect.width / 2f;
+        float pivotY = rect.y;
+        float dx = circle.x - pivotX;
+        float dy = circle.y - pivotY;
+
+        // Undo the rectangle's rotation to bring the circle's center into the rectangle's own
+        // un-rotated local frame, where it's a plain axis-aligned box again.
+        float cos = MathUtils.cosDeg(-rotation);
+        float sin = MathUtils.sinDeg(-rotation);
+        float localX = dx * cos - dy * sin;
+        float localY = dx * sin + dy * cos;
+
+        float halfWidth = rect.width / 2f;
+        float closestX = MathUtils.clamp(localX, -halfWidth, halfWidth);
+        float closestY = MathUtils.clamp(localY, 0f, rect.height);
+
+        float distX = localX - closestX;
+        float distY = localY - closestY;
+        return distX * distX + distY * distY <= circle.radius * circle.radius;
     }
 
     public void checkPlayerPowerupCollisions(Player player, Array<Powerup> powerups, AudioManager audio) {
