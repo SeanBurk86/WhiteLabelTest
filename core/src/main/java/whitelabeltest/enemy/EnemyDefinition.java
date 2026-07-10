@@ -1,6 +1,7 @@
 package whitelabeltest.enemy;
 
 import whitelabeltest.enemy.movementpatterns.MovementPattern;
+import whitelabeltest.enemy.movementpatterns.SeekingMovement;
 
 public class EnemyDefinition {
     public String id;
@@ -27,6 +28,11 @@ public class EnemyDefinition {
     // pattern's original, unrotated behavior: Straight/ZigZag/Spline treat it as an absolute
     // heading; Seeking treats it as an offset from aiming straight at the player.
     public float movementAngle = MovementPattern.DEFAULT_ANGLE_DEG;
+    // How close (in world units) a Seeking enemy gets to the player before it stops approaching.
+    public float stopDistance = SeekingMovement.DEFAULT_STOP_DISTANCE;
+    // Rich pattern definition — supports Sequence and Squadron, mirroring firingPattern below.
+    // When set, this takes priority over movementType/speed/movementAngle/stopDistance.
+    public MovementPatternDef movementPattern;
     public boolean inverseMovement = false;
     public boolean isBoss = false;
     // Legacy single-pattern fields — used when firingPattern is absent

@@ -6,6 +6,8 @@ import com.badlogic.gdx.math.Rectangle;
 import com.badlogic.gdx.math.Vector2;
 
 public class SeekingMovement implements MovementPattern {
+    public static final float DEFAULT_STOP_DISTANCE = 3.0f;
+
     private final float speed;
     private final float stopDistance;
     private final float angleOffsetDeg;
@@ -15,9 +17,6 @@ public class SeekingMovement implements MovementPattern {
     public SeekingMovement(float speed, float stopDistance) {
         this(speed, stopDistance, DEFAULT_ANGLE_DEG);
     }
-
-    /** @param angleDeg rotates the approach away from a direct line to the player;
-     *  DEFAULT_ANGLE_DEG means "aim straight at the player" (the original behavior). */
     public SeekingMovement(float speed, float stopDistance, float angleDeg) {
         this.speed = speed;
         this.stopDistance = stopDistance;

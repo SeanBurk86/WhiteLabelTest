@@ -6,25 +6,62 @@ import com.badlogic.gdx.graphics.g2d.TextureRegion;
 import com.badlogic.gdx.utils.Array;
 import whitelabeltest.enemy.movementpatterns.StraightMovement;
 import whitelabeltest.enemy.movementpatterns.MovementPattern;
+import whitelabeltest.enemy.movementpatterns.MoveToPointMovement;
+import whitelabeltest.enemy.movementpatterns.NoMovement;
 import whitelabeltest.enemy.movementpatterns.SeekingMovement;
+import whitelabeltest.enemy.movementpatterns.SequencedMovementPattern;
 import whitelabeltest.enemy.movementpatterns.SplineMovement;
+import whitelabeltest.enemy.movementpatterns.SquadronMovement;
 import whitelabeltest.enemy.firingpatterns.*;
 import whitelabeltest.enemy.movementpatterns.ZigZagMovement;
 import whitelabeltest.gamemanagers.AnimationCache;
 import whitelabeltest.gamemanagers.EnemySpawnRegistry;
 
 public class PatternFactory {
-    /** @param spawnCenterX the enemy's actual spawn center-X (as dictated by the spawn schedule);
-     *  used to anchor Spline's path instead of picking a random lane. */
-    public static MovementPattern createMovement(String type, float speed, float worldHeight, float movementAngle, float spawnCenterX) {
+    public static MovementPattern createMovement(String type, float speed, float worldHeight, float movementAngle, float stopDistance, float spawnCenterX) {
         if (type == null) return new StraightMovement(speed, movementAngle);
 
         switch (type) {
             case "ZigZag": return new ZigZagMovement(speed * 1.5f, speed, movementAngle);
-            case "Seeking": return new SeekingMovement(speed, 3.0f, movementAngle);
+            case "Seeking": return new SeekingMovement(speed, stopDistance, movementAngle);
             case "Spline": return new SplineMovement(worldHeight, 6.0f, movementAngle, spawnCenterX);
             default: return new StraightMovement(speed, movementAngle);
         }
+    }
+
+    public static MovementPattern createMovement(EnemyDefinition enemyDef, MovementPatternDef def, float worldHeight, float spawnCenterX) {
+        if (def == null) return new NoMovement();
+
+        if ("Sequence".equals(def.type)) {
+            if (def.patterns == null || def.patterns.size == 0) return new NoMovement();
+            Array<MovementPattern> mps = new Array<>();
+            float[] durations = new float[def.patterns.size];
+            for (int i = 0; i < def.patterns.size; i++) {
+                MovementPatternDef sub = def.patterns.get(i);
+                mps.add(createMovement(enemyDef, sub, worldHeight, spawnCenterX));
+                durations[i] = sub.duration > 0 ? sub.duration : 3.0f;
+            }
+            return new SequencedMovementPattern(mps, durations);
+        }
+
+        if ("Squadron".equals(def.type)) {
+            if (def.pattern == null) return new NoMovement();
+            MovementPattern leader = createMovement(enemyDef, def.pattern, worldHeight, spawnCenterX - def.offsetX);
+            return new SquadronMovement(leader, def.offsetX, def.offsetY);
+        }
+
+        if ("MoveToPoint".equals(def.type)) {
+            float speed = def.speed > 0 ? def.speed : enemyDef.speed;
+            float targetX = !Float.isNaN(def.targetX) ? def.targetX : spawnCenterX;
+            float targetY = !Float.isNaN(def.targetY) ? def.targetY : 0f;
+            float stopDistance = def.stopDistance > 0 ? def.stopDistance : MoveToPointMovement.DEFAULT_STOP_DISTANCE;
+            return new MoveToPointMovement(speed, targetX, targetY, stopDistance);
+        }
+
+        float speed = def.speed > 0 ? def.speed : enemyDef.speed;
+        float angle = !Float.isNaN(def.movementAngle) ? def.movementAngle : enemyDef.movementAngle;
+        float stopDistance = def.stopDistance > 0 ? def.stopDistance : enemyDef.stopDistance;
+        return createMovement(def.type, speed, worldHeight, angle, stopDistance, spawnCenterX);
     }
 
     public static FiringPattern createFiring(String type, float fireRate) {
@@ -43,9 +80,6 @@ public class PatternFactory {
         return createFiring(type, fireRate, bulletSize, bulletSpeed, spriteOverride, -1f, -1);
     }
 
-    /** @param bulletSize, bulletSpeed pass <= 0 to use each pattern's own default.
-     *  @param spriteOverride pass null to use the enemy's default bullet animation.
-     *  @param spreadDegrees, numBullets QuarterCircle-only fan controls; pass <= 0 to use its defaults. */
     public static FiringPattern createFiring(String type, float fireRate, float bulletSize, float bulletSpeed, Animation<TextureRegion> spriteOverride, float spreadDegrees, int numBullets) {
         if (type == null) return new NoFiring();
 
@@ -102,9 +136,6 @@ public class PatternFactory {
         }
     }
 
-    /** Builds the per-pattern bullet animation when a pattern sets its own bulletTexture, falling
-     *  back to the enemy definition's bullet* layout for any frame-layout fields the pattern
-     *  doesn't override itself. Returns null when the pattern has no bulletTexture override. */
     private static Animation<TextureRegion> buildBulletAnimation(EnemyDefinition enemyDef, FiringPatternDef def) {
         if (def.bulletTexture == null) return null;
         Texture texture = EnemySpawnRegistry.getTexture(def.bulletTexture);
