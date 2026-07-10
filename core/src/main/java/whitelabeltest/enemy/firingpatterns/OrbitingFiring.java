@@ -23,6 +23,8 @@ public class OrbitingFiring implements FiringPattern {
     private static final float ORBIT_SPEED = 5.0f; // radians per second
 
     private final Animation<TextureRegion> spriteOverride;
+    private final float offsetX;
+    private final float offsetY;
 
     public OrbitingFiring(float fireRate) {
         this(fireRate, 0.5f, DEFAULT_CENTER_SPEED, null);
@@ -38,10 +40,17 @@ public class OrbitingFiring implements FiringPattern {
 
     /** @param spriteOverride pass null to use the enemy's default bullet animation */
     public OrbitingFiring(float fireRate, float bulletSize, float bulletSpeed, Animation<TextureRegion> spriteOverride) {
+        this(fireRate, bulletSize, bulletSpeed, spriteOverride, 0f, 0f);
+    }
+
+    /** @param offsetX, offsetY emission point offset from the sprite's center, in world units */
+    public OrbitingFiring(float fireRate, float bulletSize, float bulletSpeed, Animation<TextureRegion> spriteOverride, float offsetX, float offsetY) {
         this.fireRate = fireRate;
         this.bulletSize = bulletSize;
         this.bulletSpeed = bulletSpeed;
         this.spriteOverride = spriteOverride;
+        this.offsetX = offsetX;
+        this.offsetY = offsetY;
         this.shootTimer = fireRate; // fire immediately on first update
     }
 
@@ -51,8 +60,8 @@ public class OrbitingFiring implements FiringPattern {
         if (shootTimer < fireRate) return;
         shootTimer = 0;
 
-        float centerX = sprite.getX() + sprite.getWidth() / 2;
-        float centerY = sprite.getY() + sprite.getHeight() / 2;
+        float centerX = sprite.getX() + sprite.getWidth() / 2 + offsetX;
+        float centerY = sprite.getY() + sprite.getHeight() / 2 + offsetY;
         float playerX = playerHitbox.x;
         float playerY = playerHitbox.y;
         Animation<TextureRegion> animation = spriteOverride != null ? spriteOverride : bulletAnimation;

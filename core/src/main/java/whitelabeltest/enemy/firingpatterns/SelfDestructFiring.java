@@ -19,6 +19,8 @@ public class SelfDestructFiring implements FiringPattern {
 
     private static final float DEFAULT_SPEED = 4f;
     private final Animation<TextureRegion> spriteOverride;
+    private final float offsetX;
+    private final float offsetY;
 
     public SelfDestructFiring(float triggerDistance) {
         this(triggerDistance, 0.25f, DEFAULT_SPEED, null);
@@ -34,10 +36,17 @@ public class SelfDestructFiring implements FiringPattern {
 
     /** @param spriteOverride pass null to use the enemy's default bullet animation */
     public SelfDestructFiring(float triggerDistance, float bulletSize, float bulletSpeed, Animation<TextureRegion> spriteOverride) {
+        this(triggerDistance, bulletSize, bulletSpeed, spriteOverride, 0f, 0f);
+    }
+
+    /** @param offsetX, offsetY emission point offset from the sprite's center, in world units */
+    public SelfDestructFiring(float triggerDistance, float bulletSize, float bulletSpeed, Animation<TextureRegion> spriteOverride, float offsetX, float offsetY) {
         this.triggerDistance = triggerDistance;
         this.bulletSize = bulletSize;
         this.bulletSpeed = bulletSpeed;
         this.spriteOverride = spriteOverride;
+        this.offsetX = offsetX;
+        this.offsetY = offsetY;
     }
 
     @Override
@@ -49,8 +58,9 @@ public class SelfDestructFiring implements FiringPattern {
 
         if (currentPos.dst(targetPos) <= triggerDistance) {
             triggered = true;
-            float centerX = currentPos.x;
-            float centerY = currentPos.y;
+            // Offset only shifts the burst's spawn point, not the trigger-distance check itself.
+            float centerX = currentPos.x + offsetX;
+            float centerY = currentPos.y + offsetY;
             Animation<TextureRegion> animation = spriteOverride != null ? spriteOverride : bulletAnimation;
 
             for (int i = 0; i < 8; i++) {

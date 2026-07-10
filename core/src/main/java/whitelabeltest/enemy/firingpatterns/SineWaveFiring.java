@@ -21,6 +21,8 @@ public class SineWaveFiring implements FiringPattern {
     private static final float DEFAULT_SPEED = 5.0f;
 
     private final Animation<TextureRegion> spriteOverride;
+    private final float offsetX;
+    private final float offsetY;
 
     public SineWaveFiring(float fireRate) {
         this(fireRate, 0.2f, DEFAULT_SPEED, null);
@@ -36,10 +38,17 @@ public class SineWaveFiring implements FiringPattern {
 
     /** @param spriteOverride pass null to use the enemy's default bullet animation */
     public SineWaveFiring(float fireRate, float bulletSize, float bulletSpeed, Animation<TextureRegion> spriteOverride) {
+        this(fireRate, bulletSize, bulletSpeed, spriteOverride, 0f, 0f);
+    }
+
+    /** @param offsetX, offsetY emission point offset from the sprite's center, in world units */
+    public SineWaveFiring(float fireRate, float bulletSize, float bulletSpeed, Animation<TextureRegion> spriteOverride, float offsetX, float offsetY) {
         this.fireRate = fireRate;
         this.bulletSize = bulletSize;
         this.bulletSpeed = bulletSpeed;
         this.spriteOverride = spriteOverride;
+        this.offsetX = offsetX;
+        this.offsetY = offsetY;
         this.shootTimer = fireRate;
     }
 
@@ -49,8 +58,8 @@ public class SineWaveFiring implements FiringPattern {
         if (shootTimer < fireRate) return;
         shootTimer = 0;
 
-        float centerX = sprite.getX() + sprite.getWidth() / 2;
-        float centerY = sprite.getY() + sprite.getHeight() / 2;
+        float centerX = sprite.getX() + sprite.getWidth() / 2 + offsetX;
+        float centerY = sprite.getY() + sprite.getHeight() / 2 + offsetY;
         Animation<TextureRegion> animation = spriteOverride != null ? spriteOverride : bulletAnimation;
 
         SineBullet b1 = ObjectPools.sineBulletPool.obtain();

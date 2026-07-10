@@ -76,23 +76,32 @@ public class PatternFactory {
         return createFiring(type, fireRate, bulletSize, bulletSpeed, null);
     }
 
+    /** @param offsetX, offsetY emission point offset from the sprite's center, in world units */
+    public static FiringPattern createFiring(String type, float fireRate, float bulletSize, float bulletSpeed, float offsetX, float offsetY) {
+        return createFiring(type, fireRate, bulletSize, bulletSpeed, null, -1f, -1, offsetX, offsetY);
+    }
+
     public static FiringPattern createFiring(String type, float fireRate, float bulletSize, float bulletSpeed, Animation<TextureRegion> spriteOverride) {
         return createFiring(type, fireRate, bulletSize, bulletSpeed, spriteOverride, -1f, -1);
     }
 
     public static FiringPattern createFiring(String type, float fireRate, float bulletSize, float bulletSpeed, Animation<TextureRegion> spriteOverride, float spreadDegrees, int numBullets) {
+        return createFiring(type, fireRate, bulletSize, bulletSpeed, spriteOverride, spreadDegrees, numBullets, 0f, 0f);
+    }
+
+    public static FiringPattern createFiring(String type, float fireRate, float bulletSize, float bulletSpeed, Animation<TextureRegion> spriteOverride, float spreadDegrees, int numBullets, float offsetX, float offsetY) {
         if (type == null) return new NoFiring();
 
         switch (type) {
-            case "Aimed": return new AimedFiring(fireRate, resolve(bulletSize, 0.25f), resolve(bulletSpeed, 5f), spriteOverride);
-            case "SelfDestruct": return new SelfDestructFiring(3.0f, resolve(bulletSize, 0.25f), resolve(bulletSpeed, 4f), spriteOverride);
-            case "ExplodingAimed": return new ExplodingAimedFiring(fireRate, resolve(bulletSize, 0.25f), resolve(bulletSpeed, 6f), spriteOverride);
-            case "BurstAimed": return new BurstAimedFiring(fireRate, resolve(bulletSize, 0.25f), resolve(bulletSpeed, 5f), spriteOverride);
+            case "Aimed": return new AimedFiring(fireRate, resolve(bulletSize, 0.25f), resolve(bulletSpeed, 5f), spriteOverride, offsetX, offsetY);
+            case "SelfDestruct": return new SelfDestructFiring(3.0f, resolve(bulletSize, 0.25f), resolve(bulletSpeed, 4f), spriteOverride, offsetX, offsetY);
+            case "ExplodingAimed": return new ExplodingAimedFiring(fireRate, resolve(bulletSize, 0.25f), resolve(bulletSpeed, 6f), spriteOverride, offsetX, offsetY);
+            case "BurstAimed": return new BurstAimedFiring(fireRate, resolve(bulletSize, 0.25f), resolve(bulletSpeed, 5f), spriteOverride, offsetX, offsetY);
             case "QuarterCircle": return new QuarterCircleFiring(fireRate, resolve(bulletSize, 0.25f), resolve(bulletSpeed, 5f), spriteOverride,
-                resolve(spreadDegrees, 90f), resolve(numBullets, 9));
-            case "Sweep": return new SweepFiring(fireRate, resolve(bulletSize, 0.25f), resolve(bulletSpeed, 5f), spriteOverride);
-            case "SineWave": return new SineWaveFiring(fireRate, resolve(bulletSize, 0.2f), resolve(bulletSpeed, 5f), spriteOverride);
-            case "Orbiting": return new OrbitingFiring(fireRate, resolve(bulletSize, 0.5f), resolve(bulletSpeed, 4f), spriteOverride);
+                resolve(spreadDegrees, 90f), resolve(numBullets, 9), offsetX, offsetY);
+            case "Sweep": return new SweepFiring(fireRate, resolve(bulletSize, 0.25f), resolve(bulletSpeed, 5f), spriteOverride, offsetX, offsetY);
+            case "SineWave": return new SineWaveFiring(fireRate, resolve(bulletSize, 0.2f), resolve(bulletSpeed, 5f), spriteOverride, offsetX, offsetY);
+            case "Orbiting": return new OrbitingFiring(fireRate, resolve(bulletSize, 0.5f), resolve(bulletSpeed, 4f), spriteOverride, offsetX, offsetY);
             default: return new NoFiring();
         }
     }
@@ -129,10 +138,10 @@ public class PatternFactory {
                 return new CombinedFiringPattern(fps);
             }
             case "SpawnEnemy":
-                return new SpawnEnemyFiring(def.spawnType, def.fireRate);
+                return new SpawnEnemyFiring(def.spawnType, def.fireRate, def.offsetX, def.offsetY);
             default:
                 Animation<TextureRegion> spriteOverride = buildBulletAnimation(enemyDef, def);
-                return createFiring(def.type, def.fireRate, def.bulletSize, def.bulletSpeed, spriteOverride, def.spreadDegrees, def.numBullets);
+                return createFiring(def.type, def.fireRate, def.bulletSize, def.bulletSpeed, spriteOverride, def.spreadDegrees, def.numBullets, def.offsetX, def.offsetY);
         }
     }
 

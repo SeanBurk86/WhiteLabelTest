@@ -20,6 +20,10 @@ public class FiringPatternDef implements Json.Serializable {
     public float bulletFrameDuration = -1f;
     public float spreadDegrees = -1f; // -1 means "use this pattern's own default" (e.g. QuarterCircle's fan width)
     public int numBullets = -1; // -1 means "use this pattern's own default" (e.g. QuarterCircle's bullet count)
+    // Emission point offset from the sprite's center, in world units — lets multi-gun enemies
+    // fire from off-center mount points instead of dead center.
+    public float offsetX = 0f;
+    public float offsetY = 0f;
     public Array<FiringPatternDef> patterns; // sub-patterns for Sequence / Combined
 
     public FiringPatternDef() {}
@@ -39,6 +43,8 @@ public class FiringPatternDef implements Json.Serializable {
         if (bulletFrameDuration > 0) json.writeValue("bulletFrameDuration", bulletFrameDuration);
         if (spreadDegrees > 0) json.writeValue("spreadDegrees", spreadDegrees);
         if (numBullets > 0) json.writeValue("numBullets", numBullets);
+        if (offsetX != 0f) json.writeValue("offsetX", offsetX);
+        if (offsetY != 0f) json.writeValue("offsetY", offsetY);
         if (patterns != null) json.writeValue("patterns", patterns);
     }
 
@@ -57,6 +63,8 @@ public class FiringPatternDef implements Json.Serializable {
         bulletFrameDuration = data.getFloat("bulletFrameDuration", -1f);
         spreadDegrees = data.getFloat("spreadDegrees", -1f);
         numBullets = data.getInt("numBullets", -1);
+        offsetX = data.getFloat("offsetX", 0f);
+        offsetY = data.getFloat("offsetY", 0f);
         JsonValue patternsData = data.get("patterns");
         if (patternsData != null) {
             patterns = new Array<>();

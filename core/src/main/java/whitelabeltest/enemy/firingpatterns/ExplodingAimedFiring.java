@@ -16,6 +16,8 @@ public class ExplodingAimedFiring implements FiringPattern {
     private float shootTimer;
     private final int numRadialBullets = 8;
     private final Animation<TextureRegion> spriteOverride;
+    private final float offsetX;
+    private final float offsetY;
     private static final float DEFAULT_SPEED = 6f;
 
     public ExplodingAimedFiring(float fireRate) {
@@ -32,10 +34,17 @@ public class ExplodingAimedFiring implements FiringPattern {
 
     /** @param spriteOverride pass null to use the enemy's default bullet animation */
     public ExplodingAimedFiring(float fireRate, float bulletSize, float bulletSpeed, Animation<TextureRegion> spriteOverride) {
+        this(fireRate, bulletSize, bulletSpeed, spriteOverride, 0f, 0f);
+    }
+
+    /** @param offsetX, offsetY emission point offset from the sprite's center, in world units */
+    public ExplodingAimedFiring(float fireRate, float bulletSize, float bulletSpeed, Animation<TextureRegion> spriteOverride, float offsetX, float offsetY) {
         this.fireRate = fireRate;
         this.bulletSize = bulletSize;
         this.bulletSpeed = bulletSpeed;
         this.spriteOverride = spriteOverride;
+        this.offsetX = offsetX;
+        this.offsetY = offsetY;
         this.shootTimer = 0;
     }
 
@@ -44,8 +53,8 @@ public class ExplodingAimedFiring implements FiringPattern {
         shootTimer += delta;
         if (shootTimer >= fireRate) {
             shootTimer = 0;
-            float centerX = sprite.getX() + sprite.getWidth() / 2;
-            float centerY = sprite.getY() + sprite.getHeight() / 2;
+            float centerX = sprite.getX() + sprite.getWidth() / 2 + offsetX;
+            float centerY = sprite.getY() + sprite.getHeight() / 2 + offsetY;
             Animation<TextureRegion> animation = spriteOverride != null ? spriteOverride : bulletAnimation;
 
             for (int i = 0; i < numRadialBullets; i++) {

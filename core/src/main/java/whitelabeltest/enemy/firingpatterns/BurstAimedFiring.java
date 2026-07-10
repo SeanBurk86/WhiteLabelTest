@@ -23,6 +23,8 @@ public class BurstAimedFiring implements FiringPattern {
     private boolean isBursting = false;
 
     private final Animation<TextureRegion> spriteOverride;
+    private final float offsetX;
+    private final float offsetY;
     private static final float DEFAULT_SPEED = 5f;
 
     public BurstAimedFiring(float fireRate) {
@@ -39,10 +41,17 @@ public class BurstAimedFiring implements FiringPattern {
 
     /** @param spriteOverride pass null to use the enemy's default bullet animation */
     public BurstAimedFiring(float fireRate, float bulletSize, float bulletSpeed, Animation<TextureRegion> spriteOverride) {
+        this(fireRate, bulletSize, bulletSpeed, spriteOverride, 0f, 0f);
+    }
+
+    /** @param offsetX, offsetY emission point offset from the sprite's center, in world units */
+    public BurstAimedFiring(float fireRate, float bulletSize, float bulletSpeed, Animation<TextureRegion> spriteOverride, float offsetX, float offsetY) {
         this.fireRate = fireRate;
         this.bulletSize = bulletSize;
         this.bulletSpeed = bulletSpeed;
         this.spriteOverride = spriteOverride;
+        this.offsetX = offsetX;
+        this.offsetY = offsetY;
         this.shootTimer = 0;
     }
 
@@ -73,8 +82,8 @@ public class BurstAimedFiring implements FiringPattern {
     }
 
     private void fireAimedShot(Sprite sprite, Array<EnemyBullet> enemyBullets, Animation<TextureRegion> bulletAnimation, Circle playerHitbox) {
-        float centerX = sprite.getX() + sprite.getWidth() / 2;
-        float centerY = sprite.getY() + sprite.getHeight() / 2;
+        float centerX = sprite.getX() + sprite.getWidth() / 2 + offsetX;
+        float centerY = sprite.getY() + sprite.getHeight() / 2 + offsetY;
         float targetX = playerHitbox.x;
         float targetY = playerHitbox.y;
 

@@ -22,6 +22,8 @@ public class QuarterCircleFiring implements FiringPattern {
     private static final float DEFAULT_SPREAD_DEGREES = 90f;
     private static final float DEFAULT_SPEED = 5f;
     private final Animation<TextureRegion> spriteOverride;
+    private final float offsetX;
+    private final float offsetY;
 
     public QuarterCircleFiring(float fireRate) {
         this(fireRate, 0.25f, DEFAULT_SPEED, null);
@@ -44,12 +46,19 @@ public class QuarterCircleFiring implements FiringPattern {
      *  @param spreadDegrees total angular width of the fan, centered on the aim direction
      *  @param numBullets how many bullets make up the fan (must be >= 2) */
     public QuarterCircleFiring(float fireRate, float bulletSize, float bulletSpeed, Animation<TextureRegion> spriteOverride, float spreadDegrees, int numBullets) {
+        this(fireRate, bulletSize, bulletSpeed, spriteOverride, spreadDegrees, numBullets, 0f, 0f);
+    }
+
+    /** @param offsetX, offsetY emission point offset from the sprite's center, in world units */
+    public QuarterCircleFiring(float fireRate, float bulletSize, float bulletSpeed, Animation<TextureRegion> spriteOverride, float spreadDegrees, int numBullets, float offsetX, float offsetY) {
         this.fireRate = fireRate;
         this.bulletSize = bulletSize;
         this.bulletSpeed = bulletSpeed;
         this.spriteOverride = spriteOverride;
         this.spreadDegrees = spreadDegrees;
         this.numBullets = numBullets;
+        this.offsetX = offsetX;
+        this.offsetY = offsetY;
         this.shootTimer = 0;
     }
 
@@ -59,8 +68,8 @@ public class QuarterCircleFiring implements FiringPattern {
         if (shootTimer < fireRate) return;
         shootTimer = 0;
 
-        float centerX = sprite.getX() + sprite.getWidth() / 2;
-        float centerY = sprite.getY() + sprite.getHeight() / 2;
+        float centerX = sprite.getX() + sprite.getWidth() / 2 + offsetX;
+        float centerY = sprite.getY() + sprite.getHeight() / 2 + offsetY;
         float playerX = playerHitbox.x;
         float playerY = playerHitbox.y;
         Animation<TextureRegion> animation = spriteOverride != null ? spriteOverride : bulletAnimation;

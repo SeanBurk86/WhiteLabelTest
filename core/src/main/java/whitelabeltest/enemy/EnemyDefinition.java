@@ -40,6 +40,10 @@ public class EnemyDefinition {
     public float fireRate;
     public float bulletSize = -1f; // -1 means "use this pattern's own default"
     public float bulletSpeed = -1f; // -1 means "use this pattern's own default"
+    // Emission point offset from the sprite's center, in world units; only used by the legacy
+    // firingType/fireRate path above (firingPattern's own FiringPatternDef.offsetX/Y takes priority).
+    public float firingOffsetX = 0f;
+    public float firingOffsetY = 0f;
     // Rich pattern definition — supports Sequence and Combined
     public FiringPatternDef firingPattern;
 
