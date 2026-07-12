@@ -113,7 +113,7 @@ public class Main extends ApplicationAdapter {
         spriteBatch.flush();
         Gdx.gl.glDisable(GL20.GL_SCISSOR_TEST);
 
-        ui.drawHUD(spriteBatch, game.getScoreManager(), game.getEntities().getPlayer(), PLAY_AREA_HEIGHT, leftX);
+        ui.drawHUD(spriteBatch, game.getScoreManager(), game.getEntities().getPlayer(), PLAY_AREA_HEIGHT, leftX, game.getBombCooldownTimer(), game.getBombCooldownFraction());
 
         ui.drawLevelStartAesthetics(spriteBatch, PLAY_AREA_WIDTH, PLAY_AREA_HEIGHT, game.getLevelStartTimer());
 

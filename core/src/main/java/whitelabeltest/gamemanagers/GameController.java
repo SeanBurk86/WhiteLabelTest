@@ -22,7 +22,10 @@ public class GameController implements Disposable {
     private boolean levelComplete;
     private boolean debugMode;
     private float levelStartTimer;
+    private float bombCooldownTimer;
     private final float worldWidth, worldHeight;
+
+    private static final float BOMB_COOLDOWN = 15f;
 
     public GameController(float worldWidth, float worldHeight) {
         this.worldWidth = worldWidth;
@@ -48,6 +51,9 @@ public class GameController implements Disposable {
     public void update(float delta) {
         scoreManager.update(delta);
         levelStartTimer += delta;
+        if (bombCooldownTimer > 0) {
+            bombCooldownTimer -= delta;
+        }
         input.update();
 
         if (input.isDebugToggleJustPressed()) {
@@ -91,7 +97,7 @@ public class GameController implements Disposable {
         }
 
         if (collisionManager.checkGrazeCollisions(entities.getPlayer(), entities.getEnemyBullets())) {
-            entities.getPlayer().setGrazePoints(entities.getPlayer().getGrazePoints() + 0.5f);
+            entities.getPlayer().setGrazePoints(entities.getPlayer().getGrazePoints() + 0.25f);
             entities.getPlayer().triggerGrazeFlash();
         }
 
@@ -109,12 +115,13 @@ public class GameController implements Disposable {
     }
 
     private void handleBomb() {
-        if (entities.getPlayer().getNumBombs() > 0 && !gameOver) {
+        if (entities.getPlayer().getNumBombs() > 0 && bombCooldownTimer <= 0 && !gameOver) {
             sufferBombDamage(50, entities.getEnemies());
             entities.destroyAllEnemyBullets();
             entities.getPlayer().setNumBombs(entities.getPlayer().getNumBombs() - 1);
             entities.triggerBombEffect();
             audio.playBomb();
+            bombCooldownTimer = BOMB_COOLDOWN;
         }
     }
 
@@ -177,6 +184,7 @@ public class GameController implements Disposable {
         gameOver = false;
         levelComplete = false;
         levelStartTimer = 0f;
+        bombCooldownTimer = 0f;
         audio.stopVictory();
         entities.reset();
         collisionManager.reset();
@@ -202,6 +210,8 @@ public class GameController implements Disposable {
     public boolean isLevelComplete() { return levelComplete; }
     public boolean isDebugMode() { return debugMode; }
     public float getLevelStartTimer() { return levelStartTimer; }
+    public float getBombCooldownTimer() { return Math.max(bombCooldownTimer, 0f); }
+    public float getBombCooldownFraction() { return Math.max(bombCooldownTimer, 0f) / BOMB_COOLDOWN; }
     public EntityManager getEntities() { return entities; }
     public CollisionManager getCollisionManager() { return collisionManager; }
 }

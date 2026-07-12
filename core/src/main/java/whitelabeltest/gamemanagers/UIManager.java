@@ -43,7 +43,7 @@ public class UIManager implements Disposable {
         pixmap.dispose();
     }
 
-    public void drawHUD(SpriteBatch batch, ScoreManager scoreManager, Player player, float worldHeight, float leftPanelX) {
+    public void drawHUD(SpriteBatch batch, ScoreManager scoreManager, Player player, float worldHeight, float leftPanelX, float bombCooldownTimer, float bombCooldownFraction) {
         float textX = leftPanelX + 0.2f;
         float barWidth = -leftPanelX - 0.4f;
 
@@ -64,12 +64,19 @@ public class UIManager implements Disposable {
         font.draw(batch, "Orbit Lvl: " + player.getWeaponLevel("OrbitWeapon"), textX, worldHeight - 2.0f);
         font.draw(batch, "# of Bombs: " + player.getNumBombs(), textX, worldHeight - 2.4f);
 
-        font.setColor(Color.CYAN);
-        font.draw(batch, "Graze:", textX, worldHeight - 2.6f);
-        font.setColor(Color.WHITE);
-        drawGrazeMeter(batch, Math.min(player.getGrazePoints() / 100f, 1f), textX, worldHeight - 2.73f, barWidth);
+        if (bombCooldownTimer > 0) {
+            font.setColor(Color.GRAY);
+            font.draw(batch, String.format("Bomb Cooldown: %.1fs", bombCooldownTimer), textX, worldHeight - 2.5f);
+            font.setColor(Color.WHITE);
+            drawBombCooldownMeter(batch, 1f - bombCooldownFraction, textX, worldHeight - 2.63f, barWidth);
+        }
 
-        font.draw(batch, "# of Lives: " + player.getNumLives(), textX, worldHeight - 3.0f);
+        font.setColor(Color.CYAN);
+        font.draw(batch, "Graze:", textX, worldHeight - 2.85f);
+        font.setColor(Color.WHITE);
+        drawGrazeMeter(batch, Math.min(player.getGrazePoints() / 100f, 1f), textX, worldHeight - 2.98f, barWidth);
+
+        font.draw(batch, "# of Lives: " + player.getNumLives(), textX, worldHeight - 3.25f);
     }
 
     private void drawChainMeter(SpriteBatch batch, float fraction, float x, float y, float totalWidth) {
@@ -80,6 +87,18 @@ public class UIManager implements Disposable {
 
         Color fill = fraction > 0.5f ? Color.YELLOW : (fraction > 0.25f ? Color.ORANGE : Color.RED);
         batch.setColor(fill);
+        batch.draw(whitePixel, x, y, totalWidth * fraction, height);
+
+        batch.setColor(Color.WHITE);
+    }
+
+    private void drawBombCooldownMeter(SpriteBatch batch, float fraction, float x, float y, float totalWidth) {
+        float height = 0.08f;
+
+        batch.setColor(0.25f, 0.25f, 0.25f, 1f);
+        batch.draw(whitePixel, x, y, totalWidth, height);
+
+        batch.setColor(Color.GRAY);
         batch.draw(whitePixel, x, y, totalWidth * fraction, height);
 
         batch.setColor(Color.WHITE);
