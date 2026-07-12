@@ -12,13 +12,6 @@ public class EnemyDefinition {
     public int columns = 0;
     public int rows = 1;
     public float frameDuration = 0.1f;
-    // Sprite sheet layout for `bulletTexture`. Same conventions as above; bulletColumns=0 means
-    // "single row of bulletFrameCount frames". Individual firing patterns may override this
-    // (see FiringPatternDef) when they set their own bulletTexture.
-    public int bulletFrameCount = 1;
-    public int bulletColumns = 0;
-    public int bulletRows = 1;
-    public float bulletFrameDuration = 0.1f;
     public float size;
     public int health;
     public String movementType;

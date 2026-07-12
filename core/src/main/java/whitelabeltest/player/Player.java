@@ -34,7 +34,7 @@ public class Player {
     private float shootTimer;
     private int numBombs;
     private int numLives;
-    private int grazePoints;
+    private float grazePoints;
 
     private final Animation<TextureRegion> animation;
     private float animationTime = 0;
@@ -190,7 +190,7 @@ public class Player {
     }
 
     private void updateHitbox() {
-        hitbox.set(getCenterX(), getCenterY(), Math.min(sprite.getWidth(), sprite.getHeight()) * 0.3f);
+        hitbox.set(getCenterX(), getCenterY(), Math.min(sprite.getWidth(), sprite.getHeight()) * 0.15f);
     }
 
     private void updateGrazeHitbox() {
@@ -266,8 +266,8 @@ public class Player {
 
     public Circle getHitbox() { return hitbox; }
     public Circle getGrazeHitbox() { return grazeHitbox; }
-    public int getGrazePoints() { return grazePoints; }
-    public void setGrazePoints(int grazePoints) { this.grazePoints = grazePoints;}
+    public float getGrazePoints() { return grazePoints; }
+    public void setGrazePoints(float grazePoints) { this.grazePoints = grazePoints;}
 
     public float getCenterX() { return sprite.getX() + sprite.getWidth() / 2; }
     public float getCenterY() { return sprite.getY() + sprite.getHeight() / 2; }

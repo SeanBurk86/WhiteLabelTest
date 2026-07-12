@@ -5,6 +5,16 @@ import com.badlogic.gdx.utils.Json;
 import com.badlogic.gdx.utils.JsonValue;
 
 public class FiringPatternDef implements Json.Serializable {
+    // A bullet's sprite-sheet layout and animation speed are purely per-pattern settings (the
+    // bulletFrame*/bulletColumns/bulletRows fields below) — these are their fallbacks when a
+    // pattern doesn't specify its own. Every pattern builds its own bullet animation (reusing the
+    // enemy's default bulletTexture if the pattern doesn't set its own texture), so two patterns
+    // sharing the same default texture must each repeat its layout if they both fire bullets.
+    public static final float DEFAULT_BULLET_FRAME_DURATION = 0.1f;
+    public static final int DEFAULT_BULLET_FRAME_COUNT = 1;
+    public static final int DEFAULT_BULLET_COLUMNS = 0;
+    public static final int DEFAULT_BULLET_ROWS = 1;
+
     public String type = "None";
     public float fireRate = 0;
     public float duration = 3.0f;
@@ -23,6 +33,11 @@ public class FiringPatternDef implements Json.Serializable {
     public float length = -1f;
     public float angularSpeed = 0f;
     public float fireAngle = Float.NaN;
+    public float targetX = Float.NaN;
+    public float targetY = Float.NaN;
+    public float sweepDuration = -1f;
+    public float sweepStartAngle = Float.NaN;
+    public float sweepEndAngle = Float.NaN;
     public Array<FiringPatternDef> patterns;
 
     public FiringPatternDef() {}
@@ -47,6 +62,11 @@ public class FiringPatternDef implements Json.Serializable {
         if (length > 0) json.writeValue("length", length);
         if (angularSpeed != 0f) json.writeValue("angularSpeed", angularSpeed);
         if (!Float.isNaN(fireAngle)) json.writeValue("fireAngle", fireAngle);
+        if (!Float.isNaN(targetX)) json.writeValue("targetX", targetX);
+        if (!Float.isNaN(targetY)) json.writeValue("targetY", targetY);
+        if (sweepDuration > 0) json.writeValue("sweepDuration", sweepDuration);
+        if (!Float.isNaN(sweepStartAngle)) json.writeValue("sweepStartAngle", sweepStartAngle);
+        if (!Float.isNaN(sweepEndAngle)) json.writeValue("sweepEndAngle", sweepEndAngle);
         if (patterns != null) json.writeValue("patterns", patterns);
     }
 
@@ -70,6 +90,11 @@ public class FiringPatternDef implements Json.Serializable {
         length = data.getFloat("length", -1f);
         angularSpeed = data.getFloat("angularSpeed", 0f);
         fireAngle = data.getFloat("fireAngle", Float.NaN);
+        targetX = data.getFloat("targetX", Float.NaN);
+        targetY = data.getFloat("targetY", Float.NaN);
+        sweepDuration = data.getFloat("sweepDuration", -1f);
+        sweepStartAngle = data.getFloat("sweepStartAngle", Float.NaN);
+        sweepEndAngle = data.getFloat("sweepEndAngle", Float.NaN);
         JsonValue patternsData = data.get("patterns");
         if (patternsData != null) {
             patterns = new Array<>();

@@ -21,7 +21,9 @@ public final class AnimationCache {
             cache.put(texture, byLayout);
         }
 
-        String key = columns + "x" + rows + ":" + frameCount;
+        // frameDuration/playMode are part of the key too, since two patterns can share the same
+        // texture and grid layout but animate at different speeds (or loop differently).
+        String key = columns + "x" + rows + ":" + frameCount + ":" + frameDuration + ":" + playMode;
         Animation<TextureRegion> animation = byLayout.get(key);
         if (animation == null) {
             int frameWidth = texture.getWidth() / columns;

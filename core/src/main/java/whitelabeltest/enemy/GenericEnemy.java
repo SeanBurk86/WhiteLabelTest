@@ -30,8 +30,12 @@ public class GenericEnemy extends BaseEnemy {
         this.animation = AnimationCache.get(texture, def.columns > 0 ? def.columns : def.frameCount, def.rows, def.frameCount, def.frameDuration, Animation.PlayMode.LOOP);
         TextureRegion[] frames = animation.getKeyFrames();
 
+        // This is only the last-resort fallback bullet animation for firing patterns that don't
+        // build their own (see PatternFactory.buildBulletAnimation) — e.g. the legacy scalar
+        // firingType path, which has no FiringPatternDef to carry its own layout/frame duration.
         this.bulletAnimation = (bulletTexture != null)
-            ? AnimationCache.get(bulletTexture, def.bulletColumns > 0 ? def.bulletColumns : def.bulletFrameCount, def.bulletRows, def.bulletFrameCount, def.bulletFrameDuration, Animation.PlayMode.LOOP)
+            ? AnimationCache.get(bulletTexture, FiringPatternDef.DEFAULT_BULLET_COLUMNS > 0 ? FiringPatternDef.DEFAULT_BULLET_COLUMNS : FiringPatternDef.DEFAULT_BULLET_FRAME_COUNT,
+                FiringPatternDef.DEFAULT_BULLET_ROWS, FiringPatternDef.DEFAULT_BULLET_FRAME_COUNT, FiringPatternDef.DEFAULT_BULLET_FRAME_DURATION, Animation.PlayMode.LOOP)
             : null;
 
         if (sprite == null) sprite = new Sprite(frames[0]);

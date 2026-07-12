@@ -15,10 +15,14 @@ public class SweepFiring implements FiringPattern {
     private final float bulletInterval;
     private final float bulletSize;
     private final float bulletSpeed;
-    private static final float SWEEP_DURATION = 2.0f;
-    private static final float SWEEP_START_ANGLE = 225f; // down-left
-    private static final float SWEEP_END_ANGLE = 315f;   // down-right
+    public static final float DEFAULT_SWEEP_DURATION = 2.0f;
+    public static final float DEFAULT_START_ANGLE = 225f; // down-left
+    public static final float DEFAULT_END_ANGLE = 315f;   // down-right
     private static final float DEFAULT_SPEED = 5f;
+
+    private final float sweepDuration;
+    private final float startAngle;
+    private final float endAngle;
 
     private float bulletTimer;
     private float sweepT;         // 0 = left edge, 1 = right edge
@@ -47,12 +51,21 @@ public class SweepFiring implements FiringPattern {
 
     /** @param offsetX, offsetY emission point offset from the sprite's center, in world units */
     public SweepFiring(float fireRate, float bulletSize, float bulletSpeed, Animation<TextureRegion> spriteOverride, float offsetX, float offsetY) {
+        this(fireRate, bulletSize, bulletSpeed, spriteOverride, offsetX, offsetY, DEFAULT_SWEEP_DURATION, DEFAULT_START_ANGLE, DEFAULT_END_ANGLE);
+    }
+
+    /** @param sweepDuration seconds for one full pass from startAngle to endAngle (and back)
+     *  @param startAngle, endAngle sweep bounds in degrees, standard math convention (0 = right, 90 = up) */
+    public SweepFiring(float fireRate, float bulletSize, float bulletSpeed, Animation<TextureRegion> spriteOverride, float offsetX, float offsetY, float sweepDuration, float startAngle, float endAngle) {
         this.bulletInterval = fireRate;
         this.bulletSize = bulletSize;
         this.bulletSpeed = bulletSpeed;
         this.spriteOverride = spriteOverride;
         this.offsetX = offsetX;
         this.offsetY = offsetY;
+        this.sweepDuration = sweepDuration;
+        this.startAngle = startAngle;
+        this.endAngle = endAngle;
         this.bulletTimer = bulletInterval; // fire immediately on first update
         this.sweepT = 0f;
         this.sweepDirection = 1f;
@@ -60,7 +73,7 @@ public class SweepFiring implements FiringPattern {
 
     @Override
     public void update(float delta, Sprite sprite, Rectangle rectangle, Array<EnemyBullet> enemyBullets, Animation<TextureRegion> bulletAnimation, Circle playerHitbox) {
-        sweepT += sweepDirection * delta / SWEEP_DURATION;
+        sweepT += sweepDirection * delta / sweepDuration;
         if (sweepT >= 1f) { sweepT = 1f; sweepDirection = -1f; }
         else if (sweepT <= 0f) { sweepT = 0f; sweepDirection = 1f; }
 
@@ -68,7 +81,7 @@ public class SweepFiring implements FiringPattern {
         if (bulletTimer < bulletInterval) return;
         bulletTimer = 0;
 
-        float angle = SWEEP_START_ANGLE + sweepT * (SWEEP_END_ANGLE - SWEEP_START_ANGLE);
+        float angle = startAngle + sweepT * (endAngle - startAngle);
         Vector2 dir = new Vector2(1, 0).setAngleDeg(angle);
         float centerX = sprite.getX() + sprite.getWidth() / 2 + offsetX;
         float centerY = sprite.getY() + sprite.getHeight() / 2 + offsetY;

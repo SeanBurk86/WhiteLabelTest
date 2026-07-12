@@ -63,12 +63,8 @@ public class SineWaveFiring implements FiringPattern {
         Animation<TextureRegion> animation = spriteOverride != null ? spriteOverride : bulletAnimation;
 
         SineBullet b1 = ObjectPools.sineBulletPool.obtain();
-        b1.init(animation, centerX + .35f, centerY, AMPLITUDE, FREQUENCY, 0, bulletSpeed, bulletSize);
+        b1.init(animation, centerX, centerY, AMPLITUDE, FREQUENCY, 0, bulletSpeed, bulletSize);
         enemyBullets.add(b1);
-
-        SineBullet b2 = ObjectPools.sineBulletPool.obtain();
-        b2.init(animation, centerX - .35f, centerY, AMPLITUDE, FREQUENCY, 0, bulletSpeed, bulletSize);
-        enemyBullets.add(b2);
     }
 
     @Override

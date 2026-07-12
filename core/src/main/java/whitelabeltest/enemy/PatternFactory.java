@@ -139,11 +139,24 @@ public class PatternFactory {
             }
             case "SpawnEnemy":
                 return new SpawnEnemyFiring(def.spawnType, def.fireRate, def.offsetX, def.offsetY);
+            case "AimedAtPoint": {
+                Animation<TextureRegion> spriteOverride = buildBulletAnimation(enemyDef, def);
+                float targetX = !Float.isNaN(def.targetX) ? def.targetX : 0f;
+                float targetY = !Float.isNaN(def.targetY) ? def.targetY : 0f;
+                return new PointAimedFiring(def.fireRate, resolve(def.bulletSize, 0.25f), resolve(def.bulletSpeed, 5f), spriteOverride, targetX, targetY, def.offsetX, def.offsetY);
+            }
             case "Laser": {
                 Animation<TextureRegion> spriteOverride = buildBulletAnimation(enemyDef, def);
                 float thickness = resolve(def.bulletSize, 0.3f);
                 float length = def.length > 0 ? def.length : LaserFiring.DEFAULT_LENGTH;
                 return new LaserFiring(def.fireRate, thickness, length, def.angularSpeed, def.fireAngle, def.duration, spriteOverride, def.offsetX, def.offsetY);
+            }
+            case "Sweep": {
+                Animation<TextureRegion> spriteOverride = buildBulletAnimation(enemyDef, def);
+                float sweepDuration = def.sweepDuration > 0 ? def.sweepDuration : SweepFiring.DEFAULT_SWEEP_DURATION;
+                float startAngle = !Float.isNaN(def.sweepStartAngle) ? def.sweepStartAngle : SweepFiring.DEFAULT_START_ANGLE;
+                float endAngle = !Float.isNaN(def.sweepEndAngle) ? def.sweepEndAngle : SweepFiring.DEFAULT_END_ANGLE;
+                return new SweepFiring(def.fireRate, resolve(def.bulletSize, 0.25f), resolve(def.bulletSpeed, 5f), spriteOverride, def.offsetX, def.offsetY, sweepDuration, startAngle, endAngle);
             }
             default:
                 Animation<TextureRegion> spriteOverride = buildBulletAnimation(enemyDef, def);
@@ -151,15 +164,20 @@ public class PatternFactory {
         }
     }
 
+    /** Builds this pattern's own bullet animation — reusing the enemy's default bulletTexture
+     *  when the pattern doesn't set its own, but otherwise entirely self-contained: sheet layout
+     *  and animation speed are resolved purely from this pattern, never from the enemy
+     *  definition, so two patterns sharing a texture can still animate independently. */
     private static Animation<TextureRegion> buildBulletAnimation(EnemyDefinition enemyDef, FiringPatternDef def) {
-        if (def.bulletTexture == null) return null;
-        Texture texture = EnemySpawnRegistry.getTexture(def.bulletTexture);
+        String texturePath = def.bulletTexture != null ? def.bulletTexture : (enemyDef != null ? enemyDef.bulletTexture : null);
+        if (texturePath == null) return null;
+        Texture texture = EnemySpawnRegistry.getTexture(texturePath);
         if (texture == null) return null;
 
-        int frameCount = def.bulletFrameCount > 0 ? def.bulletFrameCount : (enemyDef != null ? enemyDef.bulletFrameCount : 1);
-        int columns = def.bulletColumns >= 0 ? def.bulletColumns : (enemyDef != null ? enemyDef.bulletColumns : 0);
-        int rows = def.bulletRows > 0 ? def.bulletRows : (enemyDef != null ? enemyDef.bulletRows : 1);
-        float frameDuration = def.bulletFrameDuration > 0 ? def.bulletFrameDuration : (enemyDef != null ? enemyDef.bulletFrameDuration : 0.1f);
+        int frameCount = def.bulletFrameCount > 0 ? def.bulletFrameCount : FiringPatternDef.DEFAULT_BULLET_FRAME_COUNT;
+        int columns = def.bulletColumns >= 0 ? def.bulletColumns : FiringPatternDef.DEFAULT_BULLET_COLUMNS;
+        int rows = def.bulletRows > 0 ? def.bulletRows : FiringPatternDef.DEFAULT_BULLET_ROWS;
+        float frameDuration = def.bulletFrameDuration > 0 ? def.bulletFrameDuration : FiringPatternDef.DEFAULT_BULLET_FRAME_DURATION;
 
         return AnimationCache.get(texture, columns > 0 ? columns : frameCount, rows, frameCount, frameDuration, Animation.PlayMode.LOOP);
     }
