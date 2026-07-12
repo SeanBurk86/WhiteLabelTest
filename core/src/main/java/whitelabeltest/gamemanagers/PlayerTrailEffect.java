@@ -5,7 +5,7 @@ import com.badlogic.gdx.graphics.g2d.TextureRegion;
 import com.badlogic.gdx.utils.Pool;
 
 public class PlayerTrailEffect implements Pool.Poolable {
-    private static final float LIFETIME = 0.33f;
+    private static final float LIFETIME = 0.5f;
 
     private final TextureRegion frame = new TextureRegion();
     private float x, y, width, height;

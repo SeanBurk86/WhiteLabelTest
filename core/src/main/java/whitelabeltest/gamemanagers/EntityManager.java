@@ -30,7 +30,7 @@ public class EntityManager {
     private boolean bossKilled;
 
     private float trailSpawnTimer;
-    private static final float TRAIL_SPAWN_INTERVAL = 0.03f;
+    private static final float TRAIL_SPAWN_INTERVAL = 0.02f;
 
     public EntityManager(AssetManager assets, float worldWidth, float worldHeight) {
         this.worldWidth = worldWidth;
