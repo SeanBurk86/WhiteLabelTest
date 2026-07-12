@@ -18,6 +18,7 @@ public class EntityManager {
     private final Array<EnemyBullet> enemyBullets;
     private final Array<Powerup> powerups;
     private final Array<ExplosionEffect> explosions;
+    private final Array<PlayerTrailEffect> trails;
 
     private final float worldWidth;
     private final float worldHeight;
@@ -27,6 +28,9 @@ public class EntityManager {
     private float bombAnimationTime;
     private boolean bombActive;
     private boolean bossKilled;
+
+    private float trailSpawnTimer;
+    private static final float TRAIL_SPAWN_INTERVAL = 0.03f;
 
     public EntityManager(AssetManager assets, float worldWidth, float worldHeight) {
         this.worldWidth = worldWidth;
@@ -56,6 +60,7 @@ public class EntityManager {
         this.enemyBullets = new Array<>();
         this.powerups = new Array<>();
         this.explosions = new Array<>();
+        this.trails = new Array<>();
 
         EnemySpawnRegistry.init(assets, enemies, worldWidth, worldHeight);
     }
@@ -71,8 +76,24 @@ public class EntityManager {
             if (bombAnimation.isAnimationFinished(bombAnimationTime)) bombActive = false;
         }
         player.update(delta, input, assets, audio, bullets, enemies);
+        updateTrail(delta, input);
 
         updateCollections(delta, assets);
+    }
+
+    private void updateTrail(float delta, InputManager input) {
+        if (player.isDead() || input.getMoveDirection().len2() < 0.0001f) {
+            trailSpawnTimer = 0f;
+            return;
+        }
+
+        trailSpawnTimer += delta;
+        if (trailSpawnTimer >= TRAIL_SPAWN_INTERVAL) {
+            trailSpawnTimer = 0f;
+            PlayerTrailEffect trail = ObjectPools.trailPool.obtain();
+            trail.init(player.getCurrentFrame(), player.getX(), player.getY(), player.getWidth(), player.getHeight());
+            trails.add(trail);
+        }
     }
 
     private void updateCollections(float delta, AssetManager assets) {
@@ -122,6 +143,15 @@ public class EntityManager {
                 ObjectPools.freeExplosion(e);
             }
         }
+
+        for (int i = trails.size - 1; i >= 0; i--) {
+            PlayerTrailEffect t = trails.get(i);
+            t.update(delta);
+            if (t.isFinished()) {
+                trails.removeIndex(i);
+                ObjectPools.freeTrail(t);
+            }
+        }
     }
 
     public void draw(SpriteBatch batch) {
@@ -142,6 +172,7 @@ public class EntityManager {
         for (Enemy e : enemies) e.draw(batch);
         for (EnemyBullet eb : enemyBullets) eb.draw(batch);
 
+        for (PlayerTrailEffect t : trails) t.draw(batch);
         player.draw(batch);
     }
 
@@ -156,6 +187,9 @@ public class EntityManager {
         powerups.clear();
         for (ExplosionEffect e : explosions) ObjectPools.freeExplosion(e);
         explosions.clear();
+        for (PlayerTrailEffect t : trails) ObjectPools.freeTrail(t);
+        trails.clear();
+        trailSpawnTimer = 0f;
         player.reset();
     }
 

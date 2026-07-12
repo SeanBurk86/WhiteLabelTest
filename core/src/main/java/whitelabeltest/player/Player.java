@@ -271,6 +271,11 @@ public class Player {
 
     public float getCenterX() { return sprite.getX() + sprite.getWidth() / 2; }
     public float getCenterY() { return sprite.getY() + sprite.getHeight() / 2; }
+    public float getX() { return sprite.getX(); }
+    public float getY() { return sprite.getY(); }
+    public float getWidth() { return sprite.getWidth(); }
+    public float getHeight() { return sprite.getHeight(); }
+    public TextureRegion getCurrentFrame() { return sprite; }
     public Vector2 getBulletSpawnPoint() { return new Vector2(sprite.getX() + bulletSpawnOffset.x, sprite.getY() + bulletSpawnOffset.y); }
     public Weapon getWeaponPrototype() { return currentWeapon; }
 

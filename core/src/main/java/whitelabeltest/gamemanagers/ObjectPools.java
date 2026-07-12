@@ -61,6 +61,9 @@ public class ObjectPools {
     public static final Pool<ExplosionEffect> explosionPool = new Pool<ExplosionEffect>() {
         @Override protected ExplosionEffect newObject() { return new ExplosionEffect(); }
     };
+    public static final Pool<PlayerTrailEffect> trailPool = new Pool<PlayerTrailEffect>() {
+        @Override protected PlayerTrailEffect newObject() { return new PlayerTrailEffect(); }
+    };
 
     public static void freeWeapon(Weapon w) {
         if (w instanceof BasicWeapon) weaponPool.free((BasicWeapon)w);
@@ -90,5 +93,9 @@ public class ObjectPools {
 
     public static void freeExplosion(ExplosionEffect e) {
         explosionPool.free(e);
+    }
+
+    public static void freeTrail(PlayerTrailEffect t) {
+        trailPool.free(t);
     }
 }
