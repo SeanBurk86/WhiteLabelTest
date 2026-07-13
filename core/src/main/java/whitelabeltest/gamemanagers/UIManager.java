@@ -60,7 +60,7 @@ public class UIManager implements Disposable {
 
         font.draw(batch, "Basic Lvl: " + player.getWeaponLevel("BasicWeapon"), textX, worldHeight - 0.8f);
         font.draw(batch, "Fast Lvl: " + player.getWeaponLevel("WaveBlastWeapon"), textX, worldHeight - 1.2f);
-        font.draw(batch, "Wave Lvl: " + player.getWeaponLevel("ThunderWhipWeapon"), textX, worldHeight - 1.6f);
+        font.draw(batch, "Bolt Lvl: " + player.getWeaponLevel("Thunderbolt"), textX, worldHeight - 1.6f);
         font.draw(batch, "Orbit Lvl: " + player.getWeaponLevel("OrbitWeapon"), textX, worldHeight - 2.0f);
         font.draw(batch, "# of Bombs: " + player.getNumBombs(), textX, worldHeight - 2.4f);
 
@@ -83,7 +83,6 @@ public class UIManager implements Disposable {
         font.setColor(player.getActiveSlot() == 1 ? Color.YELLOW : Color.WHITE);
         font.draw(batch, "Slot 2: " + weaponLabel(player.getSlotWeaponId(1)) + (player.getActiveSlot() == 1 ? " <" : ""), textX, worldHeight - 3.95f);
         font.setColor(Color.WHITE);
-        font.draw(batch, "Bolt Lvl: " + player.getWeaponLevel("Thunderbolt"), textX, worldHeight - 4.3f);
     }
 
     private String weaponLabel(String weaponId) {
@@ -91,7 +90,6 @@ public class UIManager implements Disposable {
         return switch (weaponId) {
             case "BasicWeapon" -> "Basic";
             case "WaveBlastWeapon" -> "Fast";
-            case "ThunderWhipWeapon" -> "Wave";
             case "OrbitWeapon" -> "Orbit";
             case "Thunderbolt" -> "Bolt";
             default -> weaponId;

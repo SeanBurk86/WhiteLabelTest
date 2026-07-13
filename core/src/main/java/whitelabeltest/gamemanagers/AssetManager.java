@@ -25,7 +25,7 @@ public class AssetManager implements Disposable {
     public final Texture pixelTexture;
     public final Texture circleTexture;
     public final Texture[] explosionTextures;
-    public final Texture powerup1, powerup2, powerup3, powerup4, powerup5;
+    public final Texture powerup1, powerup2, powerup3, powerup4;
 
     public AssetManager() {
         Json json = new Json();
@@ -64,8 +64,6 @@ public class AssetManager implements Disposable {
         powerup2 = new Texture("ForcePowerUp.png");
         powerup3 = new Texture("LightningPowerUp.png");
         powerup4 = new Texture("MoonPowerUp.png");
-        // No dedicated Thunderbolt icon art yet; reuses the Lightning icon since it's the closest thematic match.
-        powerup5 = new Texture("LightningPowerUp.png");
 
         Pixmap pixmap = new Pixmap(1, 1, Pixmap.Format.RGBA8888);
         pixmap.setColor(Color.YELLOW);
@@ -129,6 +127,5 @@ public class AssetManager implements Disposable {
         powerup2.dispose();
         powerup3.dispose();
         powerup4.dispose();
-        powerup5.dispose();
     }
 }

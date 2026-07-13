@@ -27,7 +27,6 @@ public class Player {
 
     private final BasicWeapon basicWeapon;
     private final WaveBlastWeapon waveBlastWeapon;
-    private final ThunderWhipWeapon thunderWhipWeapon;
     private final OrbitWeapon orbitWeapon;
     private final ThunderboltWeapon thunderboltWeapon;
 
@@ -117,10 +116,6 @@ public class Player {
         waveBlastWeapon = new WaveBlastWeapon();
         waveBlastWeapon.init(wDef, assets.getTexture(wDef.texture), 0, 0, new Vector2(0,1), wDef.getSpeed(1));
 
-        WeaponDefinition tDef = assets.getWeaponDefinition("ThunderWhipWeapon");
-        thunderWhipWeapon = new ThunderWhipWeapon();
-        thunderWhipWeapon.init(tDef, assets.getTexture(tDef.texture), 0, 0, new Vector2(0,1), tDef.getSpeed(1));
-
         WeaponDefinition oDef = assets.getWeaponDefinition("OrbitWeapon");
         orbitWeapon = new OrbitWeapon();
         orbitWeapon.init(oDef, assets.getTexture(oDef.texture), this, 0f);
@@ -204,7 +199,6 @@ public class Player {
     private String weaponId(Weapon weapon) {
         if (weapon == basicWeapon) return "BasicWeapon";
         if (weapon == waveBlastWeapon) return "WaveBlastWeapon";
-        if (weapon == thunderWhipWeapon) return "ThunderWhipWeapon";
         if (weapon == orbitWeapon) return "OrbitWeapon";
         if (weapon == thunderboltWeapon) return "Thunderbolt";
         return null;
@@ -277,7 +271,6 @@ public class Player {
         updateGrazeHitbox();
         basicWeapon.setLevel(1);
         waveBlastWeapon.setLevel(0);
-        thunderWhipWeapon.setLevel(0);
         orbitWeapon.setLevel(0);
         thunderboltWeapon.setLevel(0);
         weaponSlots[0] = basicWeapon;
@@ -316,7 +309,6 @@ public class Player {
         Weapon target = switch (weaponId) {
             case "BasicWeapon" -> basicWeapon;
             case "WaveBlastWeapon" -> waveBlastWeapon;
-            case "ThunderWhipWeapon" -> thunderWhipWeapon;
             case "OrbitWeapon" -> orbitWeapon;
             case "Thunderbolt" -> thunderboltWeapon;
             default -> null;
@@ -332,7 +324,6 @@ public class Player {
         return switch (weaponId) {
             case "BasicWeapon" -> basicWeapon.getLevel();
             case "WaveBlastWeapon" -> waveBlastWeapon.getLevel();
-            case "ThunderWhipWeapon" -> thunderWhipWeapon.getLevel();
             case "OrbitWeapon" -> orbitWeapon.getLevel();
             case "Thunderbolt" -> thunderboltWeapon.getLevel();
             default -> 0;

@@ -17,7 +17,6 @@ public class AudioManager implements Disposable {
     private final Music victoryLoop;
     private final ObjectMap<Integer, Array<Sound>> explosionSounds;
     private final ObjectMap<Integer, Array<Sound>> basicWeaponSounds;
-    private final ObjectMap<Integer, Array<Sound>> thunderWhipWeaponSounds;
     private final ObjectMap<Integer, Array<Sound>> waveBlastWeaponSounds;
     private final ObjectMap<Integer, Array<Sound>> homingWeaponSounds;
     private final ObjectMap<Integer, Array<Sound>> orbitWeaponSounds;
@@ -34,7 +33,6 @@ public class AudioManager implements Disposable {
         victoryFanfare.setOnCompletionListener(music -> victoryLoop.play());
         Json json = new Json();
         basicWeaponSounds = new ObjectMap<>();
-        thunderWhipWeaponSounds = new ObjectMap<>();
         waveBlastWeaponSounds = new ObjectMap<>();
         homingWeaponSounds = new ObjectMap<>();
         orbitWeaponSounds = new ObjectMap<>();
@@ -45,9 +43,6 @@ public class AudioManager implements Disposable {
         for(SoundBank sBank : soundBanks) {
             if(sBank.type == SoundType.BasicWeapon) {
                 populateSounds(sBank, basicWeaponSounds);
-            }
-            if(sBank.type == SoundType.ThunderWhipWeapon) {
-                populateSounds(sBank, thunderWhipWeaponSounds);
             }
             if(sBank.type == SoundType.OrbitWeapon) {
                 populateSounds(sBank, orbitWeaponSounds);
@@ -109,10 +104,6 @@ public class AudioManager implements Disposable {
         if (basicWeaponSounds != null && basicWeaponSounds.containsKey(level)) basicWeaponSounds.get(level).random().play();
     }
 
-    public void playThunderWhipWeaponSound(int level) {
-        if (thunderWhipWeaponSounds != null && thunderWhipWeaponSounds.containsKey(level)) thunderWhipWeaponSounds.get(level).random().play();
-    }
-
     public void playWaveBlastWeaponSound(int level) {
         if (waveBlastWeaponSounds != null && waveBlastWeaponSounds.containsKey(level)) waveBlastWeaponSounds.get(level).random().play();
     }
@@ -139,7 +130,6 @@ public class AudioManager implements Disposable {
         victoryLoop.dispose();
         disposeSoundsMap(explosionSounds);
         disposeSoundsMap(basicWeaponSounds);
-        disposeSoundsMap(thunderWhipWeaponSounds);
         disposeSoundsMap(waveBlastWeaponSounds);
         disposeSoundsMap(homingWeaponSounds);
         disposeSoundsMap(orbitWeaponSounds);

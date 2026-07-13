@@ -21,9 +21,6 @@ public class ObjectPools {
     public static final Pool<WaveBlastWeapon> fastWeaponPool = new Pool<WaveBlastWeapon>() {
         @Override protected WaveBlastWeapon newObject() { return new WaveBlastWeapon(); }
     };
-    public static final Pool<ThunderWhipWeapon> waveWeaponPool = new Pool<ThunderWhipWeapon>() {
-        @Override protected ThunderWhipWeapon newObject() { return new ThunderWhipWeapon(); }
-    };
     public static final Pool<OrbitWeapon> orbitWeaponPool = new Pool<OrbitWeapon>() {
         @Override protected OrbitWeapon newObject() { return new OrbitWeapon(); }
     };
@@ -71,7 +68,6 @@ public class ObjectPools {
     public static void freeWeapon(Weapon w) {
         if (w instanceof BasicWeapon) weaponPool.free((BasicWeapon)w);
         else if (w instanceof WaveBlastWeapon) fastWeaponPool.free((WaveBlastWeapon)w);
-        else if (w instanceof ThunderWhipWeapon) waveWeaponPool.free((ThunderWhipWeapon)w);
         else if (w instanceof OrbitWeapon) orbitWeaponPool.free((OrbitWeapon)w);
         else if (w instanceof HomingWeapon) homingWeaponPool.free((HomingWeapon)w);
         else if (w instanceof ThunderboltWeapon) thunderboltWeaponPool.free((ThunderboltWeapon)w);

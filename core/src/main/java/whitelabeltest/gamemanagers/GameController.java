@@ -154,7 +154,7 @@ public class GameController implements Disposable {
         return wasBoss ? 1000 : 10;
     }
 
-    private static final String[] POWERUP_WEAPON_IDS = {"BasicWeapon", "WaveBlastWeapon", "ThunderWhipWeapon", "OrbitWeapon", "Thunderbolt"};
+    private static final String[] POWERUP_WEAPON_IDS = {"BasicWeapon", "WaveBlastWeapon", "Thunderbolt", "OrbitWeapon"};
 
     private static int powerupChoiceForWeaponId(String weaponId) {
         for (int i = 0; i < POWERUP_WEAPON_IDS.length; i++) {
@@ -168,8 +168,7 @@ public class GameController implements Disposable {
             case 0: return assets.powerup1;
             case 1: return assets.powerup2;
             case 2: return assets.powerup3;
-            case 3: return assets.powerup4;
-            default: return assets.powerup5;
+            default: return assets.powerup4;
         }
     }
 
