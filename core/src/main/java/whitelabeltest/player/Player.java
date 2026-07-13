@@ -110,15 +110,15 @@ public class Player {
         // Initialize weapons using the new dynamic AssetManager
         WeaponDefinition bDef = assets.getWeaponDefinition("BasicWeapon");
         basicWeapon = new BasicWeapon();
-        basicWeapon.init(bDef, assets.getTexture(bDef.texture), 0, 0, new Vector2(0,1), bDef.speed);
+        basicWeapon.init(bDef, assets.getTexture(bDef.texture), 0, 0, new Vector2(0,1), bDef.getSpeed(1));
 
         WeaponDefinition wDef = assets.getWeaponDefinition("WaveBlastWeapon");
         waveBlastWeapon = new WaveBlastWeapon();
-        waveBlastWeapon.init(wDef, assets.getTexture(wDef.texture), 0, 0, new Vector2(0,1), wDef.speed);
+        waveBlastWeapon.init(wDef, assets.getTexture(wDef.texture), 0, 0, new Vector2(0,1), wDef.getSpeed(1));
 
         WeaponDefinition tDef = assets.getWeaponDefinition("ThunderWhipWeapon");
         thunderWhipWeapon = new ThunderWhipWeapon();
-        thunderWhipWeapon.init(tDef, assets.getTexture(tDef.texture), 0, 0, new Vector2(0,1), tDef.speed);
+        thunderWhipWeapon.init(tDef, assets.getTexture(tDef.texture), 0, 0, new Vector2(0,1), tDef.getSpeed(1));
 
         WeaponDefinition oDef = assets.getWeaponDefinition("OrbitWeapon");
         orbitWeapon = new OrbitWeapon();

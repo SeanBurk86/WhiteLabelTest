@@ -70,7 +70,7 @@ public class ThunderWhipWeapon extends BaseWeapon {
         setupBase(def, texture, x, y);
         this.velocity.set(dir).scl(speed);
         this.path = null;
-        this.damage = def.baseDamage + (level - 1) * def.damagePerLevel;
+        this.damage = def.getDamage(level);
     }
 
     public void initSpline(WeaponDefinition def, Texture texture, float x, float y, Vector2 dir, float amplitude) {
@@ -94,7 +94,7 @@ public class ThunderWhipWeapon extends BaseWeapon {
 
         this.path = new CatmullRomSpline<>(controlPoints, false);
         this.pathDuration = Math.max(0.4f, 1.0f - (level - 1) * 0.1f);
-        this.damage = def.baseDamage + (level - 1) * def.damagePerLevel;
+        this.damage = def.getDamage(level);
     }
 
     @Override
@@ -154,7 +154,7 @@ public class ThunderWhipWeapon extends BaseWeapon {
 
     @Override
     public void spawn(Array<Weapon> activeWeapons, Texture texture, float x, float y, Player player, Array<Enemy> enemies, AssetManager assets) {
-        float baseSpeed = def.speed;
+        float baseSpeed = def.getSpeed(level);
         if(level >= 1) spawnStraight(activeWeapons, texture, x, y, new Vector2(0, 1), baseSpeed);
         if (level >= 2) {
             spawnStraight(activeWeapons, texture, x, y, new Vector2(-1, 1), baseSpeed);
@@ -187,7 +187,7 @@ public class ThunderWhipWeapon extends BaseWeapon {
     }
 
     @Override
-    public float getFireRate() { return def.baseFireRate - (level - 1) * def.fireRatePerLevel; }
+    public float getFireRate() { return def.getFireRate(level); }
     @Override
     public void playFireSound(AudioManager audio, int level) {
         audio.playThunderWhipWeaponSound(level);

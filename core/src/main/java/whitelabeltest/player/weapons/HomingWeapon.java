@@ -37,10 +37,10 @@ public class HomingWeapon extends BaseWeapon {
         sprite.setCenterX(x);
         sprite.setY(y);
 
-        this.damage = def.baseDamage + (level - 1) * def.damagePerLevel;
+        this.damage = def.getDamage(level);
         this.chainWindow = def.chainWindow;
         this.target = initialTarget;
-        this.velocity.set(0, def.speed);
+        this.velocity.set(0, def.getSpeed(level));
         this.animationTime = 0;
         this.lifeTime = 0;
 
@@ -73,7 +73,7 @@ public class HomingWeapon extends BaseWeapon {
             if (Math.abs(angleDiff) > changeAngle) currentAngle += Math.signum(angleDiff) * changeAngle;
             else currentAngle = targetAngle;
 
-            velocity.setAngleDeg(currentAngle).setLength(def.speed);
+            velocity.setAngleDeg(currentAngle).setLength(def.getSpeed(level));
             sprite.setRotation(currentAngle - 90);
         }
 
@@ -120,7 +120,7 @@ public class HomingWeapon extends BaseWeapon {
     }
 
     @Override
-    public float getFireRate() { return def.baseFireRate; }
+    public float getFireRate() { return def.getFireRate(level); }
     @Override
     public void playFireSound(AudioManager audio, int level) {
         audio.playHomingWeaponSound(level);

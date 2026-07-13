@@ -39,7 +39,7 @@ public class OrbitWeapon extends BaseWeapon {
         sprite.setOriginCenter();
         sprite.setColor(1, 1, 1, 1);
 
-        this.damage = def.baseDamage + (level - 1) * def.damagePerLevel;
+        this.damage = def.getDamage(level);
         this.chainWindow = def.chainWindow;
         this.shootSpeedMultiplier = def.shootSpeedMultiplier;
         this.animationTime = 0;
@@ -101,7 +101,7 @@ public class OrbitWeapon extends BaseWeapon {
     }
 
     @Override
-    public float getFireRate() { return def.baseFireRate; }
+    public float getFireRate() { return def.getFireRate(level); }
     @Override
     public void playFireSound(AudioManager audio, int level) {
         audio.playOrbitWeaponSound(level);

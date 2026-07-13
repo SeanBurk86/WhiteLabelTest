@@ -33,7 +33,7 @@ public class WaveBlastWeapon extends BaseWeapon {
         sprite.setY(y);
 
         this.velocity.set(dir).scl(speed);
-        this.damage = def.baseDamage + (level - 1) * def.damagePerLevel;
+        this.damage = def.getDamage(level);
         this.chainWindow = def.chainWindow;
         this.shootSpeedMultiplier = def.shootSpeedMultiplier;
         this.animationTime = 0;
@@ -45,10 +45,11 @@ public class WaveBlastWeapon extends BaseWeapon {
 
     @Override
     public void spawn(Array<Weapon> activeWeapons, Texture texture, float x, float y, Player player, Array<Enemy> enemies, AssetManager assets) {
-        spawnSingle(activeWeapons, texture, x, y, new Vector2(0, 1), def.speed);
+        float speed = def.getSpeed(level);
+        spawnSingle(activeWeapons, texture, x, y, new Vector2(0, 1), speed);
         if (level >= 2) {
-            spawnSingle(activeWeapons, texture, x, y, new Vector2(-0.559f, 0.829f), def.speed);
-            spawnSingle(activeWeapons, texture, x, y, new Vector2(0.559f, 0.829f), def.speed);
+            spawnSingle(activeWeapons, texture, x, y, new Vector2(-0.559f, 0.829f), speed);
+            spawnSingle(activeWeapons, texture, x, y, new Vector2(0.559f, 0.829f), speed);
         }
         if (level >= 3) {
             trySpawnHoming(activeWeapons, x, y, enemies, assets);
@@ -95,7 +96,7 @@ public class WaveBlastWeapon extends BaseWeapon {
     }
 
     @Override
-    public float getFireRate() { return def.baseFireRate; }
+    public float getFireRate() { return def.getFireRate(level); }
     @Override
     public void playFireSound(AudioManager audio, int level) {
         audio.playWaveBlastWeaponSound(level);

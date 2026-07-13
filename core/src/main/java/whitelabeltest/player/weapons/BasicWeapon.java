@@ -33,7 +33,7 @@ public class BasicWeapon extends BaseWeapon {
         sprite.setY(y);
 
         this.velocity.set(dir).scl(speed);
-        this.damage = def.baseDamage + (level - 1) * def.damagePerLevel;
+        this.damage = def.getDamage(level);
         this.shootSpeedMultiplier = def.shootSpeedMultiplier;
         this.chainWindow = def.chainWindow;
         this.animationTime = 0;
@@ -45,7 +45,7 @@ public class BasicWeapon extends BaseWeapon {
 
     @Override
     public void spawn(Array<Weapon> activeWeapons, Texture texture, float x, float y, Player player, Array<Enemy> enemies, AssetManager assets) {
-        float baseSpeed = def.speed;
+        float baseSpeed = def.getSpeed(level);
         if (level == 1) {
             spawnSingle(activeWeapons, texture, x, y, new Vector2(0, 1), baseSpeed);
         } else if (level == 2) {
@@ -79,7 +79,7 @@ public class BasicWeapon extends BaseWeapon {
 
     @Override
     public float getFireRate() {
-        return def.baseFireRate - (level - 1) * def.fireRatePerLevel;
+        return def.getFireRate(level);
     }
 
     @Override
