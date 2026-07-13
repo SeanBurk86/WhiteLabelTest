@@ -102,6 +102,7 @@ public class GameController implements Disposable {
         }
 
         collisionManager.checkPlayerPowerupCollisions(entities.getPlayer(), entities.getPowerups(), audio);
+        collisionManager.checkBulletPowerupCollisions(entities.getBullets(), entities.getPowerups(), assets);
 
         collisionManager.checkBulletEnemyCollisions(entities.getBullets(), entities.getEnemies(), audio, entities, assets, worldWidth, worldHeight, scoreManager);
     }
@@ -153,25 +154,35 @@ public class GameController implements Disposable {
         return wasBoss ? 1000 : 10;
     }
 
+    private static final String[] POWERUP_WEAPON_IDS = {"BasicWeapon", "WaveBlastWeapon", "ThunderWhipWeapon", "OrbitWeapon"};
+
+    private static int powerupChoiceForWeaponId(String weaponId) {
+        for (int i = 0; i < POWERUP_WEAPON_IDS.length; i++) {
+            if (POWERUP_WEAPON_IDS[i].equals(weaponId)) return i;
+        }
+        return POWERUP_WEAPON_IDS.length - 1;
+    }
+
+    private static Texture powerupTextureForChoice(AssetManager assets, int choice) {
+        switch (choice) {
+            case 0: return assets.powerup1;
+            case 1: return assets.powerup2;
+            case 2: return assets.powerup3;
+            default: return assets.powerup4;
+        }
+    }
+
     public static void spawnPowerup(Array<Powerup> powerups, AssetManager assets, float x, float y, float worldWidth, float worldHeight, String forcedType) {
         WeaponPowerup wp = ObjectPools.weaponPowerupPool.obtain();
-        Texture tex;
-        String weaponId;
-        int choice;
-        if (forcedType != null) {
-            if (forcedType.equals("BasicWeapon")) choice = 0;
-            else if (forcedType.equals("WaveBlastWeapon")) choice = 1;
-            else if (forcedType.equals("ThunderWhipWeapon")) choice = 2;
-            else choice = 3;
-        } else {
-            choice = com.badlogic.gdx.math.MathUtils.random(0, 3);
-        }
-        if (choice == 0) { tex = assets.powerup1; weaponId = "BasicWeapon"; }
-        else if (choice == 1) { tex = assets.powerup2; weaponId = "WaveBlastWeapon"; }
-        else if (choice == 2) { tex = assets.powerup3; weaponId = "ThunderWhipWeapon"; }
-        else { tex = assets.powerup4; weaponId = "OrbitWeapon"; }
-        wp.initWithType(tex, weaponId, x, y, worldWidth, worldHeight);
+        int choice = forcedType != null ? powerupChoiceForWeaponId(forcedType) : com.badlogic.gdx.math.MathUtils.random(0, 3);
+        wp.initWithType(powerupTextureForChoice(assets, choice), POWERUP_WEAPON_IDS[choice], x, y, worldWidth, worldHeight);
         powerups.add(wp);
+    }
+
+    /** Cycles a shot-but-not-collected powerup to the next weapon type in the pickup, in place. */
+    public static void cyclePowerupType(WeaponPowerup wp, AssetManager assets) {
+        int next = (powerupChoiceForWeaponId(wp.getWeaponId()) + 1) % POWERUP_WEAPON_IDS.length;
+        wp.setType(POWERUP_WEAPON_IDS[next], powerupTextureForChoice(assets, next));
     }
 
     public void draw(com.badlogic.gdx.graphics.g2d.SpriteBatch batch) {

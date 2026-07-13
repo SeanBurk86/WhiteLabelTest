@@ -9,6 +9,7 @@ import whitelabeltest.enemy.Enemy;
 import whitelabeltest.enemy.bullets.EnemyBullet;
 import whitelabeltest.player.Player;
 import whitelabeltest.player.powerups.Powerup;
+import whitelabeltest.player.powerups.WeaponPowerup;
 import whitelabeltest.player.weapons.Weapon;
 
 public class CollisionManager {
@@ -51,9 +52,6 @@ public class CollisionManager {
         return false;
     }
 
-    /** Most bullets report getRotation() == 0, so this is a plain Circle-vs-AABB check; bullets
-     *  like LaserBullet whose hitbox is rotated (but not resized) get an exact rotated-rect check
-     *  instead, by testing the circle against the rectangle in the rectangle's own local frame. */
     private boolean overlaps(Circle circle, EnemyBullet bullet) {
         Rectangle rect = bullet.getRectangle();
         float rotation = bullet.getRotation();
@@ -88,6 +86,27 @@ public class CollisionManager {
                 audio.playPowerup();
                 powerups.removeIndex(i);
                 ObjectPools.freePowerup(p);
+            }
+        }
+    }
+
+    public void checkBulletPowerupCollisions(Array<Weapon> bullets, Array<Powerup> powerups, AssetManager assets) {
+        for (int i = powerups.size - 1; i >= 0; i--) {
+            Powerup p = powerups.get(i);
+            if (!(p instanceof WeaponPowerup)) continue;
+            WeaponPowerup wp = (WeaponPowerup) p;
+            for (int j = bullets.size - 1; j >= 0; j--) {
+                Weapon bullet = bullets.get(j);
+                if (p.getRectangle().overlaps(bullet.getRectangle())) {
+                    if (wp.takeDamage(bullet.getDamage())) {
+                        GameController.cyclePowerupType(wp, assets);
+                    }
+                    if (bullet.shouldDestroyOnCollision()) {
+                        bullets.removeIndex(j);
+                        ObjectPools.freeWeapon(bullet);
+                    }
+                    break;
+                }
             }
         }
     }
