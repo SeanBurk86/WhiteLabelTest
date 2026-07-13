@@ -20,6 +20,7 @@ public class EnemyDefinition {
     public float stopDistance = SeekingMovement.DEFAULT_STOP_DISTANCE;
     public MovementPatternDef movementPattern;
     public boolean inverseMovement = false;
+    public boolean rotateWithMovement = true;
     public boolean isBoss = false;
     public String firingType;
     public float fireRate;

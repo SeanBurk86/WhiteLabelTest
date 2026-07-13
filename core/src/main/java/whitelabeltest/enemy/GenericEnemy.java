@@ -26,6 +26,7 @@ public class GenericEnemy extends BaseEnemy {
         this.spawnTexture = spawnTexture;
         this.deathTexture = deathTexture;
         this.invertMovement = def.inverseMovement;
+        this.rotateWithMovement = def.rotateWithMovement;
 
         this.animation = AnimationCache.get(texture, def.columns > 0 ? def.columns : def.frameCount, def.rows, def.frameCount, def.frameDuration, Animation.PlayMode.LOOP);
         TextureRegion[] frames = animation.getKeyFrames();

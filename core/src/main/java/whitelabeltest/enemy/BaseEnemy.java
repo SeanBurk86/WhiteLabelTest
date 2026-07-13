@@ -21,6 +21,7 @@ public abstract class BaseEnemy implements Enemy {
     protected String guaranteedPowerup;
     protected float worldWidth, worldHeight;
     protected boolean invertMovement; // Added field to store inversion state
+    protected boolean rotateWithMovement = true;
 
     protected Animation<TextureRegion> animation;
     protected float animationTime = 0;
@@ -90,6 +91,7 @@ public abstract class BaseEnemy implements Enemy {
             updateSpawnAnimation();
             if (movement != null) {
                 movement.update(delta, sprite, rectangle, worldWidth, worldHeight, playerHitbox, invertMovement);
+                if (!rotateWithMovement) sprite.setRotation(0);
             }
             if (lifecycleTime >= spawnDuration) {
                 lifecycleState = LifecycleState.ACTIVE;
@@ -113,6 +115,7 @@ public abstract class BaseEnemy implements Enemy {
 
         if (movement != null) {
             movement.update(delta, sprite, rectangle, worldWidth, worldHeight, playerHitbox, invertMovement);
+            if (!rotateWithMovement) sprite.setRotation(0);
         }
 
         if (firing != null) {
@@ -187,6 +190,7 @@ public abstract class BaseEnemy implements Enemy {
         damageFlashTimer = 0;
         guaranteedPowerup = null;
         invertMovement = false; // Reset on pool
+        rotateWithMovement = true;
         lifecycleState = LifecycleState.ACTIVE;
         lifecycleTime = 0f;
         if (sprite != null) {
