@@ -83,6 +83,7 @@ public class UIManager implements Disposable {
         font.setColor(player.getActiveSlot() == 1 ? Color.YELLOW : Color.WHITE);
         font.draw(batch, "Slot 2: " + weaponLabel(player.getSlotWeaponId(1)) + (player.getActiveSlot() == 1 ? " <" : ""), textX, worldHeight - 3.95f);
         font.setColor(Color.WHITE);
+        font.draw(batch, "Bolt Lvl: " + player.getWeaponLevel("Thunderbolt"), textX, worldHeight - 4.3f);
     }
 
     private String weaponLabel(String weaponId) {
@@ -92,6 +93,7 @@ public class UIManager implements Disposable {
             case "WaveBlastWeapon" -> "Fast";
             case "ThunderWhipWeapon" -> "Wave";
             case "OrbitWeapon" -> "Orbit";
+            case "Thunderbolt" -> "Bolt";
             default -> weaponId;
         };
     }

@@ -31,6 +31,11 @@ public interface Weapon extends Pool.Poolable {
     default float getChainWindow() { return 2.0f; }
     default float getShootSpeedMultiplier() { return 0.75f; }
 
+    // Lets a persistent, non-destroying weapon (e.g. a lingering hitbox) damage each enemy only
+    // once instead of every frame it overlaps. Bullets that destroy themselves on hit never need this.
+    default boolean hasDamaged(Enemy enemy) { return false; }
+    default void markDamaged(Enemy enemy) {}
+
     void setLevel(int level);
     int getLevel();
 

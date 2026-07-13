@@ -118,8 +118,11 @@ public class CollisionManager {
             for (int j = bullets.size - 1; j >= 0; j--) {
                 Weapon bullet = bullets.get(j);
                 if (enemy.getRectangle().overlaps(bullet.getRectangle())) {
-                    if (enemy.takeDamage(bullet.getDamage())) {
-                        scoreManager.addScore(GameController.destroyEnemy(audio, entityManager, assets, worldWidth, worldHeight, enemy), bullet.getChainWindow());
+                    if (!bullet.hasDamaged(enemy)) {
+                        bullet.markDamaged(enemy);
+                        if (enemy.takeDamage(bullet.getDamage())) {
+                            scoreManager.addScore(GameController.destroyEnemy(audio, entityManager, assets, worldWidth, worldHeight, enemy), bullet.getChainWindow());
+                        }
                     }
                     if (bullet.shouldDestroyOnCollision()) {
                         bullets.removeIndex(j);

@@ -22,8 +22,10 @@ public class AssetManager implements Disposable {
     public final Texture playerHaloTexture;
     public final Texture bombSpriteTexture;
     public final Texture bulletTexture;
+    public final Texture pixelTexture;
+    public final Texture circleTexture;
     public final Texture[] explosionTextures;
-    public final Texture powerup1, powerup2, powerup3, powerup4;
+    public final Texture powerup1, powerup2, powerup3, powerup4, powerup5;
 
     public AssetManager() {
         Json json = new Json();
@@ -62,12 +64,28 @@ public class AssetManager implements Disposable {
         powerup2 = new Texture("ForcePowerUp.png");
         powerup3 = new Texture("LightningPowerUp.png");
         powerup4 = new Texture("MoonPowerUp.png");
+        // No dedicated Thunderbolt icon art yet; reuses the Lightning icon since it's the closest thematic match.
+        powerup5 = new Texture("LightningPowerUp.png");
 
         Pixmap pixmap = new Pixmap(1, 1, Pixmap.Format.RGBA8888);
         pixmap.setColor(Color.YELLOW);
         pixmap.fill();
         bulletTexture = new Texture(pixmap);
         pixmap.dispose();
+
+        Pixmap whitePixmap = new Pixmap(1, 1, Pixmap.Format.RGBA8888);
+        whitePixmap.setColor(Color.WHITE);
+        whitePixmap.fill();
+        pixelTexture = new Texture(whitePixmap);
+        whitePixmap.dispose();
+
+        int circleSize = 64;
+        Pixmap circlePixmap = new Pixmap(circleSize, circleSize, Pixmap.Format.RGBA8888);
+        circlePixmap.setColor(Color.WHITE);
+        circlePixmap.fillCircle(circleSize / 2, circleSize / 2, circleSize / 2);
+        circleTexture = new Texture(circlePixmap);
+        circleTexture.setFilter(Texture.TextureFilter.Linear, Texture.TextureFilter.Linear);
+        circlePixmap.dispose();
     }
 
     private void loadFiringPatternTextures(FiringPatternDef def) {
@@ -104,10 +122,13 @@ public class AssetManager implements Disposable {
         playerHaloTexture.dispose();
         bombSpriteTexture.dispose();
         bulletTexture.dispose();
+        pixelTexture.dispose();
+        circleTexture.dispose();
         for (Texture t : explosionTextures) t.dispose();
         powerup1.dispose();
         powerup2.dispose();
         powerup3.dispose();
         powerup4.dispose();
+        powerup5.dispose();
     }
 }

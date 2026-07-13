@@ -154,7 +154,7 @@ public class GameController implements Disposable {
         return wasBoss ? 1000 : 10;
     }
 
-    private static final String[] POWERUP_WEAPON_IDS = {"BasicWeapon", "WaveBlastWeapon", "ThunderWhipWeapon", "OrbitWeapon"};
+    private static final String[] POWERUP_WEAPON_IDS = {"BasicWeapon", "WaveBlastWeapon", "ThunderWhipWeapon", "OrbitWeapon", "Thunderbolt"};
 
     private static int powerupChoiceForWeaponId(String weaponId) {
         for (int i = 0; i < POWERUP_WEAPON_IDS.length; i++) {
@@ -168,13 +168,14 @@ public class GameController implements Disposable {
             case 0: return assets.powerup1;
             case 1: return assets.powerup2;
             case 2: return assets.powerup3;
-            default: return assets.powerup4;
+            case 3: return assets.powerup4;
+            default: return assets.powerup5;
         }
     }
 
     public static void spawnPowerup(Array<Powerup> powerups, AssetManager assets, float x, float y, float worldWidth, float worldHeight, String forcedType) {
         WeaponPowerup wp = ObjectPools.weaponPowerupPool.obtain();
-        int choice = forcedType != null ? powerupChoiceForWeaponId(forcedType) : com.badlogic.gdx.math.MathUtils.random(0, 3);
+        int choice = forcedType != null ? powerupChoiceForWeaponId(forcedType) : com.badlogic.gdx.math.MathUtils.random(0, POWERUP_WEAPON_IDS.length - 1);
         wp.initWithType(powerupTextureForChoice(assets, choice), POWERUP_WEAPON_IDS[choice], x, y, worldWidth, worldHeight);
         powerups.add(wp);
     }

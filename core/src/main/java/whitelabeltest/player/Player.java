@@ -29,6 +29,7 @@ public class Player {
     private final WaveBlastWeapon waveBlastWeapon;
     private final ThunderWhipWeapon thunderWhipWeapon;
     private final OrbitWeapon orbitWeapon;
+    private final ThunderboltWeapon thunderboltWeapon;
 
     private final Weapon[] weaponSlots = new Weapon[2];
     private int activeSlot;
@@ -124,6 +125,10 @@ public class Player {
         orbitWeapon = new OrbitWeapon();
         orbitWeapon.init(oDef, assets.getTexture(oDef.texture), this, 0f);
 
+        WeaponDefinition thbDef = assets.getWeaponDefinition("Thunderbolt");
+        thunderboltWeapon = new ThunderboltWeapon();
+        thunderboltWeapon.init(thbDef, assets.pixelTexture, assets.circleTexture, new Vector2(0, 0), new Vector2(0, 1), thbDef.size, worldHeight);
+
         weaponSlots[0] = basicWeapon;
         weaponSlots[1] = basicWeapon;
         activeSlot = 0;
@@ -189,7 +194,7 @@ public class Player {
 
     private Texture resolveActiveTexture(AssetManager assets) {
         WeaponDefinition def = assets.getWeaponDefinition(weaponId(getCurrentWeapon()));
-        return (def != null) ? assets.getTexture(def.texture) : assets.bulletTexture;
+        return (def != null && def.texture != null) ? assets.getTexture(def.texture) : assets.bulletTexture;
     }
 
     private Weapon getCurrentWeapon() {
@@ -201,6 +206,7 @@ public class Player {
         if (weapon == waveBlastWeapon) return "WaveBlastWeapon";
         if (weapon == thunderWhipWeapon) return "ThunderWhipWeapon";
         if (weapon == orbitWeapon) return "OrbitWeapon";
+        if (weapon == thunderboltWeapon) return "Thunderbolt";
         return null;
     }
 
@@ -273,6 +279,7 @@ public class Player {
         waveBlastWeapon.setLevel(0);
         thunderWhipWeapon.setLevel(0);
         orbitWeapon.setLevel(0);
+        thunderboltWeapon.setLevel(0);
         weaponSlots[0] = basicWeapon;
         weaponSlots[1] = basicWeapon;
         activeSlot = 0;
@@ -292,6 +299,7 @@ public class Player {
 
     public float getCenterX() { return sprite.getX() + sprite.getWidth() / 2; }
     public float getCenterY() { return sprite.getY() + sprite.getHeight() / 2; }
+    public float getWorldHeight() { return worldHeight; }
     public float getX() { return sprite.getX(); }
     public float getY() { return sprite.getY(); }
     public float getWidth() { return sprite.getWidth(); }
@@ -310,6 +318,7 @@ public class Player {
             case "WaveBlastWeapon" -> waveBlastWeapon;
             case "ThunderWhipWeapon" -> thunderWhipWeapon;
             case "OrbitWeapon" -> orbitWeapon;
+            case "Thunderbolt" -> thunderboltWeapon;
             default -> null;
         };
 
@@ -325,6 +334,7 @@ public class Player {
             case "WaveBlastWeapon" -> waveBlastWeapon.getLevel();
             case "ThunderWhipWeapon" -> thunderWhipWeapon.getLevel();
             case "OrbitWeapon" -> orbitWeapon.getLevel();
+            case "Thunderbolt" -> thunderboltWeapon.getLevel();
             default -> 0;
         };
     }

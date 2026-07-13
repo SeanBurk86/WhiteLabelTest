@@ -21,6 +21,7 @@ public class AudioManager implements Disposable {
     private final ObjectMap<Integer, Array<Sound>> waveBlastWeaponSounds;
     private final ObjectMap<Integer, Array<Sound>> homingWeaponSounds;
     private final ObjectMap<Integer, Array<Sound>> orbitWeaponSounds;
+    private final ObjectMap<Integer, Array<Sound>> thunderboltWeaponSounds;
 
     public AudioManager() {
         playerDeathSound = Gdx.audio.newSound(Gdx.files.internal("playerdeath.mp3"));
@@ -37,6 +38,7 @@ public class AudioManager implements Disposable {
         waveBlastWeaponSounds = new ObjectMap<>();
         homingWeaponSounds = new ObjectMap<>();
         orbitWeaponSounds = new ObjectMap<>();
+        thunderboltWeaponSounds = new ObjectMap<>();
         explosionSounds = new ObjectMap<>();
         @SuppressWarnings("unchecked")
         Array<SoundBank> soundBanks = json.fromJson(Array.class, SoundBank.class, Gdx.files.internal("sounds.json"));
@@ -49,6 +51,9 @@ public class AudioManager implements Disposable {
             }
             if(sBank.type == SoundType.OrbitWeapon) {
                 populateSounds(sBank, orbitWeaponSounds);
+            }
+            if(sBank.type == SoundType.Thunderbolt) {
+                populateSounds(sBank, thunderboltWeaponSounds);
             }
             if(sBank.type == SoundType.WaveBlastWeapon) {
                 populateSounds(sBank, waveBlastWeaponSounds);
@@ -120,6 +125,10 @@ public class AudioManager implements Disposable {
         if (orbitWeaponSounds != null && orbitWeaponSounds.containsKey(level)) orbitWeaponSounds.get(level).random().play();
     }
 
+    public void playThunderboltWeaponSound(int level) {
+        if (thunderboltWeaponSounds != null && thunderboltWeaponSounds.containsKey(level)) thunderboltWeaponSounds.get(level).random().play();
+    }
+
     @Override
     public void dispose() {
         playerDeathSound.dispose();
@@ -134,6 +143,7 @@ public class AudioManager implements Disposable {
         disposeSoundsMap(waveBlastWeaponSounds);
         disposeSoundsMap(homingWeaponSounds);
         disposeSoundsMap(orbitWeaponSounds);
+        disposeSoundsMap(thunderboltWeaponSounds);
     }
 
     private void disposeSoundsMap(ObjectMap<Integer, Array<Sound>> soundsMap) {
