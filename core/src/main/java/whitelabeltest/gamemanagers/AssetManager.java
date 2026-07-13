@@ -58,10 +58,10 @@ public class AssetManager implements Disposable {
             explosionTextures[i] = new Texture("ExplosionParticle" + (i + 1) + ".png");
         }
 
-        powerup1 = new Texture("powerup1.png");
-        powerup2 = new Texture("powerup2.png");
-        powerup3 = new Texture("powerup3.png");
-        powerup4 = new Texture("powerup4.png");
+        powerup1 = new Texture("RainPowerUp.png");
+        powerup2 = new Texture("ForcePowerUp.png");
+        powerup3 = new Texture("LightningPowerUp.png");
+        powerup4 = new Texture("MoonPowerUp.png");
 
         Pixmap pixmap = new Pixmap(1, 1, Pixmap.Format.RGBA8888);
         pixmap.setColor(Color.YELLOW);
