@@ -30,7 +30,8 @@ public class Player {
     private final ThunderWhipWeapon thunderWhipWeapon;
     private final OrbitWeapon orbitWeapon;
 
-    private Weapon currentWeapon;
+    private final Weapon[] weaponSlots = new Weapon[2];
+    private int activeSlot;
     private float shootTimer;
     private int numBombs;
     private int numLives;
@@ -123,7 +124,9 @@ public class Player {
         orbitWeapon = new OrbitWeapon();
         orbitWeapon.init(oDef, assets.getTexture(oDef.texture), this, 0f);
 
-        currentWeapon = basicWeapon;
+        weaponSlots[0] = basicWeapon;
+        weaponSlots[1] = basicWeapon;
+        activeSlot = 0;
         numBombs = 1;
         numLives = 3;
         grazePoints = 0;
@@ -149,6 +152,10 @@ public class Player {
         if (grazeFlashTimer > 0) grazeFlashTimer -= delta;
         sprite.setRegion(animation.getKeyFrame(animationTime));
 
+        if (input.isWeaponSwitchJustPressed()) {
+            switchActiveSlot();
+        }
+
         handleMovement(delta, input.getMoveDirection(), input.isShooting());
         handleShooting(delta, input.isShooting(), assets, audio, bullets, enemies);
         updateHitbox();
@@ -158,7 +165,7 @@ public class Player {
     }
 
     private void handleMovement(float delta, Vector2 moveDirection, boolean isShooting) {
-        float speed = isShooting ? movementSpeed * currentWeapon.getShootSpeedMultiplier() : movementSpeed;
+        float speed = isShooting ? movementSpeed * getCurrentWeapon().getShootSpeedMultiplier() : movementSpeed;
         if (moveDirection.x != 0 || moveDirection.y != 0) {
             sprite.translateX(moveDirection.x * speed * delta);
             sprite.translateY(moveDirection.y * speed * delta);
@@ -168,6 +175,7 @@ public class Player {
     }
 
     private void handleShooting(float delta, boolean isShooting, AssetManager assets, AudioManager audio, Array<Weapon> bullets, Array<Enemy> enemies) {
+        Weapon currentWeapon = getCurrentWeapon();
         shootTimer += delta;
         if (isShooting && shootTimer > currentWeapon.getFireRate()) {
             shootTimer = 0;
@@ -180,13 +188,24 @@ public class Player {
     }
 
     private Texture resolveActiveTexture(AssetManager assets) {
-        String texPath = null;
-        if (currentWeapon == basicWeapon) texPath = assets.getWeaponDefinition("BasicWeapon").texture;
-        else if (currentWeapon == waveBlastWeapon) texPath = assets.getWeaponDefinition("WaveBlastWeapon").texture;
-        else if (currentWeapon == thunderWhipWeapon) texPath = assets.getWeaponDefinition("ThunderWhipWeapon").texture;
-        else if (currentWeapon == orbitWeapon) texPath = assets.getWeaponDefinition("OrbitWeapon").texture;
+        WeaponDefinition def = assets.getWeaponDefinition(weaponId(getCurrentWeapon()));
+        return (def != null) ? assets.getTexture(def.texture) : assets.bulletTexture;
+    }
 
-        return (texPath != null) ? assets.getTexture(texPath) : assets.bulletTexture;
+    private Weapon getCurrentWeapon() {
+        return weaponSlots[activeSlot];
+    }
+
+    private String weaponId(Weapon weapon) {
+        if (weapon == basicWeapon) return "BasicWeapon";
+        if (weapon == waveBlastWeapon) return "WaveBlastWeapon";
+        if (weapon == thunderWhipWeapon) return "ThunderWhipWeapon";
+        if (weapon == orbitWeapon) return "OrbitWeapon";
+        return null;
+    }
+
+    public void switchActiveSlot() {
+        activeSlot = 1 - activeSlot;
     }
 
     private void updateHitbox() {
@@ -254,7 +273,9 @@ public class Player {
         waveBlastWeapon.setLevel(0);
         thunderWhipWeapon.setLevel(0);
         orbitWeapon.setLevel(0);
-        currentWeapon = basicWeapon;
+        weaponSlots[0] = basicWeapon;
+        weaponSlots[1] = basicWeapon;
+        activeSlot = 0;
         shootTimer = 0;
         animationTime = 0;
         numBombs = 1;
@@ -277,8 +298,12 @@ public class Player {
     public float getHeight() { return sprite.getHeight(); }
     public TextureRegion getCurrentFrame() { return sprite; }
     public Vector2 getBulletSpawnPoint() { return new Vector2(sprite.getX() + bulletSpawnOffset.x, sprite.getY() + bulletSpawnOffset.y); }
-    public Weapon getWeaponPrototype() { return currentWeapon; }
+    public Weapon getWeaponPrototype() { return getCurrentWeapon(); }
+    public int getActiveSlot() { return activeSlot; }
+    public String getSlotWeaponId(int slot) { return weaponId(weaponSlots[slot]); }
 
+    /** Collecting a weapon powerup levels up that weapon type and equips it into the active slot,
+     *  replacing whatever weapon was there. */
     public void levelUpWeapon(String weaponId) {
         Weapon target = switch (weaponId) {
             case "BasicWeapon" -> basicWeapon;
@@ -290,7 +315,7 @@ public class Player {
 
         if (target != null) {
             target.setLevel(Math.min(target.getLevel() + 1, MAX_WEAPON_LEVEL));
-            currentWeapon = target;
+            weaponSlots[activeSlot] = target;
         }
     }
 

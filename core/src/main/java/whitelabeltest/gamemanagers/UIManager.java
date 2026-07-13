@@ -77,6 +77,23 @@ public class UIManager implements Disposable {
         drawGrazeMeter(batch, Math.min(player.getGrazePoints() / 100f, 1f), textX, worldHeight - 2.98f, barWidth);
 
         font.draw(batch, "# of Lives: " + player.getNumLives(), textX, worldHeight - 3.25f);
+
+        font.setColor(player.getActiveSlot() == 0 ? Color.YELLOW : Color.WHITE);
+        font.draw(batch, "Slot 1: " + weaponLabel(player.getSlotWeaponId(0)) + (player.getActiveSlot() == 0 ? " <" : ""), textX, worldHeight - 3.6f);
+        font.setColor(player.getActiveSlot() == 1 ? Color.YELLOW : Color.WHITE);
+        font.draw(batch, "Slot 2: " + weaponLabel(player.getSlotWeaponId(1)) + (player.getActiveSlot() == 1 ? " <" : ""), textX, worldHeight - 3.95f);
+        font.setColor(Color.WHITE);
+    }
+
+    private String weaponLabel(String weaponId) {
+        if (weaponId == null) return "-";
+        return switch (weaponId) {
+            case "BasicWeapon" -> "Basic";
+            case "WaveBlastWeapon" -> "Fast";
+            case "ThunderWhipWeapon" -> "Wave";
+            case "OrbitWeapon" -> "Orbit";
+            default -> weaponId;
+        };
     }
 
     private void drawChainMeter(SpriteBatch batch, float fraction, float x, float y, float totalWidth) {

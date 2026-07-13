@@ -10,12 +10,14 @@ public class InputManager {
     private final Vector2 moveDirection = new Vector2();
     private boolean isShooting;
     private boolean bombJustPressed;
+    private boolean weaponSwitchJustPressed;
     private boolean restartJustPressed;
     private boolean quitJustPressed;
     private boolean debugToggleJustPressed;
 
     private InputType activeInput = InputType.KEYBOARD;
     private boolean prevBombButton;
+    private boolean prevWeaponSwitchButton;
 
     public void setActiveInput(InputType type) {
         this.activeInput = type;
@@ -25,6 +27,7 @@ public class InputManager {
         moveDirection.set(0, 0);
         isShooting = false;
         bombJustPressed = false;
+        weaponSwitchJustPressed = false;
         restartJustPressed = false;
         quitJustPressed = false;
         debugToggleJustPressed = false;
@@ -37,6 +40,7 @@ public class InputManager {
 
             isShooting = Gdx.input.isKeyPressed(Input.Keys.SPACE);
             bombJustPressed = Gdx.input.isKeyJustPressed(Input.Keys.SHIFT_LEFT);
+            weaponSwitchJustPressed = Gdx.input.isKeyJustPressed(Input.Keys.X);
             restartJustPressed = Gdx.input.isKeyJustPressed(Input.Keys.R);
             quitJustPressed = Gdx.input.isKeyJustPressed(Input.Keys.Q);
         }
@@ -56,11 +60,15 @@ public class InputManager {
                 if (controller.getButton(controller.getMapping().buttonDpadDown)) moveDirection.y -= 1;
 
                 isShooting |= controller.getButton(controller.getMapping().buttonA);
-                isShooting |= controller.getButton(controller.getMapping().buttonR1);
 
                 boolean bombButton = controller.getButton(controller.getMapping().buttonB);
                 if (bombButton && !prevBombButton) bombJustPressed = true;
                 prevBombButton = bombButton;
+
+                boolean weaponSwitchButton = controller.getButton(controller.getMapping().buttonX);
+                if (weaponSwitchButton && !prevWeaponSwitchButton) weaponSwitchJustPressed = true;
+                prevWeaponSwitchButton = weaponSwitchButton;
+
                 if (controller.getButton(controller.getMapping().buttonStart)) restartJustPressed = true;
                 if (controller.getButton(controller.getMapping().buttonBack)) quitJustPressed = true;
             }
@@ -77,6 +85,7 @@ public class InputManager {
     public Vector2 getMoveDirection() { return moveDirection; }
     public boolean isShooting() { return isShooting; }
     public boolean isBombJustPressed() { return bombJustPressed; }
+    public boolean isWeaponSwitchJustPressed() { return weaponSwitchJustPressed; }
     public boolean isRestartJustPressed() { return restartJustPressed; }
     public boolean isQuitJustPressed() { return quitJustPressed; }
     public boolean isDebugToggleJustPressed() { return debugToggleJustPressed; }
