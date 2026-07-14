@@ -10,7 +10,10 @@ import com.badlogic.gdx.graphics.g2d.SpriteBatch;
 import com.badlogic.gdx.graphics.g2d.freetype.FreeTypeFontGenerator;
 import com.badlogic.gdx.graphics.g2d.freetype.FreeTypeFontGenerator.FreeTypeFontParameter;
 import com.badlogic.gdx.math.MathUtils;
+import com.badlogic.gdx.math.Rectangle;
+import com.badlogic.gdx.utils.Array;
 import com.badlogic.gdx.utils.Disposable;
+import whitelabeltest.enemy.Enemy;
 import whitelabeltest.player.Player;
 
 public class UIManager implements Disposable {
@@ -83,6 +86,31 @@ public class UIManager implements Disposable {
         font.setColor(player.getActiveSlot() == 1 ? Color.YELLOW : Color.WHITE);
         font.draw(batch, "Slot 2: " + weaponLabel(player.getSlotWeaponId(1)) + (player.getActiveSlot() == 1 ? " <" : ""), textX, worldHeight - 3.95f);
         font.setColor(Color.WHITE);
+    }
+
+    // Debug-only: a small meter and "current/max" text floating above each enemy's sprite.
+    public void drawEnemyHealthDebug(SpriteBatch batch, Array<Enemy> enemies) {
+        float barHeight = 0.08f;
+        for (Enemy enemy : enemies) {
+            int maxHealth = enemy.getMaxHealth();
+            if (maxHealth <= 0) continue; // not tracked for this enemy type
+
+            int health = enemy.getHealth();
+            float fraction = MathUtils.clamp(health / (float) maxHealth, 0f, 1f);
+
+            Rectangle r = enemy.getRectangle();
+            float barX = r.x;
+            float barY = r.y + r.height + 0.1f;
+
+            batch.setColor(0.25f, 0.25f, 0.25f, 1f);
+            batch.draw(whitePixel, barX, barY, r.width, barHeight);
+
+            batch.setColor(fraction > 0.5f ? Color.GREEN : (fraction > 0.25f ? Color.ORANGE : Color.RED));
+            batch.draw(whitePixel, barX, barY, r.width * fraction, barHeight);
+            batch.setColor(Color.WHITE);
+
+            font.draw(batch, health + "/" + maxHealth, barX, barY + barHeight + 0.22f);
+        }
     }
 
     private String weaponLabel(String weaponId) {

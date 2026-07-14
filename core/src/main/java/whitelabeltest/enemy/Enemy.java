@@ -17,6 +17,10 @@ public interface Enemy extends Pool.Poolable {
     boolean takeDamage(int amount); // Returns true if destroyed
     default boolean isBoss() { return false; }
 
+    // For debug display (e.g. an on-screen health meter); 0 means "not tracked".
+    default int getHealth() { return 0; }
+    default int getMaxHealth() { return 0; }
+
     // Lifecycle: false while playing an entrance or death animation. Used to keep enemies
     // invulnerable/non-colliding during those transitions.
     default boolean isActive() { return true; }

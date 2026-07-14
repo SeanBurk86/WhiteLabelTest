@@ -18,6 +18,8 @@ import whitelabeltest.gamemanagers.GameController;
 import whitelabeltest.gamemanagers.InputType;
 import whitelabeltest.gamemanagers.UIManager;
 import whitelabeltest.player.powerups.Powerup;
+import whitelabeltest.player.weapons.ThunderboltWeapon;
+import whitelabeltest.player.weapons.Weapon;
 
 public class Main extends ApplicationAdapter {
     private enum AppState { START, PLAYING }
@@ -110,6 +112,10 @@ public class Main extends ApplicationAdapter {
 
         game.draw(spriteBatch);
 
+        if (game.isDebugMode()) {
+            ui.drawEnemyHealthDebug(spriteBatch, game.getEntities().getEnemies());
+        }
+
         spriteBatch.flush();
         Gdx.gl.glDisable(GL20.GL_SCISSOR_TEST);
 
@@ -157,6 +163,18 @@ public class Main extends ApplicationAdapter {
         shapeRenderer.setColor(Color.GREEN);
         for (Powerup powerup : em.getPowerups()) {
             shapeRenderer.rect(powerup.getRectangle().x, powerup.getRectangle().y, powerup.getRectangle().width, powerup.getRectangle().height);
+        }
+
+        shapeRenderer.setColor(Color.MAGENTA);
+        for (Weapon bullet : em.getBullets()) {
+            if (bullet instanceof ThunderboltWeapon) {
+                Rectangle r = bullet.getRectangle();
+                // getRectangle() is the un-rotated shape pivoted at getRotationPivotX/Y(); rotate
+                // it into place the same way the CollisionManager SAT test does.
+                float originX = bullet.getRotationPivotX() - r.x;
+                float originY = bullet.getRotationPivotY() - r.y;
+                shapeRenderer.rect(r.x, r.y, originX, originY, r.width, r.height, 1f, 1f, bullet.getRotation());
+            }
         }
 
         if (game.isGameOver()) {

@@ -18,6 +18,7 @@ public abstract class BaseEnemy implements Enemy {
     protected Sprite sprite;
     protected Rectangle rectangle;
     protected int health;
+    protected int maxHealth;
     protected String guaranteedPowerup;
     protected float worldWidth, worldHeight;
     protected boolean invertMovement; // Added field to store inversion state
@@ -155,6 +156,16 @@ public abstract class BaseEnemy implements Enemy {
     @Override
     public Rectangle getRectangle() {
         return rectangle;
+    }
+
+    @Override
+    public int getHealth() {
+        return health;
+    }
+
+    @Override
+    public int getMaxHealth() {
+        return maxHealth;
     }
 
     @Override

@@ -31,6 +31,14 @@ public interface Weapon extends Pool.Poolable {
     default float getChainWindow() { return 2.0f; }
     default float getShootSpeedMultiplier() { return 0.75f; }
 
+    // getRectangle() is normally an axis-aligned box tested with plain Rectangle#overlaps. A weapon
+    // whose real footprint is rotated (e.g. a diagonal Thunderbolt strike) can instead report
+    // getRectangle() as its own un-rotated shape plus a non-zero rotation and pivot, so collision
+    // can test it as a true oriented rectangle instead of inflating an axis-aligned bounding box.
+    default float getRotation() { return 0f; }
+    default float getRotationPivotX() { return getRectangle().x + getRectangle().width / 2f; }
+    default float getRotationPivotY() { return getRectangle().y; }
+
     // Lets a persistent, non-destroying weapon (e.g. a lingering hitbox) damage each enemy only
     // once instead of every frame it overlaps. Bullets that destroy themselves on hit never need this.
     default boolean hasDamaged(Enemy enemy) { return false; }

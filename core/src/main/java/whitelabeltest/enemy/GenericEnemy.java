@@ -65,6 +65,7 @@ public class GenericEnemy extends BaseEnemy {
         }
 
         this.health = def.health;
+        this.maxHealth = def.health;
         this.animationTime = 0;
 
         // Initialize patterns

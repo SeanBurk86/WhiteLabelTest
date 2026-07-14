@@ -97,7 +97,7 @@ public class CollisionManager {
             WeaponPowerup wp = (WeaponPowerup) p;
             for (int j = bullets.size - 1; j >= 0; j--) {
                 Weapon bullet = bullets.get(j);
-                if (p.getRectangle().overlaps(bullet.getRectangle())) {
+                if (overlaps(p.getRectangle(), bullet)) {
                     if (wp.takeDamage(bullet.getDamage())) {
                         GameController.cyclePowerupType(wp, assets);
                     }
@@ -117,7 +117,7 @@ public class CollisionManager {
             if (!enemy.isActive()) continue; // bullets pass through entering/dying enemies
             for (int j = bullets.size - 1; j >= 0; j--) {
                 Weapon bullet = bullets.get(j);
-                if (enemy.getRectangle().overlaps(bullet.getRectangle())) {
+                if (overlaps(enemy.getRectangle(), bullet)) {
                     if (!bullet.hasDamaged(enemy)) {
                         bullet.markDamaged(enemy);
                         if (enemy.takeDamage(bullet.getDamage())) {
@@ -133,6 +133,55 @@ public class CollisionManager {
                 }
             }
         }
+    }
+
+    // Fast path for the common axis-aligned case; falls back to a proper oriented-rectangle test
+    // (SAT) when the weapon reports a rotation, so a rotated hitbox (e.g. a diagonal Thunderbolt
+    // strike) is tested at its real size/orientation instead of an inflated axis-aligned box.
+    private boolean overlaps(Rectangle aabb, Weapon bullet) {
+        float rotation = bullet.getRotation();
+        if (rotation == 0f) return aabb.overlaps(bullet.getRectangle());
+        return overlapsRotated(aabb, bullet.getRectangle(), bullet.getRotationPivotX(), bullet.getRotationPivotY(), rotation);
+    }
+
+    private static boolean overlapsRotated(Rectangle aabb, Rectangle local, float pivotX, float pivotY, float rotationDeg) {
+        float[] ax = {aabb.x, aabb.x + aabb.width, aabb.x + aabb.width, aabb.x};
+        float[] ay = {aabb.y, aabb.y, aabb.y + aabb.height, aabb.y + aabb.height};
+
+        float cos = MathUtils.cosDeg(rotationDeg);
+        float sin = MathUtils.sinDeg(rotationDeg);
+        float[] lx = {local.x, local.x + local.width, local.x + local.width, local.x};
+        float[] ly = {local.y, local.y, local.y + local.height, local.y + local.height};
+        float[] bx = new float[4];
+        float[] by = new float[4];
+        for (int i = 0; i < 4; i++) {
+            float dx = lx[i] - pivotX, dy = ly[i] - pivotY;
+            bx[i] = pivotX + dx * cos - dy * sin;
+            by[i] = pivotY + dx * sin + dy * cos;
+        }
+
+        // Separating Axis Theorem over the 4 edge-normal axes of the two rectangles: the AABB's
+        // (world x/y) and the OBB's (its own rotated x/y).
+        return projectionsOverlap(ax, ay, bx, by, 1f, 0f)
+            && projectionsOverlap(ax, ay, bx, by, 0f, 1f)
+            && projectionsOverlap(ax, ay, bx, by, cos, sin)
+            && projectionsOverlap(ax, ay, bx, by, -sin, cos);
+    }
+
+    private static boolean projectionsOverlap(float[] ax, float[] ay, float[] bx, float[] by, float axisX, float axisY) {
+        float minA = Float.MAX_VALUE, maxA = -Float.MAX_VALUE;
+        for (int i = 0; i < 4; i++) {
+            float proj = ax[i] * axisX + ay[i] * axisY;
+            minA = Math.min(minA, proj);
+            maxA = Math.max(maxA, proj);
+        }
+        float minB = Float.MAX_VALUE, maxB = -Float.MAX_VALUE;
+        for (int i = 0; i < 4; i++) {
+            float proj = bx[i] * axisX + by[i] * axisY;
+            minB = Math.min(minB, proj);
+            maxB = Math.max(maxB, proj);
+        }
+        return minA <= maxB && minB <= maxA;
     }
 
     public Rectangle getCollisionHighlight() {

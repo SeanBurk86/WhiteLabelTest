@@ -1,5 +1,6 @@
 package whitelabeltest.player.weapons;
 
+import com.badlogic.gdx.math.MathUtils;
 import com.badlogic.gdx.math.Vector2;
 import com.badlogic.gdx.utils.Array;
 
@@ -66,7 +67,13 @@ final class RRTLightning {
     // segment by a random amount, then the displacement amplitude shrinks by `roughness` for the
     // next pass. This is what turns one of the tree's straight connector edges into an actual
     // jagged crack instead of a plain line between two random points.
-    static Array<Vector2> roughen(float ax, float ay, float bx, float by, int detail, float jitter, float roughness, long seed) {
+    // minX/maxX/minY/maxY clamp every displaced point to a caller-given box (e.g. the weapon's own
+    // hitbox, when ax/ay/bx/by are given in its local along/perp frame) so the jagged displacement
+    // can't bulge past it; clamping incrementally as each point is created - rather than only at
+    // the end - keeps neighboring points close together instead of producing one long straight
+    // segment where a stray point gets yanked back to the boundary.
+    static Array<Vector2> roughen(float ax, float ay, float bx, float by, int detail, float jitter, float roughness, long seed,
+                                   float minX, float maxX, float minY, float maxY) {
         float dx0 = bx - ax, dy0 = by - ay;
         float length = (float) Math.sqrt(dx0 * dx0 + dy0 * dy0);
         float amp = length * jitter;
@@ -93,6 +100,8 @@ final class RRTLightning {
                     midX += perpX * (r * amp);
                     midY += perpY * (r * amp);
                 }
+                midX = MathUtils.clamp(midX, minX, maxX);
+                midY = MathUtils.clamp(midY, minY, maxY);
 
                 next.add(p0);
                 next.add(new Vector2(midX, midY));

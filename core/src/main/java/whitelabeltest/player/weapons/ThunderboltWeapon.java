@@ -69,6 +69,11 @@ public class ThunderboltWeapon extends BaseWeapon {
     private int segCount = 0;
     private boolean hasRealHit = false;
     private float lifeTime = 0f;
+    private float rotationDeg = 0f;
+
+    private float dirX, dirY;
+    private float halfWidth;
+    private float endReach;
 
     public void init(WeaponDefinition def, Texture texture, Texture circleTexture, Vector2 origin, Vector2 dir, float width, float worldHeight) {
         this.def = def;
@@ -97,19 +102,16 @@ public class ThunderboltWeapon extends BaseWeapon {
         float halfWidth = width / 2f;
         float perpUnitX = -dir.y;
         float perpUnitY = dir.x;
-        float perpX = perpUnitX * halfWidth;
-        float perpY = perpUnitY * halfWidth;
+        this.dirX = dir.x;
+        this.dirY = dir.y;
+        this.halfWidth = halfWidth;
+        this.endReach = endReach;
 
-        float c1x = startX + perpX, c1y = startY + perpY;
-        float c2x = startX - perpX, c2y = startY - perpY;
-        float c3x = endX + perpX, c3y = endY + perpY;
-        float c4x = endX - perpX, c4y = endY - perpY;
-
-        float minX = Math.min(Math.min(c1x, c2x), Math.min(c3x, c4x));
-        float maxX = Math.max(Math.max(c1x, c2x), Math.max(c3x, c4x));
-        float minY = Math.min(Math.min(c1y, c2y), Math.min(c3y, c4y));
-        float maxY = Math.max(Math.max(c1y, c2y), Math.max(c3y, c4y));
-        rectangle.set(minX, minY, maxX - minX, maxY - minY);
+        // Un-rotated hitbox, same size as a straight (0,1) strike (e.g. level 2's), pivoted at the
+        // origin; getRotation()/getRotationPivotX/Y() let collision test it as a true rotated rect
+        // instead of inflating an axis-aligned box around the rotated corners.
+        rectangle.set(origin.x - halfWidth, origin.y + startReach, width, endReach - startReach);
+        rotationDeg = dir.angleDeg() - 90f;
 
         generateMissArcs(startX, startY, dir.x, dir.y, perpUnitX, perpUnitY, endReach - startReach, halfWidth);
     }
@@ -126,26 +128,38 @@ public class ThunderboltWeapon extends BaseWeapon {
 
         for (int e = 0; e < edges.size; e++) {
             RRTLightning.Edge edge = edges.get(e);
-            float x1 = startX + dirX * edge.alongStart + perpUnitX * edge.perpStart;
-            float y1 = startY + dirY * edge.alongStart + perpUnitY * edge.perpStart;
-            float x2 = startX + dirX * edge.alongEnd + perpUnitX * edge.perpEnd;
-            float y2 = startY + dirY * edge.alongEnd + perpUnitY * edge.perpEnd;
             float width = MISS_BOLT_THICKNESS * (float) Math.pow(MISS_WIDTH_FALLOFF, edge.depth);
 
+            // Roughened in beam-local (along, perp) space and clamped to [0, length] x [-halfWidth,
+            // halfWidth] so the jagged crackle can't bulge past the hitbox it's meant to depict.
             long edgeSeed = seed ^ ((long) e * 0x9E3779B97F4A7C15L);
-            Array<Vector2> jagged = RRTLightning.roughen(x1, y1, x2, y2, ROUGHEN_DETAIL, ROUGHEN_JITTER, ROUGHEN_ROUGHNESS, edgeSeed);
+            Array<Vector2> jagged = RRTLightning.roughen(edge.alongStart, edge.perpStart, edge.alongEnd, edge.perpEnd,
+                ROUGHEN_DETAIL, ROUGHEN_JITTER, ROUGHEN_ROUGHNESS, edgeSeed, 0f, length, -halfWidth, halfWidth);
             for (int p = 0; p < jagged.size - 1; p++) {
                 Vector2 a = jagged.get(p);
                 Vector2 b = jagged.get(p + 1);
-                addBoltSegment(a.x, a.y, b.x, b.y, width, MISS_ALPHA_SCALE);
+                float x1 = startX + dirX * a.x + perpUnitX * a.y;
+                float y1 = startY + dirY * a.x + perpUnitY * a.y;
+                float x2 = startX + dirX * b.x + perpUnitX * b.y;
+                float y2 = startY + dirY * b.x + perpUnitY * b.y;
+                addBoltSegment(x1, y1, x2, y2, width, MISS_ALPHA_SCALE);
             }
         }
     }
 
-    private void addArc(float startX, float startY, float targetX, float targetY, long seed) {
-        Array<LightningBolt.Segment> segments = LightningBolt.generate(startX, startY, targetX, targetY, seed, HIT_BOLT_THICKNESS);
+    private void addArc(float targetX, float targetY, long seed) {
+        float dx = targetX - origin.x, dy = targetY - origin.y;
+        float targetAlong = dx * dirX + dy * dirY;
+        float targetPerp = dy * dirX - dx * dirY;
+
+        Array<LightningBolt.Segment> segments = LightningBolt.generate(0f, 0f, targetAlong, targetPerp, seed, HIT_BOLT_THICKNESS,
+            0f, endReach, -halfWidth, halfWidth);
         for (LightningBolt.Segment seg : segments) {
-            addBoltSegment(seg.x1, seg.y1, seg.x2, seg.y2, seg.width, seg.isFork ? FORK_ALPHA_SCALE : 0.75f);
+            float x1 = origin.x + dirX * seg.x1 - dirY * seg.y1;
+            float y1 = origin.y + dirY * seg.x1 + dirX * seg.y1;
+            float x2 = origin.x + dirX * seg.x2 - dirY * seg.y2;
+            float y2 = origin.y + dirY * seg.x2 + dirX * seg.y2;
+            addBoltSegment(x1, y1, x2, y2, seg.width, seg.isFork ? FORK_ALPHA_SCALE : 0.75f);
         }
     }
 
@@ -291,6 +305,21 @@ public class ThunderboltWeapon extends BaseWeapon {
     }
 
     @Override
+    public float getRotation() {
+        return rotationDeg;
+    }
+
+    @Override
+    public float getRotationPivotX() {
+        return origin.x;
+    }
+
+    @Override
+    public float getRotationPivotY() {
+        return origin.y;
+    }
+
+    @Override
     public boolean hasDamaged(Enemy enemy) {
         if (lifeTime >= STRIKE_DURATION) return true;
         return hitEnemies.contains(enemy, true);
@@ -308,7 +337,7 @@ public class ThunderboltWeapon extends BaseWeapon {
         float py = enemy.getRectangle().y + enemy.getRectangle().height / 2f;
 
         long seed = System.nanoTime() ^ ((long) System.identityHashCode(enemy) << 32);
-        addArc(origin.x, origin.y, px, py, seed);
+        addArc(px, py, seed);
     }
 
     @Override

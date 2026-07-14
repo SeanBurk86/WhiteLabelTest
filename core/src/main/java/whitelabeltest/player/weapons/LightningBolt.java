@@ -1,5 +1,6 @@
 package whitelabeltest.player.weapons;
 
+import com.badlogic.gdx.math.MathUtils;
 import com.badlogic.gdx.math.Vector2;
 import com.badlogic.gdx.utils.Array;
 
@@ -50,7 +51,13 @@ final class LightningBolt {
 
     private LightningBolt() {}
 
-    static Array<Segment> generate(float startX, float startY, float endX, float endY, long seed, float thickness) {
+    // minAlong/maxAlong/minPerp/maxPerp clamp every displaced/fork point to a caller-given box (the
+    // weapon's hitbox, when start/end are given in its local along/perp frame) so the recursive
+    // displacement and forks can't wander past it. Clamping incrementally as each point is created
+    // - rather than only at the finished leaves - keeps neighboring points close together instead
+    // of producing one long straight segment where a stray point gets yanked back to the boundary.
+    static Array<Segment> generate(float startX, float startY, float endX, float endY, long seed, float thickness,
+                                    float minAlong, float maxAlong, float minPerp, float maxPerp) {
         Array<Working> current = new Array<>(true, 32);
         current.add(new Working(startX, startY, endX, endY, 0, false, SUBDIVISIONS));
 
@@ -78,8 +85,8 @@ final class LightningBolt {
                 float displacement = length * DISPLACEMENT_FACTOR * (float) Math.exp(-DISPLACEMENT_DECAY * seg.level);
                 float jitter = (rand(segSeed) * 2f - 1f) * displacement;
 
-                float midX = (seg.x1 + seg.x2) / 2f + nx * jitter;
-                float midY = (seg.y1 + seg.y2) / 2f + ny * jitter;
+                float midX = MathUtils.clamp((seg.x1 + seg.x2) / 2f + nx * jitter, minAlong, maxAlong);
+                float midY = MathUtils.clamp((seg.y1 + seg.y2) / 2f + ny * jitter, minPerp, maxPerp);
 
                 int childRemaining = seg.remaining - 1;
                 next.add(new Working(seg.x1, seg.y1, midX, midY, seg.level + 1, seg.isFork, childRemaining));
@@ -88,7 +95,9 @@ final class LightningBolt {
                 if (!seg.isFork && rand(hash(segSeed, 1, 0)) < FORK_PROBABILITY) {
                     float forkAngle = (rand(hash(segSeed, 2, 0)) * 2f - 1f) * FORK_MAX_ANGLE_DEG;
                     Vector2 forkDir = new Vector2(dx, dy).nor().rotateDeg(forkAngle).scl(length * FORK_LENGTH_SCALE);
-                    next.add(new Working(midX, midY, midX + forkDir.x, midY + forkDir.y, seg.level + 1, true, FORK_SUBDIVISIONS));
+                    float forkEndX = MathUtils.clamp(midX + forkDir.x, minAlong, maxAlong);
+                    float forkEndY = MathUtils.clamp(midY + forkDir.y, minPerp, maxPerp);
+                    next.add(new Working(midX, midY, forkEndX, forkEndY, seg.level + 1, true, FORK_SUBDIVISIONS));
                 }
             }
             current = next;
