@@ -14,7 +14,7 @@ import whitelabeltest.player.Player;
 
 public interface Weapon extends Pool.Poolable {
     void update(float delta);
-    void updateWithEnemies(float delta, Array<Enemy> enemies); // New method for homing logic
+    void updateWithEnemies(float delta, Array<Enemy> enemies);
     void draw(SpriteBatch batch);
     boolean isOffScreen(float worldHeight);
     Rectangle getRectangle();
@@ -35,6 +35,11 @@ public interface Weapon extends Pool.Poolable {
     // once instead of every frame it overlaps. Bullets that destroy themselves on hit never need this.
     default boolean hasDamaged(Enemy enemy) { return false; }
     default void markDamaged(Enemy enemy) {}
+
+    // Called once, right when a bullet registers a new hit, before it's (possibly) destroyed and
+    // freed back to its pool - lets a weapon spawn follow-up projectiles (e.g. shrapnel) at the
+    // moment of impact instead of only on its own initial spawn().
+    default void onHit(Enemy enemy, Array<Weapon> activeWeapons, AssetManager assets) {}
 
     void setLevel(int level);
     int getLevel();

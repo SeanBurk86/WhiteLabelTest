@@ -14,10 +14,25 @@ import whitelabeltest.enemy.Enemy;
 import whitelabeltest.player.Player;
 
 public class WaveBlastWeapon extends BaseWeapon {
+    private static final float SPLINTER_SIZE_SCALE = 0.5f;
+    private static final float SPLINTER_DAMAGE_SCALE = 0.5f;
+    private static final float SPLINTER_ANGLE = 45f;
+
     private WeaponDefinition def;
+    private Texture texture;
+    private float size;
+    private int splitDepthRemaining;
 
     public void init(WeaponDefinition def, Texture texture, float x, float y, Vector2 dir, float speed) {
+        init(def, texture, x, y, dir, speed, def.size, def.getDamage(level), initialSplitDepth(level));
+    }
+
+    private void init(WeaponDefinition def, Texture texture, float x, float y, Vector2 dir, float speed, float size, int damage, int splitDepthRemaining) {
         this.def = def;
+        this.texture = texture;
+        this.size = size;
+        this.splitDepthRemaining = splitDepthRemaining;
+
         int frameHeight = texture.getHeight();
         int frameWidth = texture.getWidth() / def.frameCount;
 
@@ -27,13 +42,13 @@ public class WaveBlastWeapon extends BaseWeapon {
         if (sprite == null) sprite = new Sprite(frames[0]);
         else sprite.setRegion(frames[0]);
 
-        sprite.setSize(def.size, def.size * ((float) frameHeight / frameWidth));
+        sprite.setSize(size, size * ((float) frameHeight / frameWidth));
         sprite.setOriginCenter();
         sprite.setCenterX(x);
         sprite.setY(y);
 
         this.velocity.set(dir).scl(speed);
-        this.damage = def.getDamage(level);
+        this.damage = damage;
         this.chainWindow = def.chainWindow;
         this.shootSpeedMultiplier = def.shootSpeedMultiplier;
         this.animationTime = 0;
@@ -43,21 +58,15 @@ public class WaveBlastWeapon extends BaseWeapon {
         rectangle.set(sprite.getX(), sprite.getY(), sprite.getWidth(), sprite.getHeight());
     }
 
+    private static int initialSplitDepth(int level) {
+        if (level >= 3) return 2;
+        return 1;
+    }
+
     @Override
     public void spawn(Array<Weapon> activeWeapons, Texture texture, float x, float y, Player player, Array<Enemy> enemies, AssetManager assets) {
         float speed = def.getSpeed(level);
         spawnSingle(activeWeapons, texture, x, y, new Vector2(0, 1), speed);
-        if (level >= 2) {
-            spawnSingle(activeWeapons, texture, x, y, new Vector2(-0.559f, 0.829f), speed);
-            spawnSingle(activeWeapons, texture, x, y, new Vector2(0.559f, 0.829f), speed);
-        }
-        if (level >= 3) {
-            trySpawnHoming(activeWeapons, x, y, enemies, assets);
-        }
-        if (level >= 4) {
-            trySpawnHoming(activeWeapons, x, y, enemies, assets);
-            trySpawnHoming(activeWeapons, x, y, enemies, assets);
-        }
     }
 
     private void spawnSingle(Array<Weapon> activeWeapons, Texture texture, float x, float y, Vector2 dir, float speed) {
@@ -67,32 +76,31 @@ public class WaveBlastWeapon extends BaseWeapon {
         activeWeapons.add(w);
     }
 
-    private void trySpawnHoming(Array<Weapon> activeWeapons, float x, float y, Array<Enemy> enemies, AssetManager assets) {
-        int homingCount = 0;
-        for (Weapon w : activeWeapons) {
-            if (w instanceof HomingWeapon) homingCount++;
-        }
-        if (homingCount < 6) {
-            HomingWeapon hw = ObjectPools.homingWeaponPool.obtain();
-            hw.setLevel(this.level);
-            WeaponDefinition hDef = assets.getWeaponDefinition("HomingWeapon");
-            // Use assets.getTexture with the path from definition instead of hardcoded field
-            hw.init(hDef, assets.getTexture(hDef.texture), x, y, findNearestEnemy(enemies, x, y));
-            activeWeapons.add(hw);
+    @Override
+    public void onHit(Enemy enemy, Array<Weapon> activeWeapons, AssetManager assets) {
+        if (splitDepthRemaining <= 0) return;
+
+        float hitX = enemy.getRectangle().x + enemy.getRectangle().width / 2f;
+        float hitY = enemy.getRectangle().y + enemy.getRectangle().height / 2f;
+        float speed = velocity.len();
+        Vector2 forward = new Vector2(velocity).nor();
+
+        float splinterSize = size * SPLINTER_SIZE_SCALE;
+        int splinterDamage = Math.max(1, Math.round(damage * SPLINTER_DAMAGE_SCALE));
+        int childDepth = splitDepthRemaining - 1;
+
+        spawnSplinter(activeWeapons, hitX, hitY, new Vector2(forward).rotateDeg(SPLINTER_ANGLE), speed, splinterSize, splinterDamage, childDepth);
+        spawnSplinter(activeWeapons, hitX, hitY, new Vector2(forward).rotateDeg(-SPLINTER_ANGLE), speed, splinterSize, splinterDamage, childDepth);
+        if (level >= 3) {
+            spawnSplinter(activeWeapons, hitX, hitY, forward, speed, splinterSize, splinterDamage, childDepth);
         }
     }
 
-    private Enemy findNearestEnemy(Array<Enemy> enemies, float x, float y) {
-        Enemy nearest = null;
-        float minDist = Float.MAX_VALUE;
-        for (Enemy enemy : enemies) {
-            float dist = Vector2.dst(x, y, enemy.getRectangle().x, enemy.getRectangle().y);
-            if (dist < minDist) {
-                minDist = dist;
-                nearest = enemy;
-            }
-        }
-        return nearest;
+    private void spawnSplinter(Array<Weapon> activeWeapons, float x, float y, Vector2 dir, float speed, float size, int damage, int splitDepthRemaining) {
+        WaveBlastWeapon w = ObjectPools.fastWeaponPool.obtain();
+        w.setLevel(this.level);
+        w.init(def, texture, x, y, dir.nor(), speed, size, damage, splitDepthRemaining);
+        activeWeapons.add(w);
     }
 
     @Override

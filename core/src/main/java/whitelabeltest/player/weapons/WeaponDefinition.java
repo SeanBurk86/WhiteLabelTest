@@ -2,7 +2,7 @@ package whitelabeltest.player.weapons;
 
 public class WeaponDefinition {
     public String id;
-    public String type; // e.g., "Direct", "Spline", "Orbit", "Homing"
+    public String type; // e.g., "Direct", "Spline", "Orbit"
     public String texture;
     public int frameCount;
     public float size;

@@ -123,6 +123,7 @@ public class CollisionManager {
                         if (enemy.takeDamage(bullet.getDamage())) {
                             scoreManager.addScore(GameController.destroyEnemy(audio, entityManager, assets, worldWidth, worldHeight, enemy), bullet.getChainWindow());
                         }
+                        bullet.onHit(enemy, bullets, assets);
                     }
                     if (bullet.shouldDestroyOnCollision()) {
                         bullets.removeIndex(j);

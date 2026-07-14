@@ -18,7 +18,6 @@ public class AudioManager implements Disposable {
     private final ObjectMap<Integer, Array<Sound>> explosionSounds;
     private final ObjectMap<Integer, Array<Sound>> basicWeaponSounds;
     private final ObjectMap<Integer, Array<Sound>> waveBlastWeaponSounds;
-    private final ObjectMap<Integer, Array<Sound>> homingWeaponSounds;
     private final ObjectMap<Integer, Array<Sound>> orbitWeaponSounds;
     private final ObjectMap<Integer, Array<Sound>> thunderboltWeaponSounds;
 
@@ -34,7 +33,6 @@ public class AudioManager implements Disposable {
         Json json = new Json();
         basicWeaponSounds = new ObjectMap<>();
         waveBlastWeaponSounds = new ObjectMap<>();
-        homingWeaponSounds = new ObjectMap<>();
         orbitWeaponSounds = new ObjectMap<>();
         thunderboltWeaponSounds = new ObjectMap<>();
         explosionSounds = new ObjectMap<>();
@@ -52,9 +50,6 @@ public class AudioManager implements Disposable {
             }
             if(sBank.type == SoundType.WaveBlastWeapon) {
                 populateSounds(sBank, waveBlastWeaponSounds);
-            }
-            if(sBank.type == SoundType.HomingWeapon) {
-                populateSounds(sBank, homingWeaponSounds);
             }
             if(sBank.type == SoundType.Explosion) {
                 populateSounds(sBank, explosionSounds);
@@ -108,10 +103,6 @@ public class AudioManager implements Disposable {
         if (waveBlastWeaponSounds != null && waveBlastWeaponSounds.containsKey(level)) waveBlastWeaponSounds.get(level).random().play();
     }
 
-    public void playHomingWeaponSound(int level) {
-        if (homingWeaponSounds != null && homingWeaponSounds.containsKey(level)) homingWeaponSounds.get(level).random().play();
-    }
-
     public void playOrbitWeaponSound(int level) {
         if (orbitWeaponSounds != null && orbitWeaponSounds.containsKey(level)) orbitWeaponSounds.get(level).random().play();
     }
@@ -131,7 +122,6 @@ public class AudioManager implements Disposable {
         disposeSoundsMap(explosionSounds);
         disposeSoundsMap(basicWeaponSounds);
         disposeSoundsMap(waveBlastWeaponSounds);
-        disposeSoundsMap(homingWeaponSounds);
         disposeSoundsMap(orbitWeaponSounds);
         disposeSoundsMap(thunderboltWeaponSounds);
     }
