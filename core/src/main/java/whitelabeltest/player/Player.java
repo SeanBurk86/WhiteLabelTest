@@ -125,7 +125,7 @@ public class Player {
         thunderboltWeapon.init(thbDef, assets.pixelTexture, assets.circleTexture, new Vector2(0, 0), new Vector2(0, 1), thbDef.size, worldHeight);
 
         weaponSlots[0] = basicWeapon;
-        weaponSlots[1] = basicWeapon;
+        weaponSlots[1] = null;
         activeSlot = 0;
         numBombs = 1;
         numLives = 3;
@@ -205,7 +205,10 @@ public class Player {
     }
 
     public void switchActiveSlot() {
-        activeSlot = 1 - activeSlot;
+        int otherSlot = 1 - activeSlot;
+        if (weaponSlots[otherSlot] != null) {
+            activeSlot = otherSlot;
+        }
     }
 
     private void updateHitbox() {
@@ -274,7 +277,7 @@ public class Player {
         orbitWeapon.setLevel(0);
         thunderboltWeapon.setLevel(0);
         weaponSlots[0] = basicWeapon;
-        weaponSlots[1] = basicWeapon;
+        weaponSlots[1] = null;
         activeSlot = 0;
         shootTimer = 0;
         animationTime = 0;
@@ -303,8 +306,9 @@ public class Player {
     public int getActiveSlot() { return activeSlot; }
     public String getSlotWeaponId(int slot) { return weaponId(weaponSlots[slot]); }
 
-    /** Collecting a weapon powerup levels up that weapon type and equips it into the active slot,
-     *  replacing whatever weapon was there. */
+    /** Collecting a weapon powerup levels up that weapon type. If it isn't already equipped in
+     *  either slot, it's placed into the unequipped slot, replacing whatever weapon was there -
+     *  a weapon is never allowed to occupy both slots at once. */
     public void levelUpWeapon(String weaponId) {
         Weapon target = switch (weaponId) {
             case "BasicWeapon" -> basicWeapon;
@@ -316,7 +320,9 @@ public class Player {
 
         if (target != null) {
             target.setLevel(Math.min(target.getLevel() + 1, MAX_WEAPON_LEVEL));
-            weaponSlots[activeSlot] = target;
+            if (weaponSlots[0] != target && weaponSlots[1] != target) {
+                weaponSlots[1 - activeSlot] = target;
+            }
         }
     }
 
