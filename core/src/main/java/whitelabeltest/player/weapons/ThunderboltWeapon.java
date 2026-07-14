@@ -8,7 +8,6 @@ import com.badlogic.gdx.graphics.g2d.SpriteBatch;
 import com.badlogic.gdx.math.MathUtils;
 import com.badlogic.gdx.math.Vector2;
 import com.badlogic.gdx.utils.Array;
-import com.badlogic.gdx.utils.BooleanArray;
 import com.badlogic.gdx.utils.FloatArray;
 import whitelabeltest.enemy.Enemy;
 import whitelabeltest.gamemanagers.AssetManager;
@@ -18,28 +17,28 @@ import whitelabeltest.player.Player;
 
 public class ThunderboltWeapon extends BaseWeapon {
     private static final float STRIKE_DURATION = 0.1f;
-    private static final float FADE_DURATION = 0.5f;
-    private static final float WIDE_SCALE = 1.75f;
+    private static final float FADE_DURATION = 0.7f;
+    private static final float HITBOX_GROWTH_PER_LEVEL = 0.75f;
     private static final float MISS_BOLT_THICKNESS = 0.0625f;
     private static final float HIT_BOLT_THICKNESS = 0.33f;
-    private static final float FORK_ALPHA_SCALE = 0.56f;
-    private static final float MISS_ALPHA_SCALE = 0.33f;
+    private static final float FORK_ALPHA_SCALE = 0.75f;
+    private static final float MISS_ALPHA_SCALE = 0.75f;
     private static final float MISS_WIDTH_FALLOFF = 0.75f;
     private static final int MISS_ARC_COUNT = 18;
 
-    // Roughens each straight RRT edge into a jagged crack via recursive midpoint displacement,
-    // rather than leaving it as one plain line between two random points.
     private static final int ROUGHEN_DETAIL = 2;
     private static final float ROUGHEN_JITTER = 0.4f;
     private static final float ROUGHEN_ROUGHNESS = 0.5f;
 
     private static final float GLOW_OUTER_WIDTH_SCALE = 2.0f;
-    private static final float GLOW_OUTER_ALPHA_SCALE = 0.06f;
     private static final float GLOW_INNER_WIDTH_SCALE = 1.3f;
-    private static final float GLOW_INNER_ALPHA_SCALE = 0.14f;
+    private static final float OUTER_TINT_G = 0.15f, OUTER_TINT_B = 0.15f;
+    private static final float INNER_TINT_G = 0.2f, INNER_TINT_B = 0.2f;
 
-    private static final float CORE_ALPHA_SCALE = 0.6f;
+    private static final float CORE_ALPHA_SCALE = 1.0f;
     private static final float CORE_WIDTH_SCALE = 0.5f;
+
+    private static final float FADE_BLUR_GROWTH = 2.0f;
 
     private static final float NOISE_AMPLITUDE = 0.04f;
     private static final float NOISE_SPEED_1 = 40f;
@@ -57,7 +56,6 @@ public class ThunderboltWeapon extends BaseWeapon {
     private final Vector2 origin = new Vector2();
     private final Array<Enemy> hitEnemies = new Array<>(false, 4);
     private final Array<Sprite> bolts = new Array<>(false, 96);
-    private final BooleanArray boltAdditive = new BooleanArray(96);
 
     private final FloatArray segX1 = new FloatArray(16);
     private final FloatArray segY1 = new FloatArray(16);
@@ -159,7 +157,7 @@ public class ThunderboltWeapon extends BaseWeapon {
             float y1 = origin.y + dirY * seg.x1 + dirX * seg.y1;
             float x2 = origin.x + dirX * seg.x2 - dirY * seg.y2;
             float y2 = origin.y + dirY * seg.x2 + dirX * seg.y2;
-            addBoltSegment(x1, y1, x2, y2, seg.width, seg.isFork ? FORK_ALPHA_SCALE : 0.75f);
+            addBoltSegment(x1, y1, x2, y2, seg.width, seg.isFork ? FORK_ALPHA_SCALE : 1.0f);
         }
     }
 
@@ -174,15 +172,19 @@ public class ThunderboltWeapon extends BaseWeapon {
         setOrAdd(segPhase, i, MathUtils.random(0f, 1000f));
 
         int base = i * SPRITES_PER_SEGMENT;
-        prepareLayer(base, 0.15f, 0.15f, true);
-        prepareLayer(base + SPRITES_PER_LAYER, 0.2f, 0.2f, true);
-        prepareLayer(base + SPRITES_PER_LAYER * 2, 1f, 1f, false);
+        prepareLayer(base);
+        prepareLayer(base + SPRITES_PER_LAYER);
+        prepareLayer(base + SPRITES_PER_LAYER * 2);
 
-        repositionSegment(i, computeFadeAlpha());
+        repositionSegment(i, fadeProgress());
     }
 
-    private float computeFadeAlpha() {
-        float t = MathUtils.clamp(lifeTime / FADE_DURATION, 0f, 1f);
+    private float fadeProgress() {
+        return MathUtils.clamp(lifeTime / FADE_DURATION, 0f, 1f);
+    }
+
+    // Smoothstep falloff: 1 at t=0 (just spawned), 0 at t=1 (fully faded).
+    private static float easeFade(float t) {
         float eased = t * t * (3f - 2f * t);
         return 1f - eased;
     }
@@ -192,29 +194,26 @@ public class ThunderboltWeapon extends BaseWeapon {
         else arr.add(value);
     }
 
-    private void prepareLayer(int base, float g, float b, boolean additive) {
+    private void prepareLayer(int base) {
         for (int k = 0; k < SPRITES_PER_LAYER; k++) {
             Sprite bolt = obtainBoltSprite(base + k);
-            boltAdditive.set(base + k, additive);
             // k 0,1 = the two half-lines (square/rectangular); k 2,3,4 = the joint caps (round).
             bolt.setRegion(k < 2 ? texture : circleTexture);
-            bolt.setColor(1f, g, b, 1f);
         }
     }
 
     private Sprite obtainBoltSprite(int index) {
         while (bolts.size <= index) {
             bolts.add(new Sprite(texture));
-            boltAdditive.add(false);
         }
         return bolts.get(index);
     }
 
-    private void repositionSegment(int i, float fadeAlpha) {
+    private void repositionSegment(int i, float t) {
         float x1 = segX1.get(i), y1 = segY1.get(i);
         float x2 = segX2.get(i), y2 = segY2.get(i);
         float width = segWidth.get(i);
-        float baseAlpha = segAlpha.get(i) * fadeAlpha;
+        float baseAlpha = segAlpha.get(i) * easeFade(t);
         float phase = segPhase.get(i);
 
         float dx = x2 - x1, dy = y2 - y1;
@@ -226,21 +225,33 @@ public class ThunderboltWeapon extends BaseWeapon {
         float midX = (x1 + x2) / 2f + perpX * wobble;
         float midY = (y1 + y2) / 2f + perpY * wobble;
 
+        // Every layer is drawn with a MAX blend equation (see draw()) so overlapping joints -
+        // e.g. where one segment's end cap sits on top of the next segment's start cap - don't
+        // compound into a brighter seam the way normal alpha blending would; max(a, a) is just a,
+        // no matter how many times the same spot gets drawn. MAX ignores blend factors entirely,
+        // so the fade has to be baked into RGB brightness instead of the alpha channel. The glow
+        // layers also spread wider as they fade (blurScale), a cheap stand-in for a real blur.
+        float blurScale = 1f + FADE_BLUR_GROWTH * t;
+        float coreBrightness = baseAlpha * CORE_ALPHA_SCALE;
+
         int base = i * SPRITES_PER_SEGMENT;
-        positionLayer(base, x1, y1, midX, midY, x2, y2, width * GLOW_OUTER_WIDTH_SCALE, baseAlpha * GLOW_OUTER_ALPHA_SCALE);
-        positionLayer(base + SPRITES_PER_LAYER, x1, y1, midX, midY, x2, y2, width * GLOW_INNER_WIDTH_SCALE, baseAlpha * GLOW_INNER_ALPHA_SCALE);
-        positionLayer(base + SPRITES_PER_LAYER * 2, x1, y1, midX, midY, x2, y2, width * CORE_WIDTH_SCALE, baseAlpha * CORE_ALPHA_SCALE);
+        positionLayer(base, x1, y1, midX, midY, x2, y2, width * GLOW_OUTER_WIDTH_SCALE * blurScale,
+            baseAlpha, OUTER_TINT_G * baseAlpha, OUTER_TINT_B * baseAlpha);
+        positionLayer(base + SPRITES_PER_LAYER, x1, y1, midX, midY, x2, y2, width * GLOW_INNER_WIDTH_SCALE * blurScale,
+            baseAlpha, INNER_TINT_G * baseAlpha, INNER_TINT_B * baseAlpha);
+        positionLayer(base + SPRITES_PER_LAYER * 2, x1, y1, midX, midY, x2, y2, width * CORE_WIDTH_SCALE,
+            coreBrightness, coreBrightness, coreBrightness);
     }
 
-    private void positionLayer(int base, float x1, float y1, float midX, float midY, float x2, float y2, float width, float alpha) {
-        positionHalf(base, x1, y1, midX, midY, width, alpha);
-        positionHalf(base + 1, midX, midY, x2, y2, width, alpha);
-        positionCap(base + 2, x1, y1, width, alpha);
-        positionCap(base + 3, midX, midY, width, alpha);
-        positionCap(base + 4, x2, y2, width, alpha);
+    private void positionLayer(int base, float x1, float y1, float midX, float midY, float x2, float y2, float width, float r, float g, float b) {
+        positionHalf(base, x1, y1, midX, midY, width, r, g, b);
+        positionHalf(base + 1, midX, midY, x2, y2, width, r, g, b);
+        positionCap(base + 2, x1, y1, width, r, g, b);
+        positionCap(base + 3, midX, midY, width, r, g, b);
+        positionCap(base + 4, x2, y2, width, r, g, b);
     }
 
-    private void positionHalf(int spriteIndex, float ax, float ay, float bx, float by, float width, float alpha) {
+    private void positionHalf(int spriteIndex, float ax, float ay, float bx, float by, float width, float r, float g, float b) {
         Sprite bolt = bolts.get(spriteIndex);
         float dx = bx - ax, dy = by - ay;
         float dist = Math.max((float) Math.sqrt(dx * dx + dy * dy), 0.01f);
@@ -249,25 +260,25 @@ public class ThunderboltWeapon extends BaseWeapon {
         bolt.setOrigin(width / 2f, 0f);
         bolt.setPosition(ax - width / 2f, ay);
         bolt.setRotation((float) Math.toDegrees(Math.atan2(dy, dx)) - 90f);
-        bolt.setAlpha(alpha);
+        bolt.setColor(r, g, b, 1f);
     }
 
-    private void positionCap(int spriteIndex, float cx, float cy, float width, float alpha) {
+    private void positionCap(int spriteIndex, float cx, float cy, float width, float r, float g, float b) {
         Sprite bolt = bolts.get(spriteIndex);
         bolt.setSize(width, width);
         bolt.setOrigin(width / 2f, width / 2f);
         bolt.setPosition(cx - width / 2f, cy - width / 2f);
         bolt.setRotation(0f);
-        bolt.setAlpha(alpha);
+        bolt.setColor(r, g, b, 1f);
     }
 
     @Override
     public void update(float delta) {
         lifeTime += delta;
-        float fadeAlpha = computeFadeAlpha();
+        float t = fadeProgress();
 
         for (int i = 0; i < segCount; i++) {
-            repositionSegment(i, fadeAlpha);
+            repositionSegment(i, t);
         }
     }
 
@@ -279,19 +290,14 @@ public class ThunderboltWeapon extends BaseWeapon {
 
         batch.flush();
         Gdx.gl.glBlendEquation(GL_MAX);
-
         batch.setBlendFunction(GL20.GL_SRC_ALPHA, GL20.GL_ONE);
         for (int i = 0; i < spriteCount; i++) {
-            if (boltAdditive.get(i)) bolts.get(i).draw(batch);
-        }
-
-        batch.setBlendFunction(srcFunc, dstFunc);
-        for (int i = 0; i < spriteCount; i++) {
-            if (!boltAdditive.get(i)) bolts.get(i).draw(batch);
+            bolts.get(i).draw(batch);
         }
 
         batch.flush();
         Gdx.gl.glBlendEquation(GL20.GL_FUNC_ADD);
+        batch.setBlendFunction(srcFunc, dstFunc);
     }
 
     @Override
@@ -343,7 +349,9 @@ public class ThunderboltWeapon extends BaseWeapon {
     @Override
     public void spawn(Array<Weapon> activeWeapons, Texture texture, float x, float y, Player player, Array<Enemy> enemies, AssetManager assets) {
         Vector2 origin = new Vector2(player.getCenterX(), player.getCenterY());
-        float width = def.size * (level >= 2 ? WIDE_SCALE : 1f);
+        // Grows a little with every level (not just a single jump at level 2) so an enemy caught
+        // where multiple strikes overlap is more likely to sit in several hitboxes at once.
+        float width = def.size * (1f + (level - 1) * HITBOX_GROWTH_PER_LEVEL);
         float worldHeight = player.getWorldHeight();
         Texture pixel = assets.pixelTexture;
         Texture circle = assets.circleTexture;

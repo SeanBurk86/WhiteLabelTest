@@ -117,20 +117,26 @@ public class CollisionManager {
             if (!enemy.isActive()) continue; // bullets pass through entering/dying enemies
             for (int j = bullets.size - 1; j >= 0; j--) {
                 Weapon bullet = bullets.get(j);
-                if (overlaps(enemy.getRectangle(), bullet)) {
-                    if (!bullet.hasDamaged(enemy)) {
-                        bullet.markDamaged(enemy);
-                        if (enemy.takeDamage(bullet.getDamage())) {
-                            scoreManager.addScore(GameController.destroyEnemy(audio, entityManager, assets, worldWidth, worldHeight, enemy), bullet.getChainWindow());
-                        }
-                        bullet.onHit(enemy, bullets, assets);
+                if (!overlaps(enemy.getRectangle(), bullet)) continue;
+
+                if (!bullet.hasDamaged(enemy)) {
+                    bullet.markDamaged(enemy);
+                    if (enemy.takeDamage(bullet.getDamage())) {
+                        scoreManager.addScore(GameController.destroyEnemy(audio, entityManager, assets, worldWidth, worldHeight, enemy), bullet.getChainWindow());
                     }
-                    if (bullet.shouldDestroyOnCollision()) {
-                        bullets.removeIndex(j);
-                        ObjectPools.freeWeapon(bullet);
-                    }
-                    break;
+                    bullet.onHit(enemy, bullets, assets);
                 }
+
+                if (bullet.shouldDestroyOnCollision()) {
+                    bullets.removeIndex(j);
+                    ObjectPools.freeWeapon(bullet);
+                }
+
+                // A destroying bullet (or a now-dead enemy) ends this enemy's checks for the
+                // frame, same as before; a persistent, non-destroying hitbox (e.g. a Thunderbolt
+                // strike) doesn't, so an enemy standing in several overlapping strikes at once
+                // takes - and visibly arcs from - a hit from each one instead of just the first.
+                if (bullet.shouldDestroyOnCollision() || !enemy.isActive()) break;
             }
         }
     }

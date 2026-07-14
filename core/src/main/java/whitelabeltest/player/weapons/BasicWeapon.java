@@ -14,6 +14,10 @@ import whitelabeltest.gamemanagers.ObjectPools;
 import whitelabeltest.player.Player;
 
 public class BasicWeapon extends BaseWeapon {
+    private static final float STREAM_BULLET_SPACING = 0.2f;
+    private static final float OUTER_SPREAD_ANGLE = 15f;
+    private static final float INNER_SPREAD_ANGLE = 6f;
+
     private WeaponDefinition def;
 
     public void init(WeaponDefinition def, Texture texture, float x, float y, Vector2 dir, float speed) {
@@ -49,24 +53,28 @@ public class BasicWeapon extends BaseWeapon {
         if (level == 1) {
             spawnSingle(activeWeapons, texture, x, y, new Vector2(0, 1), baseSpeed);
         } else if (level == 2) {
-            for (int i = 0; i < 4; i++) {
-                spawnSingle(activeWeapons, texture, x - 0.3f + (i * 0.2f), y, new Vector2(0, 1), baseSpeed);
-            }
+            spawnStream(activeWeapons, texture, x, y, 0f, 4, baseSpeed);
         } else if (level == 3) {
-            for (int i = 0; i < 4; i++) spawnSingle(activeWeapons, texture, x - 0.3f + (i * 0.2f), y, new Vector2(0, 1), baseSpeed);
-            spawnSingle(activeWeapons, texture, x, y, new Vector2(-1, 1), baseSpeed * 0.8f);
-            spawnSingle(activeWeapons, texture, x, y, new Vector2(1, 1), baseSpeed * 0.8f);
-            spawnSingle(activeWeapons, texture, x, y, new Vector2(-1, -1), baseSpeed * 0.8f);
-            spawnSingle(activeWeapons, texture, x, y, new Vector2(1, -1), baseSpeed * 0.8f);
+            spawnStream(activeWeapons, texture, x, y, 0f, 4, baseSpeed);
+            spawnStream(activeWeapons, texture, x, y, -OUTER_SPREAD_ANGLE, 2, baseSpeed);
+            spawnStream(activeWeapons, texture, x, y, OUTER_SPREAD_ANGLE, 2, baseSpeed);
         } else {
-            float[][] dirs = {{0, 1}, {0, -1}, {1, 0}, {-1, 0}, {1, 1}, {-1, 1}, {1, -1}, {-1, -1}};
-            for (float[] d : dirs) {
-                for (int i = 0; i < 4; i++) {
-                    float offsetX = d[1] * (-0.3f + i * 0.2f);
-                    float offsetY = d[0] * (-0.3f + i * 0.2f);
-                    spawnSingle(activeWeapons, texture, x + offsetX, y + offsetY, new Vector2(d[0], d[1]), baseSpeed);
-                }
-            }
+            spawnStream(activeWeapons, texture, x, y, 0f, 4, baseSpeed);
+            spawnStream(activeWeapons, texture, x, y, -OUTER_SPREAD_ANGLE, 4, baseSpeed);
+            spawnStream(activeWeapons, texture, x, y, OUTER_SPREAD_ANGLE, 4, baseSpeed);
+            spawnStream(activeWeapons, texture, x, y, -INNER_SPREAD_ANGLE, 4, baseSpeed);
+            spawnStream(activeWeapons, texture, x, y, INNER_SPREAD_ANGLE, 4, baseSpeed);
+        }
+    }
+
+    /** Spawns bulletCount bullets side-by-side (evenly spaced perpendicular to their travel
+     *  direction), all fired in the same direction: straight up, rotated by angleOffsetDeg. */
+    private void spawnStream(Array<Weapon> activeWeapons, Texture texture, float x, float y, float angleOffsetDeg, int bulletCount, float speed) {
+        Vector2 dir = new Vector2(0, 1).rotateDeg(angleOffsetDeg);
+        float perpX = -dir.y, perpY = dir.x;
+        for (int i = 0; i < bulletCount; i++) {
+            float offset = (i - (bulletCount - 1) / 2f) * STREAM_BULLET_SPACING;
+            spawnSingle(activeWeapons, texture, x + perpX * offset, y + perpY * offset, new Vector2(dir), speed);
         }
     }
 

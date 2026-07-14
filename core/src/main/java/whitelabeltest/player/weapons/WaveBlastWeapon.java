@@ -82,6 +82,8 @@ public class WaveBlastWeapon extends BaseWeapon {
 
         float hitX = enemy.getRectangle().x + enemy.getRectangle().width / 2f;
         float hitY = enemy.getRectangle().y + enemy.getRectangle().height / 2f;
+        float enemyHalfWidth = enemy.getRectangle().width / 2f;
+        float enemyHalfHeight = enemy.getRectangle().height / 2f;
         float speed = velocity.len();
         Vector2 forward = new Vector2(velocity).nor();
 
@@ -89,11 +91,22 @@ public class WaveBlastWeapon extends BaseWeapon {
         int splinterDamage = Math.max(1, Math.round(damage * SPLINTER_DAMAGE_SCALE));
         int childDepth = splitDepthRemaining - 1;
 
-        spawnSplinter(activeWeapons, hitX, hitY, new Vector2(forward).rotateDeg(SPLINTER_ANGLE), speed, splinterSize, splinterDamage, childDepth);
-        spawnSplinter(activeWeapons, hitX, hitY, new Vector2(forward).rotateDeg(-SPLINTER_ANGLE), speed, splinterSize, splinterDamage, childDepth);
+        spawnSplinterOutside(activeWeapons, hitX, hitY, enemyHalfWidth, enemyHalfHeight, new Vector2(forward).rotateDeg(SPLINTER_ANGLE), speed, splinterSize, splinterDamage, childDepth);
+        spawnSplinterOutside(activeWeapons, hitX, hitY, enemyHalfWidth, enemyHalfHeight, new Vector2(forward).rotateDeg(-SPLINTER_ANGLE), speed, splinterSize, splinterDamage, childDepth);
         if (level >= 3) {
-            spawnSplinter(activeWeapons, hitX, hitY, forward, speed, splinterSize, splinterDamage, childDepth);
+            spawnSplinterOutside(activeWeapons, hitX, hitY, enemyHalfWidth, enemyHalfHeight, forward, speed, splinterSize, splinterDamage, childDepth);
         }
+    }
+
+    private void spawnSplinterOutside(Array<Weapon> activeWeapons, float centerX, float centerY, float enemyHalfWidth, float enemyHalfHeight, Vector2 dir, float speed, float size, int damage, int splitDepthRemaining) {
+        float clearance = exitDistance(dir, enemyHalfWidth, enemyHalfHeight) + size / 2f;
+        spawnSplinter(activeWeapons, centerX + dir.x * clearance, centerY + dir.y * clearance, dir, speed, size, damage, splitDepthRemaining);
+    }
+
+    private static float exitDistance(Vector2 dir, float halfWidth, float halfHeight) {
+        float tx = Math.abs(dir.x) > 0.0001f ? halfWidth / Math.abs(dir.x) : Float.MAX_VALUE;
+        float ty = Math.abs(dir.y) > 0.0001f ? halfHeight / Math.abs(dir.y) : Float.MAX_VALUE;
+        return Math.min(tx, ty);
     }
 
     private void spawnSplinter(Array<Weapon> activeWeapons, float x, float y, Vector2 dir, float speed, float size, int damage, int splitDepthRemaining) {

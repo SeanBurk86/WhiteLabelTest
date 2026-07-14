@@ -53,7 +53,7 @@ public class WeaponPowerup implements Powerup {
         sprite.setRotation(0);
 
         this.lifeTime = 0;
-        this.cycleCooldownTimer = 0f;
+        this.cycleCooldownTimer = CYCLE_COOLDOWN;
         this.rectangle.set(sprite.getX(), sprite.getY(), sprite.getWidth(), sprite.getHeight());
 
         if (velocity.isZero()) {
