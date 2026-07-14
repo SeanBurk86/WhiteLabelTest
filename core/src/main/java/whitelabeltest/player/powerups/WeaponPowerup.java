@@ -15,7 +15,7 @@ public class WeaponPowerup implements Powerup {
     private static final int FRAME_ROWS = 3;
     private static final int FRAME_COUNT = FRAME_COLUMNS * FRAME_ROWS;
     private static final float FRAME_DURATION = 0.08f;
-    private static final int DAMAGE_TO_CYCLE = 50;
+    private static final float CYCLE_COOLDOWN = 1f;
 
     private Sprite sprite;
     private Animation<TextureRegion> animation;
@@ -27,7 +27,7 @@ public class WeaponPowerup implements Powerup {
 
     private float lifeTime = 0;
     private final float maxLifeTime = 8.0f;
-    private int damageTaken = 0;
+    private float cycleCooldownTimer = 0f;
 
     public WeaponPowerup() {
         this.rectangle = new Rectangle();
@@ -53,7 +53,7 @@ public class WeaponPowerup implements Powerup {
         sprite.setRotation(0);
 
         this.lifeTime = 0;
-        this.damageTaken = 0;
+        this.cycleCooldownTimer = 0f;
         this.rectangle.set(sprite.getX(), sprite.getY(), sprite.getWidth(), sprite.getHeight());
 
         if (velocity.isZero()) {
@@ -78,19 +78,18 @@ public class WeaponPowerup implements Powerup {
         sprite.setRegion(animation.getKeyFrame(0));
     }
 
-    /** Accumulates bullet damage and reports true once DAMAGE_TO_CYCLE is reached, carrying over any excess. */
-    public boolean takeDamage(int amount) {
-        damageTaken += amount;
-        if (damageTaken >= DAMAGE_TO_CYCLE) {
-            damageTaken -= DAMAGE_TO_CYCLE;
-            return true;
-        }
-        return false;
+    /** Called when a bullet touches this pickup; reports true (and starts the cooldown) at most
+     *  once every CYCLE_COOLDOWN seconds, regardless of how many bullets touch it in between. */
+    public boolean registerHit() {
+        if (cycleCooldownTimer > 0f) return false;
+        cycleCooldownTimer = CYCLE_COOLDOWN;
+        return true;
     }
 
     @Override
     public void update(float delta) {
         lifeTime += delta;
+        if (cycleCooldownTimer > 0f) cycleCooldownTimer -= delta;
         animationTime += delta;
         sprite.setRegion(animation.getKeyFrame(animationTime));
         sprite.translate(velocity.x * delta, velocity.y * delta);
@@ -140,7 +139,7 @@ public class WeaponPowerup implements Powerup {
         if (sprite != null) sprite.setRotation(0);
         lifeTime = 0;
         animationTime = 0;
-        damageTaken = 0;
+        cycleCooldownTimer = 0f;
         velocity.setZero();
         weaponId = null;
     }

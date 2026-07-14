@@ -98,7 +98,7 @@ public class CollisionManager {
             for (int j = bullets.size - 1; j >= 0; j--) {
                 Weapon bullet = bullets.get(j);
                 if (overlaps(p.getRectangle(), bullet)) {
-                    if (wp.takeDamage(bullet.getDamage())) {
+                    if (wp.registerHit()) {
                         GameController.cyclePowerupType(wp, assets);
                     }
                     if (bullet.shouldDestroyOnCollision()) {
