@@ -31,9 +31,6 @@ public class GenericEnemy extends BaseEnemy {
         this.animation = AnimationCache.get(texture, def.columns > 0 ? def.columns : def.frameCount, def.rows, def.frameCount, def.frameDuration, Animation.PlayMode.LOOP);
         TextureRegion[] frames = animation.getKeyFrames();
 
-        // This is only the last-resort fallback bullet animation for firing patterns that don't
-        // build their own (see PatternFactory.buildBulletAnimation) — e.g. the legacy scalar
-        // firingType path, which has no FiringPatternDef to carry its own layout/frame duration.
         this.bulletAnimation = (bulletTexture != null)
             ? AnimationCache.get(bulletTexture, FiringPatternDef.DEFAULT_BULLET_COLUMNS > 0 ? FiringPatternDef.DEFAULT_BULLET_COLUMNS : FiringPatternDef.DEFAULT_BULLET_FRAME_COUNT,
                 FiringPatternDef.DEFAULT_BULLET_ROWS, FiringPatternDef.DEFAULT_BULLET_FRAME_COUNT, FiringPatternDef.DEFAULT_BULLET_FRAME_DURATION, Animation.PlayMode.LOOP)
@@ -50,8 +47,6 @@ public class GenericEnemy extends BaseEnemy {
         }
         sprite.setOriginCenter();
 
-        // NaN means "not specified" -> pick a default. Any finite value is used as-is, including
-        // negative or beyond world bounds, so enemies can spawn off either edge of the screen.
         if (!Float.isNaN(startX)) {
             sprite.setX(startX);
         } else {
@@ -61,14 +56,13 @@ public class GenericEnemy extends BaseEnemy {
         if (!Float.isNaN(startY)) {
             sprite.setY(startY);
         } else {
-            sprite.setY(worldHeight + 1.0f); // Default to spawning above screen
+            sprite.setY(worldHeight + 1.0f);
         }
 
         this.health = def.health;
         this.maxHealth = def.health;
         this.animationTime = 0;
 
-        // Initialize patterns
         this.movement = def.movementPattern != null
             ? PatternFactory.createMovement(def, def.movementPattern, worldHeight, sprite.getX() + sprite.getWidth() / 2f)
             : PatternFactory.createMovement(def.movementType, def.speed, worldHeight, def.movementAngle, def.stopDistance, sprite.getX() + sprite.getWidth() / 2f);
@@ -93,21 +87,16 @@ public class GenericEnemy extends BaseEnemy {
 
     @Override
     public void init(Texture texture, float worldWidth, float worldHeight, float startX, float startY) {
-        // Fallback or random initialization if initWithDefinition isn't used
         initWithDefinition(null, texture, null, null, null, worldWidth, worldHeight, startX, startY);
     }
 
     @Override
     public boolean isOffScreen() {
-        // While dying, only the death animation controls when this enemy is actually reaped.
         if (lifecycleState == LifecycleState.DYING) return isDeathAnimationFinished();
 
         if (firing instanceof SelfDestructFiring && ((SelfDestructFiring)firing).isTriggered()) return true;
         if (movement != null && movement.isFinished()) return true;
 
-        // Bounds checking that handles movement in any direction. A margin equal to twice the
-        // sprite's own size on each edge (matching the Y check) lets enemies spawn off either
-        // side of the screen and stay alive long enough to move on-screen.
         return sprite.getY() < -sprite.getHeight() * 2f || sprite.getY() > worldHeight + sprite.getHeight() * 2f ||
                sprite.getX() + sprite.getWidth() < -sprite.getWidth() * 2f || sprite.getX() > worldWidth + sprite.getWidth() * 2f;
     }
@@ -121,6 +110,9 @@ public class GenericEnemy extends BaseEnemy {
 
     @Override
     public boolean isBoss() { return def != null && def.isBoss; }
+
+    @Override
+    public boolean isGround() { return def != null && def.isGround; }
 
     @Override
     public float getSpawnRate() { return 1.0f; }

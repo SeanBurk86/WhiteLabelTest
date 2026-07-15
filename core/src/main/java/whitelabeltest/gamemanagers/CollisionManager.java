@@ -22,7 +22,8 @@ public class CollisionManager {
     public boolean checkPlayerEnemyCollisions(Player player, Array<Enemy> enemies) {
         for (int i = enemies.size - 1; i >= 0; i--) {
             Enemy enemy = enemies.get(i);
-            if (!enemy.isActive()) continue; // entering/dying enemies don't deal contact damage
+            if (!enemy.isActive()) continue;
+            if (enemy.isGround()) continue;
             if (Intersector.overlaps(player.getHitbox(), enemy.getRectangle())) {
                 collisionHighlight.set(enemy.getRectangle());
                 return true;
@@ -62,8 +63,6 @@ public class CollisionManager {
         float dx = circle.x - pivotX;
         float dy = circle.y - pivotY;
 
-        // Undo the rectangle's rotation to bring the circle's center into the rectangle's own
-        // un-rotated local frame, where it's a plain axis-aligned box again.
         float cos = MathUtils.cosDeg(-rotation);
         float sin = MathUtils.sinDeg(-rotation);
         float localX = dx * cos - dy * sin;
@@ -132,18 +131,11 @@ public class CollisionManager {
                     ObjectPools.freeWeapon(bullet);
                 }
 
-                // A destroying bullet (or a now-dead enemy) ends this enemy's checks for the
-                // frame, same as before; a persistent, non-destroying hitbox (e.g. a Thunderbolt
-                // strike) doesn't, so an enemy standing in several overlapping strikes at once
-                // takes - and visibly arcs from - a hit from each one instead of just the first.
                 if (bullet.shouldDestroyOnCollision() || !enemy.isActive()) break;
             }
         }
     }
 
-    // Fast path for the common axis-aligned case; falls back to a proper oriented-rectangle test
-    // (SAT) when the weapon reports a rotation, so a rotated hitbox (e.g. a diagonal Thunderbolt
-    // strike) is tested at its real size/orientation instead of an inflated axis-aligned box.
     private boolean overlaps(Rectangle aabb, Weapon bullet) {
         float rotation = bullet.getRotation();
         if (rotation == 0f) return aabb.overlaps(bullet.getRectangle());
@@ -166,8 +158,6 @@ public class CollisionManager {
             by[i] = pivotY + dx * sin + dy * cos;
         }
 
-        // Separating Axis Theorem over the 4 edge-normal axes of the two rectangles: the AABB's
-        // (world x/y) and the OBB's (its own rotated x/y).
         return projectionsOverlap(ax, ay, bx, by, 1f, 0f)
             && projectionsOverlap(ax, ay, bx, by, 0f, 1f)
             && projectionsOverlap(ax, ay, bx, by, cos, sin)

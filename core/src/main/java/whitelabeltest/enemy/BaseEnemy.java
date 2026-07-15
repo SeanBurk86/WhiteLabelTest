@@ -1,5 +1,6 @@
 package whitelabeltest.enemy;
 
+import com.badlogic.gdx.graphics.Color;
 import com.badlogic.gdx.graphics.Texture;
 import com.badlogic.gdx.graphics.g2d.Animation;
 import com.badlogic.gdx.graphics.g2d.Sprite;
@@ -146,11 +147,35 @@ public abstract class BaseEnemy implements Enemy {
         return deathAnimation != null ? deathAnimation.isAnimationFinished(lifecycleTime) : lifecycleTime >= deathDuration;
     }
 
+    private static final float SHADOW_OFFSET_FACTOR = 1.25f;
+    private static final float SHADOW_SCALE = 0.66f;
+    private static final float SHADOW_ALPHA = 0.75f;
+
     @Override
     public void draw(SpriteBatch batch) {
         if (sprite != null && !isOffScreen()) {
+            if (!isGround()) drawDropShadow(batch);
             sprite.draw(batch);
         }
+    }
+
+    private void drawDropShadow(SpriteBatch batch) {
+        Color color = sprite.getColor();
+        float r = color.r, g = color.g, b = color.b, a = color.a;
+        if (a <= 0f) return;
+
+        float offsetX = sprite.getWidth() * SHADOW_OFFSET_FACTOR;
+        float offsetY = -sprite.getHeight() * SHADOW_OFFSET_FACTOR;
+        float scaleX = sprite.getScaleX();
+        float scaleY = sprite.getScaleY();
+
+        sprite.translate(offsetX, offsetY);
+        sprite.setScale(scaleX * SHADOW_SCALE, scaleY * SHADOW_SCALE);
+        sprite.setColor(0f, 0f, 0f, a * SHADOW_ALPHA);
+        sprite.draw(batch);
+        sprite.translate(-offsetX, -offsetY);
+        sprite.setScale(scaleX, scaleY);
+        sprite.setColor(r, g, b, a);
     }
 
     @Override
