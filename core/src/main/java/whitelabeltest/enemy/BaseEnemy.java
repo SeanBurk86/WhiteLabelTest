@@ -172,8 +172,22 @@ public abstract class BaseEnemy implements Enemy {
         float r = color.r, g = color.g, b = color.b, a = color.a;
         if (a <= 0f) return;
 
-        float offsetX = sprite.getWidth() * SHADOW_OFFSET_FACTOR;
-        float offsetY = -sprite.getHeight() * SHADOW_OFFSET_FACTOR;
+        // Shadow points toward the center of the play area, as if lit from behind each enemy
+        // outward from the edges: enemies near an edge cast a longer, more skewed shadow toward
+        // the middle, while enemies near dead-center fall back to a straight-down offset.
+        float magnitude = sprite.getWidth() * SHADOW_OFFSET_FACTOR;
+        float dx = worldWidth / 2f - (sprite.getX() + sprite.getWidth() / 2f);
+        float dy = worldHeight / 2f - (sprite.getY() + sprite.getHeight() / 2f);
+        float dist = (float) Math.sqrt(dx * dx + dy * dy);
+
+        float offsetX, offsetY;
+        if (dist > 0.0001f) {
+            offsetX = (dx / dist) * magnitude;
+            offsetY = (dy / dist) * magnitude;
+        } else {
+            offsetX = 0f;
+            offsetY = -magnitude;
+        }
         float scaleX = sprite.getScaleX();
         float scaleY = sprite.getScaleY();
 
