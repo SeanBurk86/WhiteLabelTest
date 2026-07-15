@@ -2,11 +2,11 @@ package whitelabeltest.gamemanagers;
 
 public class ScoreManager {
     private static final float DEFAULT_CHAIN_WINDOW = 2.0f;
-    private static final int MAX_CHAIN_MULTIPLIER = 8;
 
     private int score;
     private int highScore;
     private int chainCount;
+    private int chainValueSum;
     private float chainTimer;
     private float currentChainWindow = DEFAULT_CHAIN_WINDOW;
 
@@ -15,15 +15,17 @@ public class ScoreManager {
             chainTimer -= delta;
             if (chainTimer <= 0) {
                 chainCount = 0;
+                chainValueSum = 0;
             }
         }
     }
 
     public void addScore(int basePoints, float chainWindow) {
         chainCount++;
+        chainValueSum += basePoints;
         currentChainWindow = chainWindow;
         chainTimer = chainWindow;
-        score += basePoints * Math.min(chainCount, MAX_CHAIN_MULTIPLIER);
+        score += chainValueSum;
         if (score > highScore) highScore = score;
     }
 
@@ -34,6 +36,7 @@ public class ScoreManager {
     public void reset() {
         score = 0;
         chainCount = 0;
+        chainValueSum = 0;
         chainTimer = 0;
         currentChainWindow = DEFAULT_CHAIN_WINDOW;
     }

@@ -136,7 +136,7 @@ public class GameController implements Disposable {
     }
 
     public static int destroyEnemy(AudioManager audio, EntityManager entityManager, AssetManager assets, float worldWidth, float worldHeight, Enemy enemy) {
-        boolean wasBoss = enemy.isBoss();
+        int scoreValue = enemy.getScore();
 
         float centerX = enemy.getRectangle().x + enemy.getRectangle().width / 2;
         float centerY = enemy.getRectangle().y + enemy.getRectangle().height / 2;
@@ -151,7 +151,7 @@ public class GameController implements Disposable {
         }
 
         audio.playExplosion();
-        return wasBoss ? 1000 : 10;
+        return scoreValue;
     }
 
     private static final String[] POWERUP_WEAPON_IDS = {"BasicWeapon", "WaveBlastWeapon", "Thunderbolt", "OrbitWeapon"};

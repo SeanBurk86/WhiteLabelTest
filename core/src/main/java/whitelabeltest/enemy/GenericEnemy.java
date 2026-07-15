@@ -115,5 +115,8 @@ public class GenericEnemy extends BaseEnemy {
     public boolean isGround() { return def != null && def.isGround; }
 
     @Override
+    public int getScore() { return def != null ? def.score : 10; }
+
+    @Override
     public float getSpawnRate() { return 1.0f; }
 }

@@ -22,6 +22,7 @@ public class EnemyDefinition {
     public boolean rotateWithMovement = true;
     public boolean isBoss = false;
     public boolean isGround = false;
+    public int score = 10;
     public String firingType;
     public float fireRate;
     public float bulletSize = -1f;
