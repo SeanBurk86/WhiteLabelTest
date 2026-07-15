@@ -15,9 +15,6 @@ public class SpawnScheduler {
     public static class SpawnEvent {
         public float time;
         public String type;
-        // NaN (the default when omitted from spawn_schedule.json) means "pick a default spawn
-        // position"; any finite value is used literally, including negative or beyond the world
-        // bounds so enemies can spawn off either edge of the screen (not just above/below it).
         public float x = Float.NaN;
         public float y = Float.NaN;
         public String powerup;
@@ -27,10 +24,18 @@ public class SpawnScheduler {
         public SpawnEvent() {}
     }
 
+    private static class ScheduleFile {
+        public Array<TextCue> textCues;
+        public Array<SpawnEvent> events;
+
+        public ScheduleFile() {}
+    }
+
     private float totalTime;
     private final float worldWidth;
     private final float worldHeight;
     private Array<SpawnEvent> schedule;
+    private Array<TextCue> textCues = new Array<>();
     private final ObjectMap<String, EnemyDefinition> enemyDefinitions;
     private final AssetManager assets;
 
@@ -56,10 +61,9 @@ public class SpawnScheduler {
     private void loadSchedule() {
         Json json = new Json();
         try {
-            @SuppressWarnings("unchecked")
-            Array<SpawnEvent> loadedSchedule = json.fromJson(Array.class, SpawnEvent.class, Gdx.files.internal("spawn_schedule.json"));
-            this.schedule = loadedSchedule;
-            if (this.schedule == null) this.schedule = new Array<>();
+            ScheduleFile file = json.fromJson(ScheduleFile.class, Gdx.files.internal("spawn_schedule.json"));
+            this.schedule = (file != null && file.events != null) ? file.events : new Array<>();
+            if (file != null && file.textCues != null) this.textCues = file.textCues;
             schedule.sort(new Comparator<SpawnEvent>() {
                 @Override
                 public int compare(SpawnEvent e1, SpawnEvent e2) {
@@ -71,6 +75,8 @@ public class SpawnScheduler {
             this.schedule = new Array<>();
         }
     }
+
+    public Array<TextCue> getTextCues() { return textCues; }
 
     public void update(float delta, EntityManager entityManager) {
         totalTime += delta;

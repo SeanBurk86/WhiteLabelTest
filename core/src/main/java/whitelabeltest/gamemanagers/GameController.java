@@ -221,6 +221,7 @@ public class GameController implements Disposable {
     public boolean isLevelComplete() { return levelComplete; }
     public boolean isDebugMode() { return debugMode; }
     public float getLevelStartTimer() { return levelStartTimer; }
+    public Array<TextCue> getTextCues() { return spawnScheduler.getTextCues(); }
     public float getBombCooldownTimer() { return Math.max(bombCooldownTimer, 0f); }
     public float getBombCooldownFraction() { return Math.max(bombCooldownTimer, 0f) / BOMB_COOLDOWN; }
     public EntityManager getEntities() { return entities; }

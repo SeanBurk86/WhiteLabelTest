@@ -20,7 +20,7 @@ public class UIManager implements Disposable {
     private final BitmapFont font;
     private final GlyphLayout gameOverLayout;
     private final GlyphLayout levelCompleteLayout;
-    private final GlyphLayout destroyIceLayout;
+    private final GlyphLayout textCueLayout;
     private final Texture whitePixel;
     private final InputType inputType;
 
@@ -37,7 +37,7 @@ public class UIManager implements Disposable {
         font.getData().setScale(0.009375f);
         gameOverLayout = new GlyphLayout();
         levelCompleteLayout = new GlyphLayout();
-        destroyIceLayout = new GlyphLayout();
+        textCueLayout = new GlyphLayout();
 
         Pixmap pixmap = new Pixmap(1, 1, Pixmap.Format.RGBA8888);
         pixmap.setColor(Color.WHITE);
@@ -180,35 +180,41 @@ public class UIManager implements Disposable {
         font.setColor(Color.WHITE);
     }
 
-    private static final String LEVEL_START_LINE_1 = "Accessing secure node...\nExecuting penetration protocol...\nNode ICE detected...\nDaemon loaded...\nDaemon temp: FLAMING HOT!!!";
-    private static final String DESTROY_ICE_WARNING = "DESTROY ICE";
-    private static final float LEVEL_START_DURATION = 7f;
-    private static final float LEVEL_START_LINE_DURATION = LEVEL_START_DURATION / 2f;
-    private static final float LEVEL_START_CHARS_PER_SECOND = 30f;
-    private static final float DESTROY_ICE_SCALE_MULTIPLIER = 5f;
-    private static final float DESTROY_ICE_BLINKS_PER_SECOND = 4f;
-
-    public void drawLevelStartAesthetics(SpriteBatch batch, float worldWidth, float worldHeight, float elapsedTime) {
-        if (elapsedTime >= LEVEL_START_DURATION) return;
+    public void drawTextCues(SpriteBatch batch, float elapsedTime, Array<TextCue> cues) {
+        if (cues == null) return;
 
         font.setColor(Color.RED);
-        float x = 0.3f;
-        float y = worldHeight - 0.3f;
-        if (elapsedTime < LEVEL_START_LINE_DURATION) {
-            drawTypewriter(batch, LEVEL_START_LINE_1, x, y, elapsedTime, LEVEL_START_CHARS_PER_SECOND);
-        } else {
-            float originalScaleX = font.getData().scaleX;
-            float originalScaleY = font.getData().scaleY;
-            font.getData().setScale(originalScaleX * DESTROY_ICE_SCALE_MULTIPLIER, originalScaleY * DESTROY_ICE_SCALE_MULTIPLIER);
-
-            destroyIceLayout.setText(font, DESTROY_ICE_WARNING);
-            float bigX = (worldWidth - destroyIceLayout.width) / 2f;
-            float bigY = (worldHeight + destroyIceLayout.height) / 2f;
-            drawBlinking(batch, DESTROY_ICE_WARNING, bigX, bigY, elapsedTime - LEVEL_START_LINE_DURATION, DESTROY_ICE_BLINKS_PER_SECOND);
-
-            font.getData().setScale(originalScaleX, originalScaleY);
+        for (TextCue cue : cues) {
+            if (elapsedTime < cue.time || elapsedTime >= cue.time + cue.duration) continue;
+            drawTextCue(batch, cue, elapsedTime - cue.time);
         }
         font.setColor(Color.WHITE);
+    }
+
+    private void drawTextCue(SpriteBatch batch, TextCue cue, float cueElapsedTime) {
+        float originalScaleX = font.getData().scaleX;
+        float originalScaleY = font.getData().scaleY;
+        if (cue.fontSize != 1f) {
+            font.getData().setScale(originalScaleX * cue.fontSize, originalScaleY * cue.fontSize);
+        }
+
+        float x = cue.x;
+        float y = cue.y;
+        if (cue.centered) {
+            textCueLayout.setText(font, cue.text);
+            x = cue.x - textCueLayout.width / 2f;
+            y = cue.y + textCueLayout.height / 2f;
+        }
+
+        switch (cue.effect) {
+            case "typewriter" -> drawTypewriter(batch, cue.text, x, y, cueElapsedTime, cue.charsPerSecond);
+            case "blinking" -> drawBlinking(batch, cue.text, x, y, cueElapsedTime, cue.blinksPerSecond);
+            default -> font.draw(batch, cue.text, x, y);
+        }
+
+        if (cue.fontSize != 1f) {
+            font.getData().setScale(originalScaleX, originalScaleY);
+        }
     }
 
     public boolean drawTypewriter(SpriteBatch batch, String text, float x, float y, float elapsedTime, float charsPerSecond) {
