@@ -12,6 +12,7 @@ public interface Enemy extends Pool.Poolable {
     void init(Texture texture, float worldWidth, float worldHeight, float startX, float startY);
     void update(float delta, Array<EnemyBullet> enemyBullets, Circle playerHitbox);
     void draw(SpriteBatch batch);
+    default void drawShadow(SpriteBatch batch) {}
     boolean isOffScreen();
     Rectangle getRectangle();
     boolean takeDamage(int amount);

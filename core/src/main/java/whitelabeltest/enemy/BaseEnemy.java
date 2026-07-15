@@ -154,8 +154,16 @@ public abstract class BaseEnemy implements Enemy {
     @Override
     public void draw(SpriteBatch batch) {
         if (sprite != null && !isOffScreen()) {
-            if (!isGround()) drawDropShadow(batch);
             sprite.draw(batch);
+        }
+    }
+
+    // Drawn in its own pass before any enemy sprite (see EntityManager.draw), so a shadow never
+    // paints over another enemy's sprite when the two overlap.
+    @Override
+    public void drawShadow(SpriteBatch batch) {
+        if (sprite != null && !isOffScreen() && !isGround()) {
+            drawDropShadow(batch);
         }
     }
 

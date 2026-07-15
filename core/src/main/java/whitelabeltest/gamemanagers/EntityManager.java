@@ -169,6 +169,7 @@ public class EntityManager {
             batch.flush();
             batch.setBlendFunction(GL20.GL_SRC_ALPHA, GL20.GL_ONE_MINUS_SRC_ALPHA);
         }
+        for (Enemy e : enemies) e.drawShadow(batch);
         for (Enemy e : enemies) e.draw(batch);
         for (EnemyBullet eb : enemyBullets) eb.draw(batch);
 
