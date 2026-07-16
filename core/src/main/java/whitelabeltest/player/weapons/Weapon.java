@@ -27,6 +27,14 @@ public interface Weapon extends Pool.Poolable {
     float getFireRate();
     void playFireSound(AudioManager audio, int level);
 
+    // Each weapon tracks its own cooldown, advanced every frame regardless of which slot is
+    // active (see Player.advanceWeaponTimers). That way switching slots never resets or
+    // fast-forwards a cooldown - a weapon is only ready to fire once real time, not switch
+    // events, has closed the gap since it last fired.
+    float getShootTimer();
+    void addShootTimer(float delta);
+    void resetShootTimer();
+
     default boolean shouldDestroyOnCollision() { return true; }
     default float getChainWindow() { return 2.0f; }
     default float getShootSpeedMultiplier() { return 0.75f; }

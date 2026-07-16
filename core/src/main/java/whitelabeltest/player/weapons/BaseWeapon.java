@@ -18,6 +18,7 @@ public abstract class BaseWeapon implements Weapon {
     protected int level = 1;
     protected float chainWindow = 2.0f;
     protected float shootSpeedMultiplier = 0.75f;
+    protected float shootTimer;
 
     protected Path<Vector2> path;
     protected float pathTime = 0;
@@ -87,6 +88,13 @@ public abstract class BaseWeapon implements Weapon {
     public float getChainWindow() { return chainWindow; }
     @Override
     public float getShootSpeedMultiplier() { return shootSpeedMultiplier; }
+
+    @Override
+    public float getShootTimer() { return shootTimer; }
+    @Override
+    public void addShootTimer(float delta) { shootTimer += delta; }
+    @Override
+    public void resetShootTimer() { shootTimer = 0f; }
 
     @Override
     public void reset() {

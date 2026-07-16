@@ -32,7 +32,6 @@ public class Player {
 
     private final Weapon[] weaponSlots = new Weapon[2];
     private int activeSlot;
-    private float shootTimer;
     private int numBombs;
     private int numLives;
     private float grazePoints;
@@ -175,16 +174,25 @@ public class Player {
     }
 
     private void handleShooting(float delta, boolean isShooting, AssetManager assets, AudioManager audio, Array<Weapon> bullets, Array<Enemy> enemies) {
+        advanceWeaponTimers(delta);
+
         Weapon currentWeapon = getCurrentWeapon();
-        shootTimer += delta;
-        if (isShooting && shootTimer > currentWeapon.getFireRate()) {
-            shootTimer = 0;
+        if (isShooting && currentWeapon.getShootTimer() > currentWeapon.getFireRate()) {
+            currentWeapon.resetShootTimer();
 
             Texture bulletTex = resolveActiveTexture(assets);
             Vector2 spawnPoint = getBulletSpawnPoint();
             currentWeapon.spawn(bullets, bulletTex, spawnPoint.x, spawnPoint.y, this, enemies, assets);
             currentWeapon.playFireSound(audio, currentWeapon.getLevel());
         }
+    }
+
+    // Both equipped weapons' cooldowns tick every frame, whether or not their slot is active, so
+    // a weapon is ready to fire based on real elapsed time since it last fired - not reset by
+    // switching to it, and not fast-forwardable by rapidly toggling slots back and forth.
+    private void advanceWeaponTimers(float delta) {
+        if (weaponSlots[0] != null) weaponSlots[0].addShootTimer(delta);
+        if (weaponSlots[1] != null && weaponSlots[1] != weaponSlots[0]) weaponSlots[1].addShootTimer(delta);
     }
 
     private Texture resolveActiveTexture(AssetManager assets) {
@@ -279,7 +287,10 @@ public class Player {
         weaponSlots[0] = basicWeapon;
         weaponSlots[1] = null;
         activeSlot = 0;
-        shootTimer = 0;
+        basicWeapon.resetShootTimer();
+        waveBlastWeapon.resetShootTimer();
+        orbitWeapon.resetShootTimer();
+        thunderboltWeapon.resetShootTimer();
         animationTime = 0;
         numBombs = 1;
         numLives = 3;
