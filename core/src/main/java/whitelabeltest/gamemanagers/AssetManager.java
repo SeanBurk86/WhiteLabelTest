@@ -8,6 +8,7 @@ import com.badlogic.gdx.utils.Array;
 import com.badlogic.gdx.utils.Disposable;
 import com.badlogic.gdx.utils.Json;
 import com.badlogic.gdx.utils.ObjectMap;
+import whitelabeltest.enemy.BulletDef;
 import whitelabeltest.enemy.EnemyDefinition;
 import whitelabeltest.enemy.FiringPatternDef;
 import whitelabeltest.enemy.PatternRegistry;
@@ -40,6 +41,9 @@ public class AssetManager implements Disposable {
         }
 
         PatternRegistry.load(json);
+        for (BulletDef bulletDef : PatternRegistry.getBulletDefs()) {
+            if (bulletDef.bulletTexture != null) loadTexture(bulletDef.bulletTexture);
+        }
 
         @SuppressWarnings("unchecked")
         Array<EnemyDefinition> eDefs = json.fromJson(Array.class, EnemyDefinition.class, Gdx.files.internal("enemies.json"));

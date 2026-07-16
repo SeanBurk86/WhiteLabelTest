@@ -10,6 +10,7 @@ import com.badlogic.gdx.utils.ObjectMap;
 public final class PatternRegistry {
     private static final ObjectMap<String, MovementPatternDef> movementPatterns = new ObjectMap<>();
     private static final ObjectMap<String, FiringPatternDef> firingPatterns = new ObjectMap<>();
+    private static final ObjectMap<String, BulletDef> bulletDefs = new ObjectMap<>();
 
     private PatternRegistry() {}
 
@@ -18,6 +19,11 @@ public final class PatternRegistry {
         @SuppressWarnings("unchecked")
         Array<MovementPatternDef> mDefs = json.fromJson(Array.class, MovementPatternDef.class, Gdx.files.internal("movement_patterns.json"));
         for (MovementPatternDef def : mDefs) movementPatterns.put(def.id, def);
+
+        bulletDefs.clear();
+        @SuppressWarnings("unchecked")
+        Array<BulletDef> bDefs = json.fromJson(Array.class, BulletDef.class, Gdx.files.internal("bullets.json"));
+        for (BulletDef def : bDefs) bulletDefs.put(def.id, def);
 
         firingPatterns.clear();
         @SuppressWarnings("unchecked")
@@ -31,5 +37,13 @@ public final class PatternRegistry {
 
     public static FiringPatternDef getFiring(String id) {
         return id != null ? firingPatterns.get(id) : null;
+    }
+
+    public static BulletDef getBullet(String id) {
+        return id != null ? bulletDefs.get(id) : null;
+    }
+
+    public static ObjectMap.Values<BulletDef> getBulletDefs() {
+        return bulletDefs.values();
     }
 }

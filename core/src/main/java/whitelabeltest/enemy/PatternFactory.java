@@ -111,44 +111,65 @@ public class PatternFactory {
             case "SpawnEnemy":
                 return new SpawnEnemyFiring(def.spawnType, def.fireRate, def.offsetX, def.offsetY);
             case "AimedAtPoint": {
-                Animation<TextureRegion> spriteOverride = buildBulletAnimation(enemyDef, def);
+                BulletDef bulletDef = PatternRegistry.getBullet(def.bulletId);
+                Animation<TextureRegion> spriteOverride = buildBulletAnimation(enemyDef, def, bulletDef);
                 float targetX = !Float.isNaN(def.targetX) ? def.targetX : 0f;
                 float targetY = !Float.isNaN(def.targetY) ? def.targetY : 0f;
-                return new PointAimedFiring(def.fireRate, resolve(def.bulletSize, 0.25f), resolve(def.bulletSpeed, 5f), spriteOverride, targetX, targetY, def.offsetX, def.offsetY);
+                return new PointAimedFiring(def.fireRate, resolve(bulletSize(def, bulletDef), 0.25f), resolve(bulletSpeed(def, bulletDef), 5f), spriteOverride, targetX, targetY, def.offsetX, def.offsetY);
             }
             case "Laser": {
-                Animation<TextureRegion> spriteOverride = buildBulletAnimation(enemyDef, def);
-                float thickness = resolve(def.bulletSize, 0.3f);
+                BulletDef bulletDef = PatternRegistry.getBullet(def.bulletId);
+                Animation<TextureRegion> spriteOverride = buildBulletAnimation(enemyDef, def, bulletDef);
+                float thickness = resolve(bulletSize(def, bulletDef), 0.3f);
                 float length = def.length > 0 ? def.length : LaserFiring.DEFAULT_LENGTH;
                 return new LaserFiring(def.fireRate, thickness, length, def.angularSpeed, def.fireAngle, def.duration, spriteOverride, def.offsetX, def.offsetY);
             }
             case "Sweep": {
-                Animation<TextureRegion> spriteOverride = buildBulletAnimation(enemyDef, def);
+                BulletDef bulletDef = PatternRegistry.getBullet(def.bulletId);
+                Animation<TextureRegion> spriteOverride = buildBulletAnimation(enemyDef, def, bulletDef);
                 float sweepDuration = def.sweepDuration > 0 ? def.sweepDuration : SweepFiring.DEFAULT_SWEEP_DURATION;
                 float startAngle = !Float.isNaN(def.sweepStartAngle) ? def.sweepStartAngle : SweepFiring.DEFAULT_START_ANGLE;
                 float endAngle = !Float.isNaN(def.sweepEndAngle) ? def.sweepEndAngle : SweepFiring.DEFAULT_END_ANGLE;
-                return new SweepFiring(def.fireRate, resolve(def.bulletSize, 0.25f), resolve(def.bulletSpeed, 5f), spriteOverride, def.offsetX, def.offsetY, sweepDuration, startAngle, endAngle);
+                return new SweepFiring(def.fireRate, resolve(bulletSize(def, bulletDef), 0.25f), resolve(bulletSpeed(def, bulletDef), 5f), spriteOverride, def.offsetX, def.offsetY, sweepDuration, startAngle, endAngle);
             }
             default:
-                Animation<TextureRegion> spriteOverride = buildBulletAnimation(enemyDef, def);
-                return createFiring(def.type, def.fireRate, def.bulletSize, def.bulletSpeed, spriteOverride, def.spreadDegrees, def.numBullets, def.offsetX, def.offsetY);
+                BulletDef bulletDef = PatternRegistry.getBullet(def.bulletId);
+                Animation<TextureRegion> spriteOverride = buildBulletAnimation(enemyDef, def, bulletDef);
+                return createFiring(def.type, def.fireRate, bulletSize(def, bulletDef), bulletSpeed(def, bulletDef), spriteOverride, def.spreadDegrees, def.numBullets, def.offsetX, def.offsetY);
         }
     }
 
+    /** A pattern's own bulletSize/bulletSpeed always win; otherwise fall back to the referenced
+     *  bullet definition's values, if any. */
+    private static float bulletSize(FiringPatternDef def, BulletDef bulletDef) {
+        return def.bulletSize > 0 ? def.bulletSize : (bulletDef != null ? bulletDef.bulletSize : -1f);
+    }
+
+    private static float bulletSpeed(FiringPatternDef def, BulletDef bulletDef) {
+        return def.bulletSpeed > 0 ? def.bulletSpeed : (bulletDef != null ? bulletDef.bulletSpeed : -1f);
+    }
+
     /** Builds this pattern's own bullet animation — reusing the enemy's default bulletTexture
-     *  when the pattern doesn't set its own, but otherwise entirely self-contained: sheet layout
-     *  and animation speed are resolved purely from this pattern, never from the enemy
-     *  definition, so two patterns sharing a texture can still animate independently. */
-    private static Animation<TextureRegion> buildBulletAnimation(EnemyDefinition enemyDef, FiringPatternDef def) {
-        String texturePath = def.bulletTexture != null ? def.bulletTexture : (enemyDef != null ? enemyDef.bulletTexture : null);
+     *  when neither the pattern nor its referenced bullet definition sets one, but otherwise
+     *  entirely self-contained: sheet layout and animation speed are resolved purely from this
+     *  pattern (falling back to its bulletDef, if any), never from the enemy definition, so two
+     *  patterns sharing a texture can still animate independently. */
+    private static Animation<TextureRegion> buildBulletAnimation(EnemyDefinition enemyDef, FiringPatternDef def, BulletDef bulletDef) {
+        String texturePath = def.bulletTexture != null ? def.bulletTexture
+            : (bulletDef != null && bulletDef.bulletTexture != null ? bulletDef.bulletTexture
+            : (enemyDef != null ? enemyDef.bulletTexture : null));
         if (texturePath == null) return null;
         Texture texture = EnemySpawnRegistry.getTexture(texturePath);
         if (texture == null) return null;
 
-        int frameCount = def.bulletFrameCount > 0 ? def.bulletFrameCount : FiringPatternDef.DEFAULT_BULLET_FRAME_COUNT;
-        int columns = def.bulletColumns >= 0 ? def.bulletColumns : FiringPatternDef.DEFAULT_BULLET_COLUMNS;
-        int rows = def.bulletRows > 0 ? def.bulletRows : FiringPatternDef.DEFAULT_BULLET_ROWS;
-        float frameDuration = def.bulletFrameDuration > 0 ? def.bulletFrameDuration : FiringPatternDef.DEFAULT_BULLET_FRAME_DURATION;
+        int frameCount = def.bulletFrameCount > 0 ? def.bulletFrameCount
+            : (bulletDef != null && bulletDef.bulletFrameCount > 0 ? bulletDef.bulletFrameCount : FiringPatternDef.DEFAULT_BULLET_FRAME_COUNT);
+        int columns = def.bulletColumns >= 0 ? def.bulletColumns
+            : (bulletDef != null && bulletDef.bulletColumns >= 0 ? bulletDef.bulletColumns : FiringPatternDef.DEFAULT_BULLET_COLUMNS);
+        int rows = def.bulletRows > 0 ? def.bulletRows
+            : (bulletDef != null && bulletDef.bulletRows > 0 ? bulletDef.bulletRows : FiringPatternDef.DEFAULT_BULLET_ROWS);
+        float frameDuration = def.bulletFrameDuration > 0 ? def.bulletFrameDuration
+            : (bulletDef != null && bulletDef.bulletFrameDuration > 0 ? bulletDef.bulletFrameDuration : FiringPatternDef.DEFAULT_BULLET_FRAME_DURATION);
 
         return AnimationCache.get(texture, columns > 0 ? columns : frameCount, rows, frameCount, frameDuration, Animation.PlayMode.LOOP);
     }
