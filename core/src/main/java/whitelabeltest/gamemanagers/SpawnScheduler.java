@@ -27,6 +27,11 @@ public class SpawnScheduler {
         public float offsetX = Float.NaN;
         public float offsetY = Float.NaN;
 
+        // Overrides the enemy definition's own movementPattern when set - lets several spawn
+        // events share one enemy definition while steering each toward a different movement
+        // pattern (e.g. two waves of the same squad with different rally points/exits).
+        public String movementPattern;
+
         public SpawnEvent() {}
     }
 
@@ -107,7 +112,7 @@ public class SpawnScheduler {
 
         def.inverseMovement = event.inverseMovement;
 
-        enemy.initWithDefinition(def, tex, bulletTex, spawnTex, deathTex, worldWidth, worldHeight, event.x, event.y, event.offsetX, event.offsetY);
+        enemy.initWithDefinition(def, tex, bulletTex, spawnTex, deathTex, worldWidth, worldHeight, event.x, event.y, event.offsetX, event.offsetY, event.movementPattern);
 
         if (event.powerup != null) enemy.setGuaranteedPowerup(event.powerup);
         entityManager.getEnemies().add(enemy);

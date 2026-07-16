@@ -19,7 +19,7 @@ public class GenericEnemy extends BaseEnemy {
     public void initWithDefinition(EnemyDefinition def, Texture texture, Texture bulletTexture,
                                     Texture spawnTexture, Texture deathTexture,
                                     float worldWidth, float worldHeight, float startX, float startY) {
-        initWithDefinition(def, texture, bulletTexture, spawnTexture, deathTexture, worldWidth, worldHeight, startX, startY, Float.NaN, Float.NaN);
+        initWithDefinition(def, texture, bulletTexture, spawnTexture, deathTexture, worldWidth, worldHeight, startX, startY, Float.NaN, Float.NaN, null);
     }
 
     /** @param formationOffsetX, formationOffsetY this spawn's slot in a squad formation, passed
@@ -29,6 +29,17 @@ public class GenericEnemy extends BaseEnemy {
                                     Texture spawnTexture, Texture deathTexture,
                                     float worldWidth, float worldHeight, float startX, float startY,
                                     float formationOffsetX, float formationOffsetY) {
+        initWithDefinition(def, texture, bulletTexture, spawnTexture, deathTexture, worldWidth, worldHeight, startX, startY, formationOffsetX, formationOffsetY, null);
+    }
+
+    /** @param movementPatternId overrides def.movementPattern when non-null - lets several spawn
+     *  events share one enemy definition while still steering each toward a different movement
+     *  pattern (e.g. two squads with the same stats but a different rally point/exit), instead of
+     *  needing a near-duplicate enemy definition that differs only in movementPattern. */
+    public void initWithDefinition(EnemyDefinition def, Texture texture, Texture bulletTexture,
+                                    Texture spawnTexture, Texture deathTexture,
+                                    float worldWidth, float worldHeight, float startX, float startY,
+                                    float formationOffsetX, float formationOffsetY, String movementPatternId) {
         this.def = def;
         this.worldWidth = worldWidth;
         this.worldHeight = worldHeight;
@@ -73,7 +84,8 @@ public class GenericEnemy extends BaseEnemy {
         this.maxHealth = def.health;
         this.animationTime = 0;
 
-        this.movement = PatternFactory.createMovement(PatternRegistry.getMovement(def.movementPattern), worldHeight, sprite.getX() + sprite.getWidth() / 2f, formationOffsetX, formationOffsetY);
+        String resolvedMovementPattern = movementPatternId != null ? movementPatternId : def.movementPattern;
+        this.movement = PatternFactory.createMovement(PatternRegistry.getMovement(resolvedMovementPattern), worldHeight, sprite.getX() + sprite.getWidth() / 2f, formationOffsetX, formationOffsetY);
         this.firing = PatternFactory.createFiring(def, PatternRegistry.getFiring(def.firingPattern));
 
         this.spawnDuration = def.spawnDuration;
