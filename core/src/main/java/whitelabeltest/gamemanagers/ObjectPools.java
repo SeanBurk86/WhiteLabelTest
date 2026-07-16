@@ -64,6 +64,9 @@ public class ObjectPools {
     public static final Pool<PlayerTrailEffect> trailPool = new Pool<PlayerTrailEffect>() {
         @Override protected PlayerTrailEffect newObject() { return new PlayerTrailEffect(); }
     };
+    public static final Pool<HitEffect> hitEffectPool = new Pool<HitEffect>() {
+        @Override protected HitEffect newObject() { return new HitEffect(); }
+    };
 
     public static void freeWeapon(Weapon w) {
         if (w instanceof BasicWeapon) weaponPool.free((BasicWeapon)w);
@@ -97,5 +100,9 @@ public class ObjectPools {
 
     public static void freeTrail(PlayerTrailEffect t) {
         trailPool.free(t);
+    }
+
+    public static void freeHitEffect(HitEffect e) {
+        hitEffectPool.free(e);
     }
 }

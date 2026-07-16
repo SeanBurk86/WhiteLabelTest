@@ -4,6 +4,7 @@ import com.badlogic.gdx.Gdx;
 import com.badlogic.gdx.graphics.Color;
 import com.badlogic.gdx.graphics.Pixmap;
 import com.badlogic.gdx.graphics.Texture;
+import com.badlogic.gdx.graphics.g2d.Animation;
 import com.badlogic.gdx.utils.Array;
 import com.badlogic.gdx.utils.Disposable;
 import com.badlogic.gdx.utils.Json;
@@ -41,6 +42,12 @@ public class AssetManager implements Disposable {
         for (WeaponDefinition def : wDefs) {
             weaponDefinitions.put(def.id, def);
             loadTexture(def.texture);
+            if (def.hitTexture != null) {
+                loadTexture(def.hitTexture);
+                Texture hitTex = textures.get(def.hitTexture);
+                int hitColumns = def.hitColumns > 0 ? def.hitColumns : def.hitFrameCount;
+                def.hitAnimation = AnimationCache.get(hitTex, hitColumns, def.hitRows, def.hitFrameCount, def.hitFrameDuration, Animation.PlayMode.NORMAL);
+            }
         }
 
         PatternRegistry.load(json);

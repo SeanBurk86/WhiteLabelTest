@@ -1,6 +1,8 @@
 package whitelabeltest.gamemanagers;
 
+import com.badlogic.gdx.graphics.g2d.Animation;
 import com.badlogic.gdx.graphics.g2d.Sprite;
+import com.badlogic.gdx.graphics.g2d.TextureRegion;
 import com.badlogic.gdx.math.Circle;
 import com.badlogic.gdx.math.Intersector;
 import com.badlogic.gdx.math.MathUtils;
@@ -154,6 +156,7 @@ public class CollisionManager {
                         scoreManager.addScore(GameController.destroyEnemy(audio, entityManager, assets, worldWidth, worldHeight, enemy), bullet.getChainWindow());
                     }
                     bullet.onHit(enemy, bullets, assets);
+                    spawnHitEffect(bullet, entityManager);
                 }
 
                 if (bullet.shouldDestroyOnCollision()) {
@@ -164,6 +167,18 @@ public class CollisionManager {
                 if (bullet.shouldDestroyOnCollision() || !enemy.isActive()) break;
             }
         }
+    }
+
+    /** Spawns this bullet's impact animation (see WeaponDefinition.hitTexture) at the bullet's
+     *  own position - literally where it hit - if its weapon definition set one. */
+    private void spawnHitEffect(Weapon bullet, EntityManager entityManager) {
+        Animation<TextureRegion> hitAnimation = bullet.getHitAnimation();
+        if (hitAnimation == null) return;
+
+        Rectangle rect = bullet.getRectangle();
+        HitEffect effect = ObjectPools.hitEffectPool.obtain();
+        effect.init(hitAnimation, rect.x + rect.width / 2f, rect.y + rect.height / 2f, bullet.getHitEffectSize());
+        entityManager.getHitEffects().add(effect);
     }
 
     private boolean overlaps(Rectangle aabb, Weapon bullet) {

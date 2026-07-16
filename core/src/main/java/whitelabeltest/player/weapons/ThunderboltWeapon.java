@@ -94,6 +94,8 @@ public class ThunderboltWeapon extends BaseWeapon {
         this.damage = def.getDamage(level);
         this.chainWindow = def.chainWindow;
         this.shootSpeedMultiplier = def.shootSpeedMultiplier;
+        this.hitAnimation = def.hitAnimation;
+        this.hitEffectSize = def.hitSize;
         this.velocity.setZero();
         this.path = null;
 

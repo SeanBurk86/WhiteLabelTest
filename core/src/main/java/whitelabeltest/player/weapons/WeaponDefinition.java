@@ -1,5 +1,8 @@
 package whitelabeltest.player.weapons;
 
+import com.badlogic.gdx.graphics.g2d.Animation;
+import com.badlogic.gdx.graphics.g2d.TextureRegion;
+
 public class WeaponDefinition {
     public String id;
     public String type; // e.g., "Direct", "Spline", "Orbit"
@@ -21,6 +24,19 @@ public class WeaponDefinition {
     // Orbit specific
     public float radius;
     public float rotationSpeed;
+
+    // Impact effect played wherever this weapon's bullet lands a hit - hitTexture null (the
+    // default) means no hit effect. See AssetManager, which resolves hitTexture into
+    // hitAnimation once at load time (not JSON-backed - never a key in weapons.json - so every
+    // bullet spawned from this definition can share the one prebuilt Animation instead of each
+    // rebuilding it from hitTexture/hitColumns/hitRows/hitFrameCount/hitFrameDuration).
+    public String hitTexture;
+    public float hitSize;
+    public int hitFrameCount;
+    public int hitColumns = 0;
+    public int hitRows = 1;
+    public float hitFrameDuration = 0.05f;
+    public Animation<TextureRegion> hitAnimation;
 
     public WeaponDefinition() {}
 

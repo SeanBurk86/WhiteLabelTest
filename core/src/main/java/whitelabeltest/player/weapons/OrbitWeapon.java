@@ -55,6 +55,8 @@ public class OrbitWeapon extends BaseWeapon {
         this.damage = def.getDamage(level);
         this.chainWindow = def.chainWindow;
         this.shootSpeedMultiplier = def.shootSpeedMultiplier;
+        this.hitAnimation = def.hitAnimation;
+        this.hitEffectSize = def.hitSize;
         this.animationTime = 0;
     }
 

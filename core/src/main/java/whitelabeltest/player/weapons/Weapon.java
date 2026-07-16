@@ -1,7 +1,9 @@
 package whitelabeltest.player.weapons;
 
 import com.badlogic.gdx.graphics.Texture;
+import com.badlogic.gdx.graphics.g2d.Animation;
 import com.badlogic.gdx.graphics.g2d.SpriteBatch;
+import com.badlogic.gdx.graphics.g2d.TextureRegion;
 import com.badlogic.gdx.math.Path;
 import com.badlogic.gdx.math.Rectangle;
 import com.badlogic.gdx.math.Vector2;
@@ -56,6 +58,12 @@ public interface Weapon extends Pool.Poolable {
     // freed back to its pool - lets a weapon spawn follow-up projectiles (e.g. shrapnel) at the
     // moment of impact instead of only on its own initial spawn().
     default void onHit(Enemy enemy, Array<Weapon> activeWeapons, AssetManager assets) {}
+
+    // The impact animation to play at the point of contact on every hit (see
+    // WeaponDefinition.hitTexture and CollisionManager.checkBulletEnemyCollisions), or null for a
+    // weapon whose definition doesn't set one.
+    default Animation<TextureRegion> getHitAnimation() { return null; }
+    default float getHitEffectSize() { return 0f; }
 
     void setLevel(int level);
     int getLevel();

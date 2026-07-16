@@ -40,6 +40,8 @@ public class BasicWeapon extends BaseWeapon {
         this.damage = def.getDamage(level);
         this.shootSpeedMultiplier = def.shootSpeedMultiplier;
         this.chainWindow = def.chainWindow;
+        this.hitAnimation = def.hitAnimation;
+        this.hitEffectSize = def.hitSize;
         this.animationTime = 0;
         this.path = null;
 

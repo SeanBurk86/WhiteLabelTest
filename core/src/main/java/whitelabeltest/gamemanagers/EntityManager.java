@@ -19,6 +19,7 @@ public class EntityManager {
     private final Array<Powerup> powerups;
     private final Array<ExplosionEffect> explosions;
     private final Array<PlayerTrailEffect> trails;
+    private final Array<HitEffect> hitEffects;
 
     private final float worldWidth;
     private final float worldHeight;
@@ -61,6 +62,7 @@ public class EntityManager {
         this.powerups = new Array<>();
         this.explosions = new Array<>();
         this.trails = new Array<>();
+        this.hitEffects = new Array<>();
 
         EnemySpawnRegistry.init(assets, enemies, worldWidth, worldHeight);
     }
@@ -152,6 +154,15 @@ public class EntityManager {
                 ObjectPools.freeTrail(t);
             }
         }
+
+        for (int i = hitEffects.size - 1; i >= 0; i--) {
+            HitEffect h = hitEffects.get(i);
+            h.update(delta);
+            if (h.isFinished()) {
+                hitEffects.removeIndex(i);
+                ObjectPools.freeHitEffect(h);
+            }
+        }
     }
 
     public void draw(SpriteBatch batch) {
@@ -162,6 +173,7 @@ public class EntityManager {
         for (Enemy e : enemies) e.drawShadow(batch);
         for (Enemy e : enemies) e.draw(batch);
         for (ExplosionEffect e : explosions) e.draw(batch);
+        for (HitEffect h : hitEffects) h.draw(batch);
         for (EnemyBullet eb : enemyBullets) eb.draw(batch);
         if (bombActive) {
             TextureRegion frame = bombAnimation.getKeyFrame(bombAnimationTime);
@@ -190,6 +202,8 @@ public class EntityManager {
         explosions.clear();
         for (PlayerTrailEffect t : trails) ObjectPools.freeTrail(t);
         trails.clear();
+        for (HitEffect h : hitEffects) ObjectPools.freeHitEffect(h);
+        hitEffects.clear();
         trailSpawnTimer = 0f;
         player.reset();
     }
@@ -218,4 +232,5 @@ public class EntityManager {
     public Array<EnemyBullet> getEnemyBullets() { return enemyBullets; }
     public Array<Powerup> getPowerups() { return powerups; }
     public Array<ExplosionEffect> getExplosions() { return explosions; }
+    public Array<HitEffect> getHitEffects() { return hitEffects; }
 }

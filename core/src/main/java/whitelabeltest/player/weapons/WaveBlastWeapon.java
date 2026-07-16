@@ -50,6 +50,8 @@ public class WaveBlastWeapon extends BaseWeapon {
         this.damage = damage;
         this.chainWindow = def.chainWindow;
         this.shootSpeedMultiplier = def.shootSpeedMultiplier;
+        this.hitAnimation = def.hitAnimation;
+        this.hitEffectSize = def.hitSize;
         this.animationTime = 0;
         this.path = null;
 

@@ -28,6 +28,9 @@ public abstract class BaseWeapon implements Weapon {
     protected Animation<TextureRegion> animation;
     protected float animationTime = 0;
 
+    protected Animation<TextureRegion> hitAnimation;
+    protected float hitEffectSize;
+
     public BaseWeapon() {
         this.rectangle = new Rectangle();
     }
@@ -73,6 +76,10 @@ public abstract class BaseWeapon implements Weapon {
     public Rectangle getRectangle() { return rectangle; }
     @Override
     public int getDamage() { return damage; }
+    @Override
+    public Animation<TextureRegion> getHitAnimation() { return hitAnimation; }
+    @Override
+    public float getHitEffectSize() { return hitEffectSize; }
     @Override
     public void setPath(Path<Vector2> path, float duration) {
         this.path = path;
