@@ -10,6 +10,7 @@ import com.badlogic.gdx.utils.Json;
 import com.badlogic.gdx.utils.ObjectMap;
 import whitelabeltest.enemy.BulletDef;
 import whitelabeltest.enemy.EnemyDefinition;
+import whitelabeltest.enemy.ExplosionPatternDef;
 import whitelabeltest.enemy.FiringPatternDef;
 import whitelabeltest.enemy.PatternRegistry;
 import whitelabeltest.player.weapons.WeaponDefinition;
@@ -26,7 +27,6 @@ public class AssetManager implements Disposable {
     public final Texture bulletTexture;
     public final Texture pixelTexture;
     public final Texture circleTexture;
-    public final Texture[] explosionTextures;
     public final Texture powerup1, powerup2, powerup3, powerup4;
 
     public AssetManager() {
@@ -43,6 +43,9 @@ public class AssetManager implements Disposable {
         PatternRegistry.load(json);
         for (BulletDef bulletDef : PatternRegistry.getBulletDefs()) {
             if (bulletDef.bulletTexture != null) loadTexture(bulletDef.bulletTexture);
+        }
+        for (ExplosionPatternDef explosionDef : PatternRegistry.getExplosionDefs()) {
+            loadExplosionPatternTextures(explosionDef);
         }
 
         @SuppressWarnings("unchecked")
@@ -61,11 +64,6 @@ public class AssetManager implements Disposable {
         playerDeathTexture = new Texture("PlayerSpriteDeath.png");
         playerHaloTexture = new Texture("PlayerSpriteHalo.png");
         bombSpriteTexture = new Texture("BombSprite.png");
-
-        explosionTextures = new Texture[5];
-        for (int i = 0; i < 5; i++) {
-            explosionTextures[i] = new Texture("ExplosionParticle" + (i + 1) + ".png");
-        }
 
         powerup1 = new Texture("RainPowerUp.png");
         powerup2 = new Texture("ForcePowerUp.png");
@@ -101,6 +99,16 @@ public class AssetManager implements Disposable {
         }
     }
 
+    private void loadExplosionPatternTextures(ExplosionPatternDef def) {
+        if (def == null) return;
+        if (def.textures != null) {
+            for (String path : def.textures) loadTexture(path);
+        }
+        if (def.patterns != null) {
+            for (ExplosionPatternDef sub : def.patterns) loadExplosionPatternTextures(sub);
+        }
+    }
+
     private void loadTexture(String path) {
         if (path != null && !textures.containsKey(path)) {
             textures.put(path, new Texture(path));
@@ -129,7 +137,6 @@ public class AssetManager implements Disposable {
         bulletTexture.dispose();
         pixelTexture.dispose();
         circleTexture.dispose();
-        for (Texture t : explosionTextures) t.dispose();
         powerup1.dispose();
         powerup2.dispose();
         powerup3.dispose();

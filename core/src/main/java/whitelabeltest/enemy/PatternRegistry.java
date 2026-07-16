@@ -5,12 +5,14 @@ import com.badlogic.gdx.utils.Array;
 import com.badlogic.gdx.utils.Json;
 import com.badlogic.gdx.utils.ObjectMap;
 
-/** Holds the named movement/firing pattern library (movement_patterns.json, firing_patterns.json)
- * so enemy definitions can reference a pattern by id instead of embedding it inline. */
+/** Holds the named movement/firing/explosion pattern library (movement_patterns.json,
+ * firing_patterns.json, bullets.json, explosion_patterns.json) so enemy definitions can
+ * reference a pattern by id instead of embedding it inline. */
 public final class PatternRegistry {
     private static final ObjectMap<String, MovementPatternDef> movementPatterns = new ObjectMap<>();
     private static final ObjectMap<String, FiringPatternDef> firingPatterns = new ObjectMap<>();
     private static final ObjectMap<String, BulletDef> bulletDefs = new ObjectMap<>();
+    private static final ObjectMap<String, ExplosionPatternDef> explosionPatterns = new ObjectMap<>();
 
     private PatternRegistry() {}
 
@@ -24,6 +26,11 @@ public final class PatternRegistry {
         @SuppressWarnings("unchecked")
         Array<BulletDef> bDefs = json.fromJson(Array.class, BulletDef.class, Gdx.files.internal("bullets.json"));
         for (BulletDef def : bDefs) bulletDefs.put(def.id, def);
+
+        explosionPatterns.clear();
+        @SuppressWarnings("unchecked")
+        Array<ExplosionPatternDef> eDefs = json.fromJson(Array.class, ExplosionPatternDef.class, Gdx.files.internal("explosion_patterns.json"));
+        for (ExplosionPatternDef def : eDefs) explosionPatterns.put(def.id, def);
 
         firingPatterns.clear();
         @SuppressWarnings("unchecked")
@@ -45,5 +52,13 @@ public final class PatternRegistry {
 
     public static ObjectMap.Values<BulletDef> getBulletDefs() {
         return bulletDefs.values();
+    }
+
+    public static ExplosionPatternDef getExplosion(String id) {
+        return id != null ? explosionPatterns.get(id) : null;
+    }
+
+    public static ObjectMap.Values<ExplosionPatternDef> getExplosionDefs() {
+        return explosionPatterns.values();
     }
 }

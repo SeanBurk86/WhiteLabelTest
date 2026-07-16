@@ -114,5 +114,8 @@ public class GenericEnemy extends BaseEnemy {
     public int getScore() { return def != null ? def.score : 10; }
 
     @Override
+    public String getExplosionPattern() { return def != null ? def.explosionPattern : null; }
+
+    @Override
     public float getSpawnRate() { return 1.0f; }
 }

@@ -17,6 +17,7 @@ public class EnemyDefinition {
     public boolean isGround = false;
     public int score = 10;
     public String firingPattern;
+    public String explosionPattern;
 
     public String spawnTexture;
     public int spawnFrameCount;

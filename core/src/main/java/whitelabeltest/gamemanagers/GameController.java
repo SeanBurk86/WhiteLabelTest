@@ -5,6 +5,8 @@ import com.badlogic.gdx.graphics.Texture;
 import com.badlogic.gdx.utils.Array;
 import com.badlogic.gdx.utils.Disposable;
 import whitelabeltest.enemy.Enemy;
+import whitelabeltest.enemy.ExplosionPatternDef;
+import whitelabeltest.enemy.PatternRegistry;
 import whitelabeltest.player.powerups.Powerup;
 import whitelabeltest.player.powerups.WeaponPowerup;
 
@@ -141,8 +143,9 @@ public class GameController implements Disposable {
         float centerX = enemy.getRectangle().x + enemy.getRectangle().width / 2;
         float centerY = enemy.getRectangle().y + enemy.getRectangle().height / 2;
 
+        ExplosionPatternDef explosionPattern = PatternRegistry.getExplosion(enemy.getExplosionPattern());
         ExplosionEffect explosion = ObjectPools.explosionPool.obtain();
-        explosion.init(assets.explosionTextures, centerX, centerY, enemy.getRectangle().width * 2);
+        explosion.init(explosionPattern, centerX, centerY, enemy.getRectangle().width);
         entityManager.getExplosions().add(explosion);
 
         String guaranteed = enemy.getGuaranteedPowerup();

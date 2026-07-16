@@ -19,6 +19,7 @@ public interface Enemy extends Pool.Poolable {
     default boolean isBoss() { return false; }
     default boolean isGround() { return false; }
     default int getScore() { return 10; }
+    default String getExplosionPattern() { return null; }
 
 
     default int getHealth() { return 0; }
