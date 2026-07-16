@@ -57,7 +57,7 @@ public class WeaponPowerup implements Powerup {
         this.rectangle.set(sprite.getX(), sprite.getY(), sprite.getWidth(), sprite.getHeight());
 
         if (velocity.isZero()) {
-            velocity.set(4f, 0).setAngleDeg(-80f);
+            velocity.set(3f, 0).setAngleDeg(-80f);
         }
     }
 

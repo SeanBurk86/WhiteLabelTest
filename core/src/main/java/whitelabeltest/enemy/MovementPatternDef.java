@@ -5,6 +5,7 @@ import com.badlogic.gdx.utils.Json;
 import com.badlogic.gdx.utils.JsonValue;
 
 public class MovementPatternDef implements Json.Serializable {
+    public String id;
     public String type = "Straight";
     public float speed = -1f;
     public float movementAngle = Float.NaN;
@@ -21,6 +22,7 @@ public class MovementPatternDef implements Json.Serializable {
 
     @Override
     public void write(Json json) {
+        if (id != null) json.writeValue("id", id);
         json.writeValue("type", type);
         if (speed > 0) json.writeValue("speed", speed);
         if (!Float.isNaN(movementAngle)) json.writeValue("movementAngle", movementAngle);
@@ -36,6 +38,7 @@ public class MovementPatternDef implements Json.Serializable {
 
     @Override
     public void read(Json json, JsonValue data) {
+        id = data.getString("id", null);
         type = data.getString("type", "Straight");
         speed = data.getFloat("speed", -1f);
         movementAngle = data.getFloat("movementAngle", Float.NaN);

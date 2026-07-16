@@ -10,6 +10,7 @@ import com.badlogic.gdx.utils.Json;
 import com.badlogic.gdx.utils.ObjectMap;
 import whitelabeltest.enemy.EnemyDefinition;
 import whitelabeltest.enemy.FiringPatternDef;
+import whitelabeltest.enemy.PatternRegistry;
 import whitelabeltest.player.weapons.WeaponDefinition;
 
 public class AssetManager implements Disposable {
@@ -38,6 +39,8 @@ public class AssetManager implements Disposable {
             loadTexture(def.texture);
         }
 
+        PatternRegistry.load(json);
+
         @SuppressWarnings("unchecked")
         Array<EnemyDefinition> eDefs = json.fromJson(Array.class, EnemyDefinition.class, Gdx.files.internal("enemies.json"));
         for (EnemyDefinition def : eDefs) {
@@ -46,7 +49,7 @@ public class AssetManager implements Disposable {
             if (def.bulletTexture != null) loadTexture(def.bulletTexture);
             if (def.spawnTexture != null) loadTexture(def.spawnTexture);
             if (def.deathTexture != null) loadTexture(def.deathTexture);
-            loadFiringPatternTextures(def.firingPattern);
+            loadFiringPatternTextures(PatternRegistry.getFiring(def.firingPattern));
         }
 
         // Setup common fixed assets

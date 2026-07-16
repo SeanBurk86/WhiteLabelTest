@@ -18,19 +18,8 @@ import whitelabeltest.gamemanagers.AnimationCache;
 import whitelabeltest.gamemanagers.EnemySpawnRegistry;
 
 public class PatternFactory {
-    public static MovementPattern createMovement(String type, float speed, float worldHeight, float movementAngle, float stopDistance, float spawnCenterX) {
-        if (type == null) return new StraightMovement(speed, movementAngle);
-
-        switch (type) {
-            case "ZigZag": return new ZigZagMovement(speed * 1.5f, speed, movementAngle);
-            case "Seeking": return new SeekingMovement(speed, stopDistance, movementAngle);
-            case "Spline": return new SplineMovement(worldHeight, 6.0f, movementAngle, spawnCenterX);
-            default: return new StraightMovement(speed, movementAngle);
-        }
-    }
-
-    public static MovementPattern createMovement(EnemyDefinition enemyDef, MovementPatternDef def, float worldHeight, float spawnCenterX) {
-        if (def == null) return new NoMovement();
+    public static MovementPattern createMovement(MovementPatternDef def, float worldHeight, float spawnCenterX) {
+        if (def == null || "None".equals(def.type)) return new NoMovement();
 
         if ("Sequence".equals(def.type)) {
             if (def.patterns == null || def.patterns.size == 0) return new NoMovement();
@@ -38,7 +27,7 @@ public class PatternFactory {
             float[] durations = new float[def.patterns.size];
             for (int i = 0; i < def.patterns.size; i++) {
                 MovementPatternDef sub = def.patterns.get(i);
-                mps.add(createMovement(enemyDef, sub, worldHeight, spawnCenterX));
+                mps.add(createMovement(sub, worldHeight, spawnCenterX));
                 durations[i] = sub.duration > 0 ? sub.duration : 3.0f;
             }
             return new SequencedMovementPattern(mps, durations);
@@ -46,50 +35,40 @@ public class PatternFactory {
 
         if ("Squadron".equals(def.type)) {
             if (def.pattern == null) return new NoMovement();
-            MovementPattern leader = createMovement(enemyDef, def.pattern, worldHeight, spawnCenterX - def.offsetX);
+            MovementPattern leader = createMovement(def.pattern, worldHeight, spawnCenterX - def.offsetX);
             return new SquadronMovement(leader, def.offsetX, def.offsetY);
         }
 
+        float speed = def.speed > 0 ? def.speed : 0f;
+        float angle = !Float.isNaN(def.movementAngle) ? def.movementAngle : MovementPattern.DEFAULT_ANGLE_DEG;
+
         if ("MoveToPoint".equals(def.type)) {
-            float speed = def.speed > 0 ? def.speed : enemyDef.speed;
             float targetX = !Float.isNaN(def.targetX) ? def.targetX : spawnCenterX;
             float targetY = !Float.isNaN(def.targetY) ? def.targetY : 0f;
             float stopDistance = def.stopDistance > 0 ? def.stopDistance : MoveToPointMovement.DEFAULT_STOP_DISTANCE;
             return new MoveToPointMovement(speed, targetX, targetY, stopDistance);
         }
 
-        float speed = def.speed > 0 ? def.speed : enemyDef.speed;
-        float angle = !Float.isNaN(def.movementAngle) ? def.movementAngle : enemyDef.movementAngle;
-        float stopDistance = def.stopDistance > 0 ? def.stopDistance : enemyDef.stopDistance;
-        return createMovement(def.type, speed, worldHeight, angle, stopDistance, spawnCenterX);
+        switch (def.type) {
+            case "ZigZag": return new ZigZagMovement(speed * 1.5f, speed, angle);
+            case "Seeking": {
+                float stopDistance = def.stopDistance > 0 ? def.stopDistance : SeekingMovement.DEFAULT_STOP_DISTANCE;
+                return new SeekingMovement(speed, stopDistance, angle);
+            }
+            case "Spline": return new SplineMovement(worldHeight, 6.0f, angle, spawnCenterX);
+            default: return new StraightMovement(speed, angle);
+        }
     }
 
-    public static FiringPattern createFiring(String type, float fireRate) {
-        return createFiring(type, fireRate, -1f, -1f);
+    private static float resolve(float value, float defaultValue) {
+        return value > 0 ? value : defaultValue;
     }
 
-    public static FiringPattern createFiring(String type, float fireRate, float bulletSize) {
-        return createFiring(type, fireRate, bulletSize, -1f);
+    private static int resolve(int value, int defaultValue) {
+        return value > 0 ? value : defaultValue;
     }
 
-    public static FiringPattern createFiring(String type, float fireRate, float bulletSize, float bulletSpeed) {
-        return createFiring(type, fireRate, bulletSize, bulletSpeed, null);
-    }
-
-    /** @param offsetX, offsetY emission point offset from the sprite's center, in world units */
-    public static FiringPattern createFiring(String type, float fireRate, float bulletSize, float bulletSpeed, float offsetX, float offsetY) {
-        return createFiring(type, fireRate, bulletSize, bulletSpeed, null, -1f, -1, offsetX, offsetY);
-    }
-
-    public static FiringPattern createFiring(String type, float fireRate, float bulletSize, float bulletSpeed, Animation<TextureRegion> spriteOverride) {
-        return createFiring(type, fireRate, bulletSize, bulletSpeed, spriteOverride, -1f, -1);
-    }
-
-    public static FiringPattern createFiring(String type, float fireRate, float bulletSize, float bulletSpeed, Animation<TextureRegion> spriteOverride, float spreadDegrees, int numBullets) {
-        return createFiring(type, fireRate, bulletSize, bulletSpeed, spriteOverride, spreadDegrees, numBullets, 0f, 0f);
-    }
-
-    public static FiringPattern createFiring(String type, float fireRate, float bulletSize, float bulletSpeed, Animation<TextureRegion> spriteOverride, float spreadDegrees, int numBullets, float offsetX, float offsetY) {
+    private static FiringPattern createFiring(String type, float fireRate, float bulletSize, float bulletSpeed, Animation<TextureRegion> spriteOverride, float spreadDegrees, int numBullets, float offsetX, float offsetY) {
         if (type == null) return new NoFiring();
 
         switch (type) {
@@ -104,14 +83,6 @@ public class PatternFactory {
             case "Orbiting": return new OrbitingFiring(fireRate, resolve(bulletSize, 0.5f), resolve(bulletSpeed, 4f), spriteOverride, offsetX, offsetY);
             default: return new NoFiring();
         }
-    }
-
-    private static float resolve(float value, float defaultValue) {
-        return value > 0 ? value : defaultValue;
-    }
-
-    private static int resolve(int value, int defaultValue) {
-        return value > 0 ? value : defaultValue;
     }
 
     public static FiringPattern createFiring(EnemyDefinition enemyDef, FiringPatternDef def) {

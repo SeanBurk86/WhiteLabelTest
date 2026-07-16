@@ -15,6 +15,7 @@ public class FiringPatternDef implements Json.Serializable {
     public static final int DEFAULT_BULLET_COLUMNS = 0;
     public static final int DEFAULT_BULLET_ROWS = 1;
 
+    public String id;
     public String type = "None";
     public float fireRate = 0;
     public float duration = 3.0f;
@@ -44,6 +45,7 @@ public class FiringPatternDef implements Json.Serializable {
 
     @Override
     public void write(Json json) {
+        if (id != null) json.writeValue("id", id);
         json.writeValue("type", type);
         json.writeValue("fireRate", fireRate);
         json.writeValue("duration", duration);
@@ -72,6 +74,7 @@ public class FiringPatternDef implements Json.Serializable {
 
     @Override
     public void read(Json json, JsonValue data) {
+        id = data.getString("id", null);
         type = data.getString("type", "None");
         fireRate = data.getFloat("fireRate", 0);
         duration = data.getFloat("duration", 3.0f);

@@ -1,8 +1,5 @@
 package whitelabeltest.enemy;
 
-import whitelabeltest.enemy.movementpatterns.MovementPattern;
-import whitelabeltest.enemy.movementpatterns.SeekingMovement;
-
 public class EnemyDefinition {
     public String id;
     public String texture;
@@ -13,23 +10,13 @@ public class EnemyDefinition {
     public float frameDuration = 0.1f;
     public float size;
     public int health;
-    public String movementType;
-    public float speed;
-    public float movementAngle = MovementPattern.DEFAULT_ANGLE_DEG;
-    public float stopDistance = SeekingMovement.DEFAULT_STOP_DISTANCE;
-    public MovementPatternDef movementPattern;
+    public String movementPattern;
     public boolean inverseMovement = false;
     public boolean rotateWithMovement = true;
     public boolean isBoss = false;
     public boolean isGround = false;
     public int score = 10;
-    public String firingType;
-    public float fireRate;
-    public float bulletSize = -1f;
-    public float bulletSpeed = -1f;
-    public float firingOffsetX = 0f;
-    public float firingOffsetY = 0f;
-    public FiringPatternDef firingPattern;
+    public String firingPattern;
 
     public String spawnTexture;
     public int spawnFrameCount;

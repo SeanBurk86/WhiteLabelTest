@@ -63,12 +63,8 @@ public class GenericEnemy extends BaseEnemy {
         this.maxHealth = def.health;
         this.animationTime = 0;
 
-        this.movement = def.movementPattern != null
-            ? PatternFactory.createMovement(def, def.movementPattern, worldHeight, sprite.getX() + sprite.getWidth() / 2f)
-            : PatternFactory.createMovement(def.movementType, def.speed, worldHeight, def.movementAngle, def.stopDistance, sprite.getX() + sprite.getWidth() / 2f);
-        this.firing = def.firingPattern != null
-            ? PatternFactory.createFiring(def, def.firingPattern)
-            : PatternFactory.createFiring(def.firingType, def.fireRate, def.bulletSize, def.bulletSpeed, def.firingOffsetX, def.firingOffsetY);
+        this.movement = PatternFactory.createMovement(PatternRegistry.getMovement(def.movementPattern), worldHeight, sprite.getX() + sprite.getWidth() / 2f);
+        this.firing = PatternFactory.createFiring(def, PatternRegistry.getFiring(def.firingPattern));
 
         this.spawnDuration = def.spawnDuration;
         this.spawnAnimation = (spawnTexture != null && def.spawnFrameCount > 0)
