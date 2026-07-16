@@ -14,6 +14,7 @@ public class InputManager {
     private boolean restartJustPressed;
     private boolean quitJustPressed;
     private boolean debugToggleJustPressed;
+    private boolean debugRestartJustPressed;
 
     private InputType activeInput = InputType.KEYBOARD;
     private boolean prevBombButton;
@@ -31,6 +32,7 @@ public class InputManager {
         restartJustPressed = false;
         quitJustPressed = false;
         debugToggleJustPressed = false;
+        debugRestartJustPressed = false;
 
         if (activeInput == InputType.KEYBOARD) {
             if (Gdx.input.isKeyPressed(Input.Keys.LEFT)) moveDirection.x -= 1;
@@ -74,8 +76,9 @@ public class InputManager {
             }
         }
 
-        // Debug toggle always available regardless of input mode
+        // Debug toggle/restart always available regardless of input mode
         debugToggleJustPressed = Gdx.input.isKeyJustPressed(Input.Keys.F12);
+        debugRestartJustPressed = Gdx.input.isKeyJustPressed(Input.Keys.F9);
 
         if (moveDirection.len() > 1.0f) {
             moveDirection.nor();
@@ -89,4 +92,5 @@ public class InputManager {
     public boolean isRestartJustPressed() { return restartJustPressed; }
     public boolean isQuitJustPressed() { return quitJustPressed; }
     public boolean isDebugToggleJustPressed() { return debugToggleJustPressed; }
+    public boolean isDebugRestartJustPressed() { return debugRestartJustPressed; }
 }

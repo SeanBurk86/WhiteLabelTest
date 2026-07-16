@@ -62,6 +62,11 @@ public class GameController implements Disposable {
             debugMode = !debugMode;
         }
 
+        if (debugMode && input.isDebugRestartJustPressed()) {
+            reset();
+            return;
+        }
+
         if (input.isBombJustPressed() && !entities.getPlayer().isDead()) {
             handleBomb();
         }
