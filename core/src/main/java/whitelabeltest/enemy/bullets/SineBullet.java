@@ -7,11 +7,13 @@ import com.badlogic.gdx.graphics.g2d.TextureRegion;
 import com.badlogic.gdx.math.MathUtils;
 import com.badlogic.gdx.math.Rectangle;
 import com.badlogic.gdx.math.Vector2;
+import whitelabeltest.enemy.Enemy;
 
 public class SineBullet implements EnemyBullet {
     private Sprite sprite;
     private final Rectangle rectangle;
-    private final int damage = 1;
+    private int damage = 1;
+    private Enemy sourceEnemy;
 
     private float spawnX, spawnY;
     private float amplitude;
@@ -27,8 +29,10 @@ public class SineBullet implements EnemyBullet {
         this.rectangle = new Rectangle();
     }
 
-    public void init(Animation<TextureRegion> animation, float x, float y, float amplitude, float frequency, float phase, float speed, float size) {
+    public void init(Animation<TextureRegion> animation, float x, float y, float amplitude, float frequency, float phase, float speed, float size, int damage, Enemy source) {
         this.animation = animation;
+        this.damage = damage;
+        this.sourceEnemy = source;
         TextureRegion[] frames = animation.getKeyFrames();
 
         if (sprite == null) sprite = new Sprite(frames[0]);
@@ -92,8 +96,15 @@ public class SineBullet implements EnemyBullet {
     }
 
     @Override
+    public Enemy getSourceEnemy() { return sourceEnemy; }
+
+    @Override
+    public Sprite getSprite() { return sprite; }
+
+    @Override
     public void reset() {
         time = 0;
         animationTime = 0;
+        sourceEnemy = null;
     }
 }

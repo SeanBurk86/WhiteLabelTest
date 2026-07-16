@@ -1,5 +1,6 @@
 package whitelabeltest.player;
 
+import com.badlogic.gdx.graphics.GL20;
 import com.badlogic.gdx.graphics.Texture;
 import com.badlogic.gdx.graphics.g2d.Animation;
 import com.badlogic.gdx.graphics.g2d.Sprite;
@@ -10,12 +11,15 @@ import com.badlogic.gdx.math.MathUtils;
 import com.badlogic.gdx.math.Vector2;
 import com.badlogic.gdx.utils.Array;
 import whitelabeltest.enemy.Enemy;
+import whitelabeltest.gamemanagers.AnimationCache;
 import whitelabeltest.gamemanagers.AssetManager;
 import whitelabeltest.gamemanagers.AudioManager;
 import whitelabeltest.gamemanagers.InputManager;
 import whitelabeltest.player.weapons.*;
 
 public class Player {
+    private final PlayerDefinition playerDef;
+
     private final Sprite sprite;
     private final Circle hitbox;
     private final Circle grazeHitbox;
@@ -23,12 +27,15 @@ public class Player {
     private final float worldWidth;
     private final float worldHeight;
 
-    private final Vector2 bulletSpawnOffset = new Vector2(0.25f, 0f);
+    private final float bulletSpawnOffsetY = 0f;
 
     private final BasicWeapon basicWeapon;
     private final WaveBlastWeapon waveBlastWeapon;
     private final OrbitWeapon orbitWeapon;
     private final ThunderboltWeapon thunderboltWeapon;
+    private final WeaponDefinition orbitWeaponDef;
+    private final Animation<TextureRegion> shieldAnimation;
+    private final Circle shieldHitbox = new Circle();
 
     private final Weapon[] weaponSlots = new Weapon[2];
     private int activeSlot;
@@ -64,49 +71,35 @@ public class Player {
     public Player(AssetManager assets, float worldWidth, float worldHeight) {
         this.worldWidth = worldWidth;
         this.worldHeight = worldHeight;
+        this.playerDef = assets.getPlayerDefinition();
 
-        Texture texture = assets.playerTexture;
-        int frameWidth = texture.getWidth() / 24;
-        int frameHeight = texture.getHeight();
-        TextureRegion[][] tmp = TextureRegion.split(texture, frameWidth, frameHeight);
-        TextureRegion[] frames = new TextureRegion[24];
-        System.arraycopy(tmp[0], 0, frames, 0, 24);
-        animation = new Animation<>(0.04f, frames);
-        animation.setPlayMode(Animation.PlayMode.LOOP);
+        PlayerDefinition.SpriteDef playerSprite = playerDef.player;
+        animation = AnimationCache.get(assets.playerTexture, playerSprite.columns > 0 ? playerSprite.columns : playerSprite.frameCount,
+            playerSprite.rows, playerSprite.frameCount, 0.04f, Animation.PlayMode.LOOP);
+        TextureRegion[] frames = animation.getKeyFrames();
+        float aspect = (float) frames[0].getRegionHeight() / frames[0].getRegionWidth();
 
         sprite = new Sprite(frames[0]);
-        sprite.setSize(0.5f, 0.5f * ((float) frameHeight / frameWidth));
+        sprite.setSize(playerSprite.size, playerSprite.size * aspect);
         sprite.setX(worldWidth / 2f - sprite.getWidth() / 2f);
         sprite.setY(0);
 
-        Texture deathTexture = assets.playerDeathTexture;
-        int deathFrameWidth = deathTexture.getWidth() / 30;
-        int deathFrameHeight = deathTexture.getHeight();
-        TextureRegion[][] deathTmp = TextureRegion.split(deathTexture, deathFrameWidth, deathFrameHeight);
-        TextureRegion[] deathFrames = new TextureRegion[30];
-        System.arraycopy(deathTmp[0], 0, deathFrames, 0, 30);
-        deathAnimation = new Animation<>(1f / 30f, deathFrames);
-        deathAnimation.setPlayMode(Animation.PlayMode.NORMAL);
-        deathDrawWidth = 3f;
-        deathDrawHeight = 3f;
+        PlayerDefinition.SpriteDef deathSprite = playerDef.playerDeath;
+        deathAnimation = AnimationCache.get(assets.playerDeathTexture, deathSprite.columns > 0 ? deathSprite.columns : deathSprite.frameCount,
+            deathSprite.rows, deathSprite.frameCount, 1f / 30f, Animation.PlayMode.NORMAL);
+        deathDrawWidth = deathSprite.size;
+        deathDrawHeight = deathSprite.size;
 
-        Texture haloTexture = assets.playerHaloTexture;
-        int haloFrameWidth = haloTexture.getWidth() / 94;
-        int haloFrameHeight = haloTexture.getHeight();
-        TextureRegion[][] haloTmp = TextureRegion.split(haloTexture, haloFrameWidth, haloFrameHeight);
-        TextureRegion[] haloFrames = new TextureRegion[94];
-        System.arraycopy(haloTmp[0], 0, haloFrames, 0, 94);
-        haloAnimation = new Animation<>(1f / 24f, haloFrames);
-        haloAnimation.setPlayMode(Animation.PlayMode.LOOP);
-        haloDrawWidth = 2.225f;
-        haloDrawHeight = 2.225f * ((float) haloFrameHeight / haloFrameWidth);
+        PlayerDefinition.SpriteDef haloSprite = playerDef.playerHalo;
+        haloAnimation = AnimationCache.get(assets.playerHaloTexture, haloSprite.columns > 0 ? haloSprite.columns : haloSprite.frameCount,
+            haloSprite.rows, haloSprite.frameCount, 1f / 24f, Animation.PlayMode.LOOP);
+        TextureRegion[] haloFrames = haloAnimation.getKeyFrames();
+        float haloAspect = (float) haloFrames[0].getRegionHeight() / haloFrames[0].getRegionWidth();
+        haloDrawWidth = haloSprite.size;
+        haloDrawHeight = haloSprite.size * haloAspect;
 
-        hitbox = new Circle();
-        updateHitbox();
-        grazeHitbox = new Circle();
-        updateGrazeHitbox();
-
-        // Initialize weapons using the new dynamic AssetManager
+        // Initialize weapons using the new dynamic AssetManager - before the hitboxes below,
+        // since updateHitbox() reads orbitWeapon's shield radius.
         WeaponDefinition bDef = assets.getWeaponDefinition("BasicWeapon");
         basicWeapon = new BasicWeapon();
         basicWeapon.init(bDef, assets.getTexture(bDef.texture), 0, 0, new Vector2(0,1), bDef.getSpeed(1));
@@ -115,13 +108,23 @@ public class Player {
         waveBlastWeapon = new WaveBlastWeapon();
         waveBlastWeapon.init(wDef, assets.getTexture(wDef.texture), 0, 0, new Vector2(0,1), wDef.getSpeed(1));
 
-        WeaponDefinition oDef = assets.getWeaponDefinition("OrbitWeapon");
+        orbitWeaponDef = assets.getWeaponDefinition("OrbitWeapon");
         orbitWeapon = new OrbitWeapon();
-        orbitWeapon.init(oDef, assets.getTexture(oDef.texture), this, 0f);
+        orbitWeapon.init(orbitWeaponDef, assets.getTexture(orbitWeaponDef.texture), this, 0f);
+
+        PlayerDefinition.SpriteDef shieldSprite = playerDef.reflectShield;
+        float shieldFrameDuration = OrbitWeapon.SHIELD_DURATION / shieldSprite.frameCount;
+        shieldAnimation = AnimationCache.get(assets.playerReflectShieldTexture, shieldSprite.columns > 0 ? shieldSprite.columns : shieldSprite.frameCount,
+            shieldSprite.rows, shieldSprite.frameCount, shieldFrameDuration, Animation.PlayMode.NORMAL);
 
         WeaponDefinition thbDef = assets.getWeaponDefinition("Thunderbolt");
         thunderboltWeapon = new ThunderboltWeapon();
         thunderboltWeapon.init(thbDef, assets.pixelTexture, assets.circleTexture, new Vector2(0, 0), new Vector2(0, 1), thbDef.size, worldHeight);
+
+        hitbox = new Circle();
+        updateHitbox();
+        grazeHitbox = new Circle();
+        updateGrazeHitbox();
 
         weaponSlots[0] = basicWeapon;
         weaponSlots[1] = null;
@@ -157,10 +160,22 @@ public class Player {
 
         handleMovement(delta, input.getMoveDirection(), input.isShooting());
         handleShooting(delta, input.isShooting(), assets, audio, bullets, enemies);
+        maintainOrbitRing(bullets, assets);
         updateHitbox();
         updateGrazeHitbox();
         resolveGrazePoints();
         resolveInvincibility(delta);
+    }
+
+    // The orbit ring is kept in sync every frame, independent of firing, but only while
+    // OrbitWeapon is the actively selected slot - see OrbitWeapon's class comment for why the
+    // prototype/ring-member split is safe despite sharing a class.
+    private void maintainOrbitRing(Array<Weapon> bullets, AssetManager assets) {
+        if (getCurrentWeapon() == orbitWeapon) {
+            orbitWeapon.maintainRing(bullets, assets.getTexture(orbitWeaponDef.texture), this);
+        } else {
+            orbitWeapon.clearRing(bullets);
+        }
     }
 
     private void handleMovement(float delta, Vector2 moveDirection, boolean isShooting) {
@@ -220,11 +235,12 @@ public class Player {
     }
 
     private void updateHitbox() {
-        hitbox.set(getCenterX(), getCenterY(), Math.min(sprite.getWidth(), sprite.getHeight()) * 0.15f);
+        hitbox.set(getCenterX(), getCenterY(), Math.min(sprite.getWidth(), sprite.getHeight()) * playerDef.hitboxSize);
+        shieldHitbox.set(getCenterX(), getCenterY(), orbitWeapon.getShieldRadius());
     }
 
     private void updateGrazeHitbox() {
-        grazeHitbox.set(getCenterX(), getCenterY(), Math.min(sprite.getWidth(), sprite.getHeight()) * 1.3f);
+        grazeHitbox.set(getCenterX(), getCenterY(), Math.min(sprite.getWidth(), sprite.getHeight()) * playerDef.haloHitboxSize);
     }
 
     private void resolveGrazePoints() {
@@ -274,6 +290,15 @@ public class Player {
             batch.setColor(1f, 1f, 1f, 1f);
             sprite.draw(batch);
         }
+
+        if (orbitWeapon.isShieldActive()) {
+            TextureRegion shieldFrame = shieldAnimation.getKeyFrame(orbitWeapon.getShieldTimer());
+            float diameter = playerDef.reflectShield.size;
+            batch.setBlendFunction(GL20.GL_ONE, GL20.GL_ONE);
+            batch.draw(shieldFrame, getCenterX() - diameter / 2f, getCenterY() - diameter / 2f, diameter, diameter);
+            batch.flush();
+            batch.setBlendFunction(GL20.GL_SRC_ALPHA, GL20.GL_ONE_MINUS_SRC_ALPHA);
+        }
     }
 
     public void reset() {
@@ -290,6 +315,7 @@ public class Player {
         basicWeapon.resetShootTimer();
         waveBlastWeapon.resetShootTimer();
         orbitWeapon.resetShootTimer();
+        orbitWeapon.resetShield();
         thunderboltWeapon.resetShootTimer();
         animationTime = 0;
         numBombs = 1;
@@ -301,6 +327,10 @@ public class Player {
 
     public Circle getHitbox() { return hitbox; }
     public Circle getGrazeHitbox() { return grazeHitbox; }
+    public Circle getShieldHitbox() { return shieldHitbox; }
+    public boolean isShieldActive() { return orbitWeapon.isShieldActive(); }
+    public float getShieldCooldownFraction() { return orbitWeapon.getShieldCooldownFraction(); }
+    public float getShieldCooldownTimer() { return orbitWeapon.getShieldCooldownTimer(); }
     public float getGrazePoints() { return grazePoints; }
     public void setGrazePoints(float grazePoints) { this.grazePoints = grazePoints;}
 
@@ -312,7 +342,7 @@ public class Player {
     public float getWidth() { return sprite.getWidth(); }
     public float getHeight() { return sprite.getHeight(); }
     public TextureRegion getCurrentFrame() { return sprite; }
-    public Vector2 getBulletSpawnPoint() { return new Vector2(sprite.getX() + bulletSpawnOffset.x, sprite.getY() + bulletSpawnOffset.y); }
+    public Vector2 getBulletSpawnPoint() { return new Vector2(getCenterX(), sprite.getY() + bulletSpawnOffsetY); }
     public Weapon getWeaponPrototype() { return getCurrentWeapon(); }
     public int getActiveSlot() { return activeSlot; }
     public String getSlotWeaponId(int slot) { return weaponId(weaponSlots[slot]); }

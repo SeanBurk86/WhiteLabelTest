@@ -1,9 +1,5 @@
 package whitelabeltest.player.weapons;
 
-import com.badlogic.gdx.Gdx;
-import com.badlogic.gdx.Input;
-import com.badlogic.gdx.controllers.Controller;
-import com.badlogic.gdx.controllers.Controllers;
 import com.badlogic.gdx.graphics.Texture;
 import com.badlogic.gdx.graphics.g2d.Animation;
 import com.badlogic.gdx.graphics.g2d.Sprite;
@@ -16,25 +12,42 @@ import whitelabeltest.gamemanagers.AudioManager;
 import whitelabeltest.gamemanagers.ObjectPools;
 import whitelabeltest.player.Player;
 
+/** Two very different things share this class:
+ *  - the "prototype" instance held in Player.weaponSlots, which never itself orbits or draws -
+ *    it just tracks the reflect-shield's active/cooldown state and, via maintainRing(), keeps
+ *    the ring of orbiting bullets in sync with the weapon's level; and
+ *  - the ring member instances (pooled, added to the shared bullets array) that actually orbit
+ *    and damage enemies on contact, one per maintainRing() call per level.
+ *  Ring members never touch the shield fields (only the prototype's spawn() does, since that's
+ *  the instance Player.getCurrentWeapon() returns), so the split is safe despite being the same
+ *  class. */
 public class OrbitWeapon extends BaseWeapon {
+    public static final float SHIELD_DURATION = 2f;
+    private static final float SHIELD_COOLDOWN = 4f;
+    private static final float SHIELD_RADIUS = 1.1f;
+
     private WeaponDefinition def;
     private Player player;
     private float angle;
+
+    private boolean shieldActive;
+    private float shieldTimer;
+    private float shieldCooldownTimer;
+    private boolean justActivatedShield;
 
     public void init(WeaponDefinition def, Texture texture, Player player, float initialAngle) {
         this.def = def;
         this.player = player;
         this.angle = initialAngle;
 
-        int frameHeight = texture.getHeight();
-        int frameWidth = texture.getWidth() / def.frameCount;
-
-        animation = AnimationCache.get(texture, def.frameCount, 0.08f, Animation.PlayMode.LOOP);
+        animation = AnimationCache.get(texture, def.columns > 0 ? def.columns : def.frameCount, def.rows, def.frameCount, def.frameDuration, Animation.PlayMode.LOOP);
         TextureRegion[] frames = animation.getKeyFrames();
 
         if (sprite == null) sprite = new Sprite(frames[0]);
         else sprite.setRegion(frames[0]);
 
+        int frameWidth = frames[0].getRegionWidth();
+        int frameHeight = frames[0].getRegionHeight();
         sprite.setSize(def.size, def.size * ((float) frameHeight / frameWidth));
         sprite.setOriginCenter();
         sprite.setColor(1, 1, 1, 1);
@@ -64,31 +77,23 @@ public class OrbitWeapon extends BaseWeapon {
         rectangle.set(sprite.getX(), sprite.getY(), sprite.getWidth(), sprite.getHeight());
     }
 
+    // Ring members orbit for as long as they exist; maintainRing()/clearRing() (called every
+    // frame from Player, not gated on firing) are what add/remove them, not this.
     @Override
-    public boolean isOffScreen(float worldHeight) {
-        boolean isShooting = Gdx.input.isKeyPressed(Input.Keys.SPACE);
-        Controller controller = Controllers.getCurrent();
-        if (controller != null) {
-            isShooting |= controller.getButton(controller.getMapping().buttonA);
-            isShooting |= controller.getButton(controller.getMapping().buttonR1);
-        }
-        if (!isShooting) return true;
-        return player != null && player.getWeaponPrototype() != null && !(player.getWeaponPrototype() instanceof OrbitWeapon);
-    }
+    public boolean isOffScreen(float worldHeight) { return false; }
 
-    @Override
-    public void spawn(Array<Weapon> activeWeapons, Texture texture, float x, float y, Player player, Array<Enemy> enemies, AssetManager assets) {
+    /** Creates/replaces the ring of orbiting bullets so its size always matches this weapon's
+     *  level - called every frame while OrbitWeapon is the actively selected slot, regardless of
+     *  firing, so the ring is up whenever this weapon is the one selected. */
+    public void maintainRing(Array<Weapon> bullets, Texture texture, Player player) {
         int currentOrbitWeapons = 0;
-        for (Weapon w : activeWeapons) {
+        for (Weapon w : bullets) {
             if (w instanceof OrbitWeapon) currentOrbitWeapons++;
         }
         if (currentOrbitWeapons == this.level) return;
 
-        for (int i = activeWeapons.size - 1; i >= 0; i--) {
-            if (activeWeapons.get(i) instanceof OrbitWeapon) {
-                ObjectPools.orbitWeaponPool.free((OrbitWeapon) activeWeapons.removeIndex(i));
-            }
-        }
+        clearRing(bullets);
+        if (this.level <= 0) return;
 
         int numShields = this.level;
         float step = (float) (2 * Math.PI / numShields);
@@ -96,19 +101,75 @@ public class OrbitWeapon extends BaseWeapon {
             OrbitWeapon w = ObjectPools.orbitWeaponPool.obtain();
             w.setLevel(this.level);
             w.init(def, texture, player, i * step);
-            activeWeapons.add(w);
+            bullets.add(w);
         }
+    }
+
+    /** Removes any ring members - used whenever OrbitWeapon isn't the actively selected slot (or
+     *  its level drops to 0), so orbiting bullets never outlive actually being selected. */
+    public void clearRing(Array<Weapon> bullets) {
+        for (int i = bullets.size - 1; i >= 0; i--) {
+            if (bullets.get(i) instanceof OrbitWeapon) {
+                ObjectPools.orbitWeaponPool.free((OrbitWeapon) bullets.removeIndex(i));
+            }
+        }
+    }
+
+    /** The fire button no longer spawns bullets (the ring is always up per maintainRing()) - it
+     *  instead tries to raise the reflect shield, subject to its own active/cooldown timers. */
+    @Override
+    public void spawn(Array<Weapon> activeWeapons, Texture texture, float x, float y, Player player, Array<Enemy> enemies, AssetManager assets) {
+        justActivatedShield = false;
+        if (shieldActive || shieldCooldownTimer > 0f) return;
+        shieldActive = true;
+        shieldTimer = 0f;
+        justActivatedShield = true;
     }
 
     @Override
     public float getFireRate() { return def.getFireRate(level); }
+
     @Override
     public void playFireSound(AudioManager audio, int level) {
-        audio.playOrbitWeaponSound(level);
+        if (justActivatedShield) audio.playOrbitWeaponSound(level);
     }
 
     @Override
     public boolean shouldDestroyOnCollision() { return false; }
+
+    // Advanced every frame while equipped in either slot (see Player.advanceWeaponTimers), same
+    // as the fire-rate cooldown every other weapon uses - so the shield's duration/cooldown run
+    // on real elapsed time regardless of which slot is active.
+    @Override
+    public void addShootTimer(float delta) {
+        super.addShootTimer(delta);
+
+        if (shieldActive) {
+            shieldTimer += delta;
+            if (shieldTimer >= SHIELD_DURATION) {
+                shieldActive = false;
+                shieldTimer = 0f;
+                shieldCooldownTimer = SHIELD_COOLDOWN;
+            }
+        } else if (shieldCooldownTimer > 0f) {
+            shieldCooldownTimer -= delta;
+        }
+    }
+
+    public boolean isShieldActive() { return shieldActive; }
+    public float getShieldTimer() { return shieldTimer; }
+    public float getShieldRadius() { return SHIELD_RADIUS; }
+    public float getShieldCooldownTimer() { return Math.max(shieldCooldownTimer, 0f); }
+    public float getShieldCooldownFraction() { return Math.max(shieldCooldownTimer, 0f) / SHIELD_COOLDOWN; }
+
+    /** Called on a full game reset, not on pool reuse (see reset()) - the prototype instance is
+     *  never pooled, so its shield state would otherwise survive a restart. */
+    public void resetShield() {
+        shieldActive = false;
+        shieldTimer = 0f;
+        shieldCooldownTimer = 0f;
+        justActivatedShield = false;
+    }
 
     @Override
     public void reset() {

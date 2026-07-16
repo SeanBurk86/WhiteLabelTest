@@ -68,19 +68,19 @@ public class PatternFactory {
         return value > 0 ? value : defaultValue;
     }
 
-    private static FiringPattern createFiring(String type, float fireRate, float bulletSize, float bulletSpeed, Animation<TextureRegion> spriteOverride, float spreadDegrees, int numBullets, float offsetX, float offsetY) {
+    private static FiringPattern createFiring(String type, float fireRate, float bulletSize, float bulletSpeed, int bulletDamage, Animation<TextureRegion> spriteOverride, float spreadDegrees, int numBullets, float offsetX, float offsetY) {
         if (type == null) return new NoFiring();
 
         switch (type) {
-            case "Aimed": return new AimedFiring(fireRate, resolve(bulletSize, 0.25f), resolve(bulletSpeed, 5f), spriteOverride, offsetX, offsetY);
-            case "SelfDestruct": return new SelfDestructFiring(3.0f, resolve(bulletSize, 0.25f), resolve(bulletSpeed, 4f), spriteOverride, offsetX, offsetY);
-            case "ExplodingAimed": return new ExplodingAimedFiring(fireRate, resolve(bulletSize, 0.25f), resolve(bulletSpeed, 6f), spriteOverride, offsetX, offsetY);
-            case "BurstAimed": return new BurstAimedFiring(fireRate, resolve(bulletSize, 0.25f), resolve(bulletSpeed, 5f), spriteOverride, offsetX, offsetY);
+            case "Aimed": return new AimedFiring(fireRate, resolve(bulletSize, 0.25f), resolve(bulletSpeed, 5f), spriteOverride, offsetX, offsetY, bulletDamage);
+            case "SelfDestruct": return new SelfDestructFiring(3.0f, resolve(bulletSize, 0.25f), resolve(bulletSpeed, 4f), spriteOverride, offsetX, offsetY, bulletDamage);
+            case "ExplodingAimed": return new ExplodingAimedFiring(fireRate, resolve(bulletSize, 0.25f), resolve(bulletSpeed, 6f), spriteOverride, offsetX, offsetY, bulletDamage);
+            case "BurstAimed": return new BurstAimedFiring(fireRate, resolve(bulletSize, 0.25f), resolve(bulletSpeed, 5f), spriteOverride, offsetX, offsetY, bulletDamage);
             case "QuarterCircle": return new QuarterCircleFiring(fireRate, resolve(bulletSize, 0.25f), resolve(bulletSpeed, 5f), spriteOverride,
-                resolve(spreadDegrees, 90f), resolve(numBullets, 9), offsetX, offsetY);
-            case "Sweep": return new SweepFiring(fireRate, resolve(bulletSize, 0.25f), resolve(bulletSpeed, 5f), spriteOverride, offsetX, offsetY);
-            case "SineWave": return new SineWaveFiring(fireRate, resolve(bulletSize, 0.2f), resolve(bulletSpeed, 5f), spriteOverride, offsetX, offsetY);
-            case "Orbiting": return new OrbitingFiring(fireRate, resolve(bulletSize, 0.5f), resolve(bulletSpeed, 4f), spriteOverride, offsetX, offsetY);
+                resolve(spreadDegrees, 90f), resolve(numBullets, 9), offsetX, offsetY, bulletDamage);
+            case "Sweep": return new SweepFiring(fireRate, resolve(bulletSize, 0.25f), resolve(bulletSpeed, 5f), spriteOverride, offsetX, offsetY, bulletDamage);
+            case "SineWave": return new SineWaveFiring(fireRate, resolve(bulletSize, 0.2f), resolve(bulletSpeed, 5f), spriteOverride, offsetX, offsetY, bulletDamage);
+            case "Orbiting": return new OrbitingFiring(fireRate, resolve(bulletSize, 0.5f), resolve(bulletSpeed, 4f), spriteOverride, offsetX, offsetY, bulletDamage);
             default: return new NoFiring();
         }
     }
@@ -115,14 +115,14 @@ public class PatternFactory {
                 Animation<TextureRegion> spriteOverride = buildBulletAnimation(enemyDef, def, bulletDef);
                 float targetX = !Float.isNaN(def.targetX) ? def.targetX : 0f;
                 float targetY = !Float.isNaN(def.targetY) ? def.targetY : 0f;
-                return new PointAimedFiring(def.fireRate, resolve(bulletSize(def, bulletDef), 0.25f), resolve(bulletSpeed(def, bulletDef), 5f), spriteOverride, targetX, targetY, def.offsetX, def.offsetY);
+                return new PointAimedFiring(def.fireRate, resolve(bulletSize(def, bulletDef), 0.25f), resolve(bulletSpeed(def, bulletDef), 5f), spriteOverride, targetX, targetY, def.offsetX, def.offsetY, bulletDamage(def, bulletDef));
             }
             case "Laser": {
                 BulletDef bulletDef = PatternRegistry.getBullet(def.bulletId);
                 Animation<TextureRegion> spriteOverride = buildBulletAnimation(enemyDef, def, bulletDef);
                 float thickness = resolve(bulletSize(def, bulletDef), 0.3f);
                 float length = def.length > 0 ? def.length : LaserFiring.DEFAULT_LENGTH;
-                return new LaserFiring(def.fireRate, thickness, length, def.angularSpeed, def.fireAngle, def.duration, spriteOverride, def.offsetX, def.offsetY);
+                return new LaserFiring(def.fireRate, thickness, length, def.angularSpeed, def.fireAngle, def.duration, spriteOverride, def.offsetX, def.offsetY, bulletDamage(def, bulletDef));
             }
             case "Sweep": {
                 BulletDef bulletDef = PatternRegistry.getBullet(def.bulletId);
@@ -130,12 +130,12 @@ public class PatternFactory {
                 float sweepDuration = def.sweepDuration > 0 ? def.sweepDuration : SweepFiring.DEFAULT_SWEEP_DURATION;
                 float startAngle = !Float.isNaN(def.sweepStartAngle) ? def.sweepStartAngle : SweepFiring.DEFAULT_START_ANGLE;
                 float endAngle = !Float.isNaN(def.sweepEndAngle) ? def.sweepEndAngle : SweepFiring.DEFAULT_END_ANGLE;
-                return new SweepFiring(def.fireRate, resolve(bulletSize(def, bulletDef), 0.25f), resolve(bulletSpeed(def, bulletDef), 5f), spriteOverride, def.offsetX, def.offsetY, sweepDuration, startAngle, endAngle);
+                return new SweepFiring(def.fireRate, resolve(bulletSize(def, bulletDef), 0.25f), resolve(bulletSpeed(def, bulletDef), 5f), spriteOverride, def.offsetX, def.offsetY, sweepDuration, startAngle, endAngle, bulletDamage(def, bulletDef));
             }
             default:
                 BulletDef bulletDef = PatternRegistry.getBullet(def.bulletId);
                 Animation<TextureRegion> spriteOverride = buildBulletAnimation(enemyDef, def, bulletDef);
-                return createFiring(def.type, def.fireRate, bulletSize(def, bulletDef), bulletSpeed(def, bulletDef), spriteOverride, def.spreadDegrees, def.numBullets, def.offsetX, def.offsetY);
+                return createFiring(def.type, def.fireRate, bulletSize(def, bulletDef), bulletSpeed(def, bulletDef), bulletDamage(def, bulletDef), spriteOverride, def.spreadDegrees, def.numBullets, def.offsetX, def.offsetY);
         }
     }
 
@@ -147,6 +147,14 @@ public class PatternFactory {
 
     private static float bulletSpeed(FiringPatternDef def, BulletDef bulletDef) {
         return def.bulletSpeed > 0 ? def.bulletSpeed : (bulletDef != null ? bulletDef.bulletSpeed : -1f);
+    }
+
+    /** A pattern's own bulletDamage always wins; otherwise fall back to the referenced bullet
+     *  definition's damage, defaulting to 1 if neither sets one. This is also the value a
+     *  reflected bullet (see CollisionManager.checkShieldReflections) hits its target for. */
+    private static int bulletDamage(FiringPatternDef def, BulletDef bulletDef) {
+        if (def.bulletDamage > 0) return def.bulletDamage;
+        return bulletDef != null ? bulletDef.damage : BulletDef.DEFAULT_DAMAGE;
     }
 
     /** Builds this pattern's own bullet animation — reusing the enemy's default bulletTexture

@@ -6,6 +6,7 @@ import com.badlogic.gdx.graphics.g2d.TextureRegion;
 import com.badlogic.gdx.math.Circle;
 import com.badlogic.gdx.math.Rectangle;
 import com.badlogic.gdx.utils.Array;
+import whitelabeltest.enemy.Enemy;
 import whitelabeltest.enemy.bullets.EnemyBullet;
 
 public class CombinedFiringPattern implements FiringPattern {
@@ -16,9 +17,9 @@ public class CombinedFiringPattern implements FiringPattern {
     }
 
     @Override
-    public void update(float delta, Sprite sprite, Rectangle rectangle, Array<EnemyBullet> enemyBullets, Animation<TextureRegion> bulletAnimation, Circle playerHitbox) {
+    public void update(float delta, Enemy self, Sprite sprite, Rectangle rectangle, Array<EnemyBullet> enemyBullets, Animation<TextureRegion> bulletAnimation, Circle playerHitbox) {
         for (FiringPattern p : patterns) {
-            p.update(delta, sprite, rectangle, enemyBullets, bulletAnimation, playerHitbox);
+            p.update(delta, self, sprite, rectangle, enemyBullets, bulletAnimation, playerHitbox);
         }
     }
 

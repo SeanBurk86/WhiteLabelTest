@@ -7,6 +7,7 @@ import com.badlogic.gdx.math.Circle;
 import com.badlogic.gdx.math.Rectangle;
 import com.badlogic.gdx.math.Vector2;
 import com.badlogic.gdx.utils.Array;
+import whitelabeltest.enemy.Enemy;
 import whitelabeltest.enemy.bullets.AimedEnemyBullet;
 import whitelabeltest.enemy.bullets.EnemyBullet;
 import whitelabeltest.gamemanagers.ObjectPools;
@@ -24,6 +25,7 @@ public class QuarterCircleFiring implements FiringPattern {
     private final Animation<TextureRegion> spriteOverride;
     private final float offsetX;
     private final float offsetY;
+    private final int bulletDamage;
 
     public QuarterCircleFiring(float fireRate) {
         this(fireRate, 0.25f, DEFAULT_SPEED, null);
@@ -51,6 +53,10 @@ public class QuarterCircleFiring implements FiringPattern {
 
     /** @param offsetX, offsetY emission point offset from the sprite's center, in world units */
     public QuarterCircleFiring(float fireRate, float bulletSize, float bulletSpeed, Animation<TextureRegion> spriteOverride, float spreadDegrees, int numBullets, float offsetX, float offsetY) {
+        this(fireRate, bulletSize, bulletSpeed, spriteOverride, spreadDegrees, numBullets, offsetX, offsetY, 1);
+    }
+
+    public QuarterCircleFiring(float fireRate, float bulletSize, float bulletSpeed, Animation<TextureRegion> spriteOverride, float spreadDegrees, int numBullets, float offsetX, float offsetY, int bulletDamage) {
         this.fireRate = fireRate;
         this.bulletSize = bulletSize;
         this.bulletSpeed = bulletSpeed;
@@ -59,11 +65,12 @@ public class QuarterCircleFiring implements FiringPattern {
         this.numBullets = numBullets;
         this.offsetX = offsetX;
         this.offsetY = offsetY;
+        this.bulletDamage = bulletDamage;
         this.shootTimer = 0;
     }
 
     @Override
-    public void update(float delta, Sprite sprite, Rectangle rectangle, Array<EnemyBullet> enemyBullets, Animation<TextureRegion> bulletAnimation, Circle playerHitbox) {
+    public void update(float delta, Enemy self, Sprite sprite, Rectangle rectangle, Array<EnemyBullet> enemyBullets, Animation<TextureRegion> bulletAnimation, Circle playerHitbox) {
         shootTimer += delta;
         if (shootTimer < fireRate) return;
         shootTimer = 0;
@@ -82,7 +89,7 @@ public class QuarterCircleFiring implements FiringPattern {
             float angle = startAngle + i * step;
             Vector2 dir = new Vector2(1, 0).setAngleDeg(angle);
             AimedEnemyBullet b = ObjectPools.aimedBulletPool.obtain();
-            b.init(animation, centerX, centerY, centerX + dir.x, centerY + dir.y, bulletSize, bulletSpeed);
+            b.init(animation, centerX, centerY, centerX + dir.x, centerY + dir.y, bulletSize, bulletSpeed, bulletDamage, self);
             enemyBullets.add(b);
         }
     }

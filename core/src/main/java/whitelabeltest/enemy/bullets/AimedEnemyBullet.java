@@ -6,12 +6,14 @@ import com.badlogic.gdx.graphics.g2d.SpriteBatch;
 import com.badlogic.gdx.graphics.g2d.TextureRegion;
 import com.badlogic.gdx.math.Rectangle;
 import com.badlogic.gdx.math.Vector2;
+import whitelabeltest.enemy.Enemy;
 
 public class AimedEnemyBullet implements EnemyBullet {
     private Sprite sprite;
     private final Rectangle rectangle;
     private final Vector2 velocity = new Vector2();
-    private final int damage = 1;
+    private int damage = 1;
+    private Enemy sourceEnemy;
 
     private Animation<TextureRegion> animation;
     private float animationTime = 0;
@@ -22,11 +24,13 @@ public class AimedEnemyBullet implements EnemyBullet {
 
     public AimedEnemyBullet(Animation<TextureRegion> animation, float x, float y, float targetX, float targetY, float size, float speed) {
         this();
-        init(animation, x, y, targetX, targetY, size, speed);
+        init(animation, x, y, targetX, targetY, size, speed, 1, null);
     }
 
-    public void init(Animation<TextureRegion> animation, float x, float y, float targetX, float targetY, float size, float speed) {
+    public void init(Animation<TextureRegion> animation, float x, float y, float targetX, float targetY, float size, float speed, int damage, Enemy source) {
         this.animation = animation;
+        this.damage = damage;
+        this.sourceEnemy = source;
         TextureRegion[] frames = animation.getKeyFrames();
 
         if (sprite == null) sprite = new Sprite(frames[0]);
@@ -76,9 +80,16 @@ public class AimedEnemyBullet implements EnemyBullet {
     }
 
     @Override
+    public Enemy getSourceEnemy() { return sourceEnemy; }
+
+    @Override
+    public Sprite getSprite() { return sprite; }
+
+    @Override
     public void reset() {
         velocity.setZero();
         sprite.setRotation(0);
         animationTime = 0;
+        sourceEnemy = null;
     }
 }

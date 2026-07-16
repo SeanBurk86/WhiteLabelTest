@@ -7,6 +7,7 @@ import com.badlogic.gdx.math.Circle;
 import com.badlogic.gdx.math.Rectangle;
 import com.badlogic.gdx.math.Vector2;
 import com.badlogic.gdx.utils.Array;
+import whitelabeltest.enemy.Enemy;
 import whitelabeltest.enemy.bullets.EnemyBullet;
 import whitelabeltest.enemy.bullets.LaserBullet;
 import whitelabeltest.gamemanagers.ObjectPools;
@@ -26,6 +27,7 @@ public class LaserFiring implements FiringPattern {
     private final Animation<TextureRegion> spriteOverride;
     private final float offsetX;
     private final float offsetY;
+    private final int bulletDamage;
     private float shootTimer;
 
     public LaserFiring(float fireRate) {
@@ -41,6 +43,10 @@ public class LaserFiring implements FiringPattern {
     }
 
     public LaserFiring(float fireRate, float thickness, float length, float angularSpeed, float fireAngle, float duration, Animation<TextureRegion> spriteOverride, float offsetX, float offsetY) {
+        this(fireRate, thickness, length, angularSpeed, fireAngle, duration, spriteOverride, offsetX, offsetY, 1);
+    }
+
+    public LaserFiring(float fireRate, float thickness, float length, float angularSpeed, float fireAngle, float duration, Animation<TextureRegion> spriteOverride, float offsetX, float offsetY, int bulletDamage) {
         this.fireRate = fireRate;
         this.thickness = thickness;
         this.length = length;
@@ -50,11 +56,12 @@ public class LaserFiring implements FiringPattern {
         this.spriteOverride = spriteOverride;
         this.offsetX = offsetX;
         this.offsetY = offsetY;
+        this.bulletDamage = bulletDamage;
         this.shootTimer = 0;
     }
 
     @Override
-    public void update(float delta, Sprite sprite, Rectangle rectangle, Array<EnemyBullet> enemyBullets, Animation<TextureRegion> bulletAnimation, Circle playerHitbox) {
+    public void update(float delta, Enemy self, Sprite sprite, Rectangle rectangle, Array<EnemyBullet> enemyBullets, Animation<TextureRegion> bulletAnimation, Circle playerHitbox) {
         shootTimer += delta;
         if (shootTimer < fireRate) return;
         shootTimer = 0;
@@ -68,7 +75,7 @@ public class LaserFiring implements FiringPattern {
             : fireAngle;
 
         LaserBullet b = ObjectPools.laserBulletPool.obtain();
-        b.init(animation, originX, originY, startAngle, angularSpeed, length, thickness, duration);
+        b.init(animation, originX, originY, startAngle, angularSpeed, length, thickness, duration, bulletDamage, self);
         enemyBullets.add(b);
     }
 

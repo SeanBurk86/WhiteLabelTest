@@ -13,16 +13,19 @@ import whitelabeltest.enemy.EnemyDefinition;
 import whitelabeltest.enemy.ExplosionPatternDef;
 import whitelabeltest.enemy.FiringPatternDef;
 import whitelabeltest.enemy.PatternRegistry;
+import whitelabeltest.player.PlayerDefinition;
 import whitelabeltest.player.weapons.WeaponDefinition;
 
 public class AssetManager implements Disposable {
     private final ObjectMap<String, Texture> textures = new ObjectMap<>();
     private final ObjectMap<String, WeaponDefinition> weaponDefinitions = new ObjectMap<>();
     private final ObjectMap<String, EnemyDefinition> enemyDefinitions = new ObjectMap<>();
+    private final PlayerDefinition playerDefinition;
 
     public final Texture playerTexture;
     public final Texture playerDeathTexture;
     public final Texture playerHaloTexture;
+    public final Texture playerReflectShieldTexture;
     public final Texture bombSpriteTexture;
     public final Texture bulletTexture;
     public final Texture pixelTexture;
@@ -59,10 +62,13 @@ public class AssetManager implements Disposable {
             loadFiringPatternTextures(PatternRegistry.getFiring(def.firingPattern));
         }
 
+        playerDefinition = json.fromJson(PlayerDefinition.class, Gdx.files.internal("player.json"));
+
         // Setup common fixed assets
-        playerTexture = new Texture("PlayerSprite.png");
-        playerDeathTexture = new Texture("PlayerSpriteDeath.png");
-        playerHaloTexture = new Texture("PlayerSpriteHalo.png");
+        playerTexture = new Texture(playerDefinition.player.texture);
+        playerDeathTexture = new Texture(playerDefinition.playerDeath.texture);
+        playerHaloTexture = new Texture(playerDefinition.playerHalo.texture);
+        playerReflectShieldTexture = new Texture(playerDefinition.reflectShield.texture);
         bombSpriteTexture = new Texture("BombSprite.png");
 
         powerup1 = new Texture("RainPowerUp.png");
@@ -127,12 +133,17 @@ public class AssetManager implements Disposable {
         return enemyDefinitions.get(id);
     }
 
+    public PlayerDefinition getPlayerDefinition() {
+        return playerDefinition;
+    }
+
     @Override
     public void dispose() {
         for (Texture t : textures.values()) t.dispose();
         playerTexture.dispose();
         playerDeathTexture.dispose();
         playerHaloTexture.dispose();
+        playerReflectShieldTexture.dispose();
         bombSpriteTexture.dispose();
         bulletTexture.dispose();
         pixelTexture.dispose();

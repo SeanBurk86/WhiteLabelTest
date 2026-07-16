@@ -4,20 +4,24 @@ import com.badlogic.gdx.graphics.Texture;
 import com.badlogic.gdx.graphics.g2d.Sprite;
 import com.badlogic.gdx.graphics.g2d.SpriteBatch;
 import com.badlogic.gdx.math.Rectangle;
+import whitelabeltest.enemy.Enemy;
 
 public class BasicEnemyBullet implements EnemyBullet {
     private Sprite sprite;
     private Rectangle rectangle;
     private final float speed = -5f;
-    private final int damage = 1;
+    private int damage = 1;
+    private Enemy sourceEnemy;
 
     public BasicEnemyBullet() {}
 
     public BasicEnemyBullet(Texture texture, float x, float y) {
-        init(texture, x, y);
+        init(texture, x, y, 1, null);
     }
 
-    public void init(Texture texture, float x, float y) {
+    public void init(Texture texture, float x, float y, int damage, Enemy source) {
+        this.damage = damage;
+        this.sourceEnemy = source;
         if (sprite == null) {
             sprite = new Sprite(texture);
         } else {
@@ -61,6 +65,13 @@ public class BasicEnemyBullet implements EnemyBullet {
     }
 
     @Override
+    public Enemy getSourceEnemy() { return sourceEnemy; }
+
+    @Override
+    public Sprite getSprite() { return sprite; }
+
+    @Override
     public void reset() {
+        sourceEnemy = null;
     }
 }

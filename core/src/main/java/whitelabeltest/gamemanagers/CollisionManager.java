@@ -1,5 +1,6 @@
 package whitelabeltest.gamemanagers;
 
+import com.badlogic.gdx.graphics.g2d.Sprite;
 import com.badlogic.gdx.math.Circle;
 import com.badlogic.gdx.math.Intersector;
 import com.badlogic.gdx.math.MathUtils;
@@ -10,6 +11,7 @@ import whitelabeltest.enemy.bullets.EnemyBullet;
 import whitelabeltest.player.Player;
 import whitelabeltest.player.powerups.Powerup;
 import whitelabeltest.player.powerups.WeaponPowerup;
+import whitelabeltest.player.weapons.ReflectedBolt;
 import whitelabeltest.player.weapons.Weapon;
 
 public class CollisionManager {
@@ -41,6 +43,34 @@ public class CollisionManager {
             }
         }
         return false;
+    }
+
+    /** While the player's reflect shield is active, any enemy bullet touching it is destroyed
+     *  and replaced with a ReflectedBolt - copying that bullet's own sprite and homing on
+     *  whichever enemy fired it (falling back to straight up if that enemy's gone) - dealing
+     *  back the destroyed bullet's own damage. Runs before checkPlayerBulletCollisions so a
+     *  reflected bullet never also registers as a hit on the player's own (much smaller) hitbox
+     *  that same frame. A bullet with no sprite to copy (shouldn't happen in practice) is simply
+     *  left alone rather than reflected. */
+    public void checkShieldReflections(Player player, Array<EnemyBullet> enemyBullets, Array<Weapon> bullets, AssetManager assets) {
+        if (!player.isShieldActive()) return;
+
+        Circle shield = player.getShieldHitbox();
+        for (int i = enemyBullets.size - 1; i >= 0; i--) {
+            EnemyBullet bullet = enemyBullets.get(i);
+            if (!overlaps(shield, bullet)) continue;
+
+            Sprite sourceSprite = bullet.getSprite();
+            if (sourceSprite == null) continue;
+
+            ReflectedBolt bolt = ObjectPools.reflectedBoltPool.obtain();
+            Rectangle rect = bullet.getRectangle();
+            bolt.init(sourceSprite, rect.x + rect.width / 2f, rect.y + rect.height / 2f, bullet.getDamage(), bullet.getSourceEnemy());
+            bullets.add(bolt);
+
+            enemyBullets.removeIndex(i);
+            ObjectPools.freeEnemyBullet(bullet);
+        }
     }
 
     public boolean checkGrazeCollisions(Player player, Array<EnemyBullet> enemyBullets) {

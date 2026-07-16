@@ -22,15 +22,15 @@ public class BasicWeapon extends BaseWeapon {
 
     public void init(WeaponDefinition def, Texture texture, float x, float y, Vector2 dir, float speed) {
         this.def = def;
-        int frameHeight = texture.getHeight();
-        int frameWidth = texture.getWidth() / def.frameCount;
 
-        this.animation = AnimationCache.get(texture, def.frameCount, 0.05f, Animation.PlayMode.LOOP);
+        this.animation = AnimationCache.get(texture, def.columns > 0 ? def.columns : def.frameCount, def.rows, def.frameCount, def.frameDuration, Animation.PlayMode.LOOP);
         TextureRegion[] frames = animation.getKeyFrames();
 
         if (sprite == null) sprite = new Sprite(frames[0]);
         else sprite.setRegion(frames[0]);
 
+        int frameWidth = frames[0].getRegionWidth();
+        int frameHeight = frames[0].getRegionHeight();
         sprite.setSize(def.size, def.size * ((float) frameHeight / frameWidth));
         sprite.setOriginCenter();
         sprite.setCenterX(x);

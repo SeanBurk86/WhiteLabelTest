@@ -121,7 +121,7 @@ public abstract class BaseEnemy implements Enemy {
         }
 
         if (firing != null) {
-            firing.update(delta, sprite, rectangle, enemyBullets, bulletAnimation, playerHitbox);
+            firing.update(delta, this, sprite, rectangle, enemyBullets, bulletAnimation, playerHitbox);
         }
     }
 

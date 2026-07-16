@@ -6,6 +6,7 @@ import com.badlogic.gdx.graphics.g2d.TextureRegion;
 import com.badlogic.gdx.math.Circle;
 import com.badlogic.gdx.math.Rectangle;
 import com.badlogic.gdx.utils.Array;
+import whitelabeltest.enemy.Enemy;
 import whitelabeltest.enemy.bullets.AimedEnemyBullet;
 import whitelabeltest.enemy.bullets.EnemyBullet;
 import whitelabeltest.gamemanagers.ObjectPools;
@@ -21,9 +22,14 @@ public class PointAimedFiring implements FiringPattern {
     private final float targetY;
     private final float offsetX;
     private final float offsetY;
+    private final int bulletDamage;
     private float shootTimer;
 
     public PointAimedFiring(float fireRate, float bulletSize, float bulletSpeed, Animation<TextureRegion> spriteOverride, float targetX, float targetY, float offsetX, float offsetY) {
+        this(fireRate, bulletSize, bulletSpeed, spriteOverride, targetX, targetY, offsetX, offsetY, 1);
+    }
+
+    public PointAimedFiring(float fireRate, float bulletSize, float bulletSpeed, Animation<TextureRegion> spriteOverride, float targetX, float targetY, float offsetX, float offsetY, int bulletDamage) {
         this.fireRate = fireRate;
         this.bulletSize = bulletSize;
         this.bulletSpeed = bulletSpeed;
@@ -32,18 +38,19 @@ public class PointAimedFiring implements FiringPattern {
         this.targetY = targetY;
         this.offsetX = offsetX;
         this.offsetY = offsetY;
+        this.bulletDamage = bulletDamage;
         this.shootTimer = 0;
     }
 
     @Override
-    public void update(float delta, Sprite sprite, Rectangle rectangle, Array<EnemyBullet> enemyBullets, Animation<TextureRegion> bulletAnimation, Circle playerHitbox) {
+    public void update(float delta, Enemy self, Sprite sprite, Rectangle rectangle, Array<EnemyBullet> enemyBullets, Animation<TextureRegion> bulletAnimation, Circle playerHitbox) {
         shootTimer += delta;
         if (shootTimer >= fireRate) {
             shootTimer = 0;
             Animation<TextureRegion> animation = spriteOverride != null ? spriteOverride : bulletAnimation;
 
             AimedEnemyBullet b = ObjectPools.aimedBulletPool.obtain();
-            b.init(animation, sprite.getX() + sprite.getWidth()/2 + offsetX, sprite.getY() + sprite.getHeight()/2 + offsetY, targetX, targetY, bulletSize, bulletSpeed);
+            b.init(animation, sprite.getX() + sprite.getWidth()/2 + offsetX, sprite.getY() + sprite.getHeight()/2 + offsetY, targetX, targetY, bulletSize, bulletSpeed, bulletDamage, self);
             enemyBullets.add(b);
         }
     }

@@ -8,6 +8,7 @@ import com.badlogic.gdx.math.Circle;
 import com.badlogic.gdx.math.Rectangle;
 import com.badlogic.gdx.math.Vector2;
 import com.badlogic.gdx.utils.Array;
+import whitelabeltest.enemy.Enemy;
 import whitelabeltest.enemy.bullets.EnemyBullet;
 import whitelabeltest.enemy.bullets.OrbitingBullet;
 import whitelabeltest.gamemanagers.ObjectPools;
@@ -25,6 +26,7 @@ public class OrbitingFiring implements FiringPattern {
     private final Animation<TextureRegion> spriteOverride;
     private final float offsetX;
     private final float offsetY;
+    private final int bulletDamage;
 
     public OrbitingFiring(float fireRate) {
         this(fireRate, 0.5f, DEFAULT_CENTER_SPEED, null);
@@ -45,17 +47,22 @@ public class OrbitingFiring implements FiringPattern {
 
     /** @param offsetX, offsetY emission point offset from the sprite's center, in world units */
     public OrbitingFiring(float fireRate, float bulletSize, float bulletSpeed, Animation<TextureRegion> spriteOverride, float offsetX, float offsetY) {
+        this(fireRate, bulletSize, bulletSpeed, spriteOverride, offsetX, offsetY, 1);
+    }
+
+    public OrbitingFiring(float fireRate, float bulletSize, float bulletSpeed, Animation<TextureRegion> spriteOverride, float offsetX, float offsetY, int bulletDamage) {
         this.fireRate = fireRate;
         this.bulletSize = bulletSize;
         this.bulletSpeed = bulletSpeed;
         this.spriteOverride = spriteOverride;
         this.offsetX = offsetX;
         this.offsetY = offsetY;
+        this.bulletDamage = bulletDamage;
         this.shootTimer = fireRate; // fire immediately on first update
     }
 
     @Override
-    public void update(float delta, Sprite sprite, Rectangle rectangle, Array<EnemyBullet> enemyBullets, Animation<TextureRegion> bulletAnimation, Circle playerHitbox) {
+    public void update(float delta, Enemy self, Sprite sprite, Rectangle rectangle, Array<EnemyBullet> enemyBullets, Animation<TextureRegion> bulletAnimation, Circle playerHitbox) {
         shootTimer += delta;
         if (shootTimer < fireRate) return;
         shootTimer = 0;
@@ -69,11 +76,11 @@ public class OrbitingFiring implements FiringPattern {
         Vector2 vel = new Vector2(playerX - centerX, playerY - centerY).nor().scl(bulletSpeed);
 
         OrbitingBullet b1 = ObjectPools.orbitingBulletPool.obtain();
-        b1.init(animation, centerX, centerY, vel.x, vel.y, ORBIT_RADIUS, ORBIT_SPEED, 0, bulletSize);
+        b1.init(animation, centerX, centerY, vel.x, vel.y, ORBIT_RADIUS, ORBIT_SPEED, 0, bulletSize, bulletDamage, self);
         enemyBullets.add(b1);
 
         OrbitingBullet b2 = ObjectPools.orbitingBulletPool.obtain();
-        b2.init(animation, centerX, centerY, vel.x, vel.y, ORBIT_RADIUS, ORBIT_SPEED, MathUtils.PI, bulletSize);
+        b2.init(animation, centerX, centerY, vel.x, vel.y, ORBIT_RADIUS, ORBIT_SPEED, MathUtils.PI, bulletSize, bulletDamage, self);
         enemyBullets.add(b2);
     }
 

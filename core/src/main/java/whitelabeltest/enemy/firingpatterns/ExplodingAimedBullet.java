@@ -7,6 +7,7 @@ import com.badlogic.gdx.graphics.g2d.TextureRegion;
 import com.badlogic.gdx.math.Circle;
 import com.badlogic.gdx.math.Rectangle;
 import com.badlogic.gdx.math.Vector2;
+import whitelabeltest.enemy.Enemy;
 import whitelabeltest.enemy.bullets.EnemyBullet;
 
 public class ExplodingAimedBullet implements EnemyBullet {
@@ -14,7 +15,8 @@ public class ExplodingAimedBullet implements EnemyBullet {
     private final Rectangle rectangle;
     private final Vector2 velocity = new Vector2();
     private float speed;
-    private final int damage = 1;
+    private int damage = 1;
+    private Enemy sourceEnemy;
 
     private Animation<TextureRegion> animation;
     private float animationTime = 0;
@@ -28,8 +30,10 @@ public class ExplodingAimedBullet implements EnemyBullet {
         this.rectangle = new Rectangle();
     }
 
-    public void init(Animation<TextureRegion> animation, float x, float y, float angle, Circle playerHitbox, float size, float speed) {
+    public void init(Animation<TextureRegion> animation, float x, float y, float angle, Circle playerHitbox, float size, float speed, int damage, Enemy source) {
         this.animation = animation;
+        this.damage = damage;
+        this.sourceEnemy = source;
         TextureRegion[] frames = animation.getKeyFrames();
 
         if (sprite == null) sprite = new Sprite(frames[0]);
@@ -91,9 +95,16 @@ public class ExplodingAimedBullet implements EnemyBullet {
     public int getDamage() { return damage; }
 
     @Override
+    public Enemy getSourceEnemy() { return sourceEnemy; }
+
+    @Override
+    public Sprite getSprite() { return sprite; }
+
+    @Override
     public void reset() {
         stateTime = 0;
         isAimed = false;
         velocity.setZero();
+        sourceEnemy = null;
     }
 }

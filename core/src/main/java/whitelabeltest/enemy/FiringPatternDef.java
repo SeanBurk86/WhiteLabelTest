@@ -23,6 +23,7 @@ public class FiringPatternDef implements Json.Serializable {
     public String bulletId;
     public float bulletSize = -1f;
     public float bulletSpeed = -1f;
+    public int bulletDamage = -1;
     public String bulletTexture;
     public int bulletFrameCount = -1;
     public int bulletColumns = -1;
@@ -54,6 +55,7 @@ public class FiringPatternDef implements Json.Serializable {
         if (bulletId != null) json.writeValue("bulletId", bulletId);
         if (bulletSize > 0) json.writeValue("bulletSize", bulletSize);
         if (bulletSpeed > 0) json.writeValue("bulletSpeed", bulletSpeed);
+        if (bulletDamage > 0) json.writeValue("bulletDamage", bulletDamage);
         if (bulletTexture != null) json.writeValue("bulletTexture", bulletTexture);
         if (bulletFrameCount > 0) json.writeValue("bulletFrameCount", bulletFrameCount);
         if (bulletColumns >= 0) json.writeValue("bulletColumns", bulletColumns);
@@ -84,6 +86,7 @@ public class FiringPatternDef implements Json.Serializable {
         bulletId = data.getString("bulletId", null);
         bulletSize = data.getFloat("bulletSize", -1f);
         bulletSpeed = data.getFloat("bulletSpeed", -1f);
+        bulletDamage = data.getInt("bulletDamage", -1);
         bulletTexture = data.getString("bulletTexture", null);
         bulletFrameCount = data.getInt("bulletFrameCount", -1);
         bulletColumns = data.getInt("bulletColumns", -1);

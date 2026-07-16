@@ -6,12 +6,14 @@ import com.badlogic.gdx.graphics.g2d.SpriteBatch;
 import com.badlogic.gdx.graphics.g2d.TextureRegion;
 import com.badlogic.gdx.math.Rectangle;
 import com.badlogic.gdx.math.Vector2;
+import whitelabeltest.enemy.Enemy;
 
 public class DrifterBullet implements EnemyBullet {
     private Sprite sprite;
     private final Rectangle rectangle;
     private final Vector2 velocity = new Vector2();
-    private final int damage = 1;
+    private int damage = 1;
+    private Enemy sourceEnemy;
 
     private Animation<TextureRegion> animation;
     private float animationTime = 0;
@@ -20,8 +22,10 @@ public class DrifterBullet implements EnemyBullet {
         this.rectangle = new Rectangle();
     }
 
-    public void init(Animation<TextureRegion> animation, float x, float y, float vx, float vy, float size, float speed) {
+    public void init(Animation<TextureRegion> animation, float x, float y, float vx, float vy, float size, float speed, int damage, Enemy source) {
         this.animation = animation;
+        this.damage = damage;
+        this.sourceEnemy = source;
         TextureRegion[] frames = animation.getKeyFrames();
 
         if (sprite == null) sprite = new Sprite(frames[0]);
@@ -70,8 +74,15 @@ public class DrifterBullet implements EnemyBullet {
     }
 
     @Override
+    public Enemy getSourceEnemy() { return sourceEnemy; }
+
+    @Override
+    public Sprite getSprite() { return sprite; }
+
+    @Override
     public void reset() {
         animationTime = 0;
         velocity.setZero();
+        sourceEnemy = null;
     }
 }

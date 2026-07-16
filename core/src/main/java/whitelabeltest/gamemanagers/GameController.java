@@ -82,6 +82,8 @@ public class GameController implements Disposable {
             return;
         }
 
+        collisionManager.checkShieldReflections(entities.getPlayer(), entities.getEnemyBullets(), entities.getBullets(), assets);
+
         if (!entities.getPlayer().isInvincible() && !entities.getPlayer().isDead()) {
             if (collisionManager.checkPlayerEnemyCollisions(entities.getPlayer(), entities.getEnemies()) ||
                 collisionManager.checkPlayerBulletCollisions(entities.getPlayer(), entities.getEnemyBullets())) {

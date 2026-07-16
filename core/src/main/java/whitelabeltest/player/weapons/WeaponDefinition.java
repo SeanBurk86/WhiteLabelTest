@@ -5,6 +5,9 @@ public class WeaponDefinition {
     public String type; // e.g., "Direct", "Spline", "Orbit"
     public String texture;
     public int frameCount;
+    public int columns = 0;
+    public int rows = 1;
+    public float frameDuration = 0.05f;
     public float size;
 
     // Indexed by level - 1. Each must have one entry per weapon level.

@@ -8,6 +8,8 @@ import com.badlogic.gdx.utils.JsonValue;
  *  share one definition instead of repeating these fields inline. Any field a pattern sets on
  *  itself still takes priority over the value here. */
 public class BulletDef implements Json.Serializable {
+    public static final int DEFAULT_DAMAGE = 1;
+
     public String id;
     public float bulletSize = -1f;
     public float bulletSpeed = -1f;
@@ -16,6 +18,7 @@ public class BulletDef implements Json.Serializable {
     public int bulletColumns = -1;
     public int bulletRows = -1;
     public float bulletFrameDuration = -1f;
+    public int damage = DEFAULT_DAMAGE;
 
     public BulletDef() {}
 
@@ -29,6 +32,7 @@ public class BulletDef implements Json.Serializable {
         if (bulletColumns >= 0) json.writeValue("bulletColumns", bulletColumns);
         if (bulletRows > 0) json.writeValue("bulletRows", bulletRows);
         if (bulletFrameDuration > 0) json.writeValue("bulletFrameDuration", bulletFrameDuration);
+        json.writeValue("damage", damage);
     }
 
     @Override
@@ -41,5 +45,6 @@ public class BulletDef implements Json.Serializable {
         bulletColumns = data.getInt("bulletColumns", -1);
         bulletRows = data.getInt("bulletRows", -1);
         bulletFrameDuration = data.getFloat("bulletFrameDuration", -1f);
+        damage = data.getInt("damage", DEFAULT_DAMAGE);
     }
 }

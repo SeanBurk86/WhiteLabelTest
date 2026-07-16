@@ -33,15 +33,14 @@ public class WaveBlastWeapon extends BaseWeapon {
         this.size = size;
         this.splitDepthRemaining = splitDepthRemaining;
 
-        int frameHeight = texture.getHeight();
-        int frameWidth = texture.getWidth() / def.frameCount;
-
-        this.animation = AnimationCache.get(texture, def.frameCount, 0.05f, Animation.PlayMode.LOOP);
+        this.animation = AnimationCache.get(texture, def.columns > 0 ? def.columns : def.frameCount, def.rows, def.frameCount, def.frameDuration, Animation.PlayMode.LOOP);
         TextureRegion[] frames = animation.getKeyFrames();
 
         if (sprite == null) sprite = new Sprite(frames[0]);
         else sprite.setRegion(frames[0]);
 
+        int frameWidth = frames[0].getRegionWidth();
+        int frameHeight = frames[0].getRegionHeight();
         sprite.setSize(size, size * ((float) frameHeight / frameWidth));
         sprite.setOriginCenter();
         sprite.setCenterX(x);

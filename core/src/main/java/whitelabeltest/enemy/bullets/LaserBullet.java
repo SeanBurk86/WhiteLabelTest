@@ -5,6 +5,7 @@ import com.badlogic.gdx.graphics.g2d.Sprite;
 import com.badlogic.gdx.graphics.g2d.SpriteBatch;
 import com.badlogic.gdx.graphics.g2d.TextureRegion;
 import com.badlogic.gdx.math.Rectangle;
+import whitelabeltest.enemy.Enemy;
 
 /** A persistent beam anchored at a fixed emission point that can rotate around that point over
  *  its lifetime, unlike other bullets which translate away from where they were fired. Expires
@@ -16,7 +17,8 @@ public class LaserBullet implements EnemyBullet {
 
     private Sprite sprite;
     private final Rectangle rectangle = new Rectangle();
-    private final int damage = 1;
+    private int damage = 1;
+    private Enemy sourceEnemy;
 
     private float originX, originY;
     private float angleDeg;
@@ -31,8 +33,10 @@ public class LaserBullet implements EnemyBullet {
 
     /** @param startAngleDeg, angularSpeed standard math convention (0 = right, 90 = up); the beam
      *  rotates at angularSpeed degrees/second for its whole lifetime (0 = doesn't rotate). */
-    public void init(Animation<TextureRegion> animation, float originX, float originY, float startAngleDeg, float angularSpeed, float length, float thickness, float duration) {
+    public void init(Animation<TextureRegion> animation, float originX, float originY, float startAngleDeg, float angularSpeed, float length, float thickness, float duration, int damage, Enemy source) {
         this.animation = animation;
+        this.damage = damage;
+        this.sourceEnemy = source;
         TextureRegion[] frames = animation.getKeyFrames();
 
         if (sprite == null) sprite = new Sprite(frames[0]);
@@ -98,8 +102,15 @@ public class LaserBullet implements EnemyBullet {
     }
 
     @Override
+    public Enemy getSourceEnemy() { return sourceEnemy; }
+
+    @Override
+    public Sprite getSprite() { return sprite; }
+
+    @Override
     public void reset() {
         elapsedTime = 0f;
         angularSpeed = 0f;
+        sourceEnemy = null;
     }
 }

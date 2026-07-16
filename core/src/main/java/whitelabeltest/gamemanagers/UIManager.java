@@ -65,6 +65,24 @@ public class UIManager implements Disposable {
         font.draw(batch, "Fast Lvl: " + player.getWeaponLevel("WaveBlastWeapon"), textX, worldHeight - 1.2f);
         font.draw(batch, "Bolt Lvl: " + player.getWeaponLevel("Thunderbolt"), textX, worldHeight - 1.6f);
         font.draw(batch, "Orbit Lvl: " + player.getWeaponLevel("OrbitWeapon"), textX, worldHeight - 2.0f);
+
+        if (player.getWeaponLevel("OrbitWeapon") > 0) {
+            if (player.isShieldActive()) {
+                font.setColor(Color.CYAN);
+                font.draw(batch, "Shield: Active", textX, worldHeight - 2.13f);
+                font.setColor(Color.WHITE);
+            } else if (player.getShieldCooldownTimer() > 0) {
+                font.setColor(Color.GRAY);
+                font.draw(batch, String.format("Shield Cooldown: %.1fs", player.getShieldCooldownTimer()), textX, worldHeight - 2.13f);
+                font.setColor(Color.WHITE);
+                drawShieldCooldownMeter(batch, 1f - player.getShieldCooldownFraction(), textX, worldHeight - 2.26f, barWidth);
+            } else {
+                font.setColor(Color.GREEN);
+                font.draw(batch, "Shield: Ready", textX, worldHeight - 2.13f);
+                font.setColor(Color.WHITE);
+            }
+        }
+
         font.draw(batch, "# of Bombs: " + player.getNumBombs(), textX, worldHeight - 2.4f);
 
         if (bombCooldownTimer > 0) {
@@ -144,6 +162,18 @@ public class UIManager implements Disposable {
         batch.draw(whitePixel, x, y, totalWidth, height);
 
         batch.setColor(Color.GRAY);
+        batch.draw(whitePixel, x, y, totalWidth * fraction, height);
+
+        batch.setColor(Color.WHITE);
+    }
+
+    private void drawShieldCooldownMeter(SpriteBatch batch, float fraction, float x, float y, float totalWidth) {
+        float height = 0.08f;
+
+        batch.setColor(0.25f, 0.25f, 0.25f, 1f);
+        batch.draw(whitePixel, x, y, totalWidth, height);
+
+        batch.setColor(Color.CYAN);
         batch.draw(whitePixel, x, y, totalWidth * fraction, height);
 
         batch.setColor(Color.WHITE);

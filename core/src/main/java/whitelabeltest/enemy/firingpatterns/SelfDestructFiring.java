@@ -7,6 +7,7 @@ import com.badlogic.gdx.math.Circle;
 import com.badlogic.gdx.math.Rectangle;
 import com.badlogic.gdx.math.Vector2;
 import com.badlogic.gdx.utils.Array;
+import whitelabeltest.enemy.Enemy;
 import whitelabeltest.enemy.bullets.DrifterBullet;
 import whitelabeltest.enemy.bullets.EnemyBullet;
 import whitelabeltest.gamemanagers.ObjectPools;
@@ -21,6 +22,7 @@ public class SelfDestructFiring implements FiringPattern {
     private final Animation<TextureRegion> spriteOverride;
     private final float offsetX;
     private final float offsetY;
+    private final int bulletDamage;
 
     public SelfDestructFiring(float triggerDistance) {
         this(triggerDistance, 0.25f, DEFAULT_SPEED, null);
@@ -41,16 +43,21 @@ public class SelfDestructFiring implements FiringPattern {
 
     /** @param offsetX, offsetY emission point offset from the sprite's center, in world units */
     public SelfDestructFiring(float triggerDistance, float bulletSize, float bulletSpeed, Animation<TextureRegion> spriteOverride, float offsetX, float offsetY) {
+        this(triggerDistance, bulletSize, bulletSpeed, spriteOverride, offsetX, offsetY, 1);
+    }
+
+    public SelfDestructFiring(float triggerDistance, float bulletSize, float bulletSpeed, Animation<TextureRegion> spriteOverride, float offsetX, float offsetY, int bulletDamage) {
         this.triggerDistance = triggerDistance;
         this.bulletSize = bulletSize;
         this.bulletSpeed = bulletSpeed;
         this.spriteOverride = spriteOverride;
         this.offsetX = offsetX;
         this.offsetY = offsetY;
+        this.bulletDamage = bulletDamage;
     }
 
     @Override
-    public void update(float delta, Sprite sprite, Rectangle rectangle, Array<EnemyBullet> enemyBullets, Animation<TextureRegion> bulletAnimation, Circle playerHitbox) {
+    public void update(float delta, Enemy self, Sprite sprite, Rectangle rectangle, Array<EnemyBullet> enemyBullets, Animation<TextureRegion> bulletAnimation, Circle playerHitbox) {
         if (triggered) return;
 
         Vector2 targetPos = new Vector2(playerHitbox.x, playerHitbox.y);
@@ -67,7 +74,7 @@ public class SelfDestructFiring implements FiringPattern {
                 float angle = i * 45f;
                 Vector2 dir = new Vector2(1, 0).setAngleDeg(angle);
                 DrifterBullet b = ObjectPools.drifterBulletPool.obtain();
-                b.init(animation, centerX, centerY, dir.x, dir.y, bulletSize, bulletSpeed);
+                b.init(animation, centerX, centerY, dir.x, dir.y, bulletSize, bulletSpeed, bulletDamage, self);
                 enemyBullets.add(b);
             }
         }

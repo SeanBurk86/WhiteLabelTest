@@ -6,6 +6,7 @@ import com.badlogic.gdx.graphics.g2d.TextureRegion;
 import com.badlogic.gdx.math.Circle;
 import com.badlogic.gdx.math.Rectangle;
 import com.badlogic.gdx.utils.Array;
+import whitelabeltest.enemy.Enemy;
 import whitelabeltest.enemy.bullets.EnemyBullet;
 
 public class SequencedFiringPattern implements FiringPattern {
@@ -22,7 +23,7 @@ public class SequencedFiringPattern implements FiringPattern {
     }
 
     @Override
-    public void update(float delta, Sprite sprite, Rectangle rectangle, Array<EnemyBullet> enemyBullets, Animation<TextureRegion> bulletAnimation, Circle playerHitbox) {
+    public void update(float delta, Enemy self, Sprite sprite, Rectangle rectangle, Array<EnemyBullet> enemyBullets, Animation<TextureRegion> bulletAnimation, Circle playerHitbox) {
         if (patterns.size == 0) return;
 
         timer += delta;
@@ -32,7 +33,7 @@ public class SequencedFiringPattern implements FiringPattern {
             currentIndex = (currentIndex + 1) % patterns.size;
         }
 
-        patterns.get(currentIndex).update(delta, sprite, rectangle, enemyBullets, bulletAnimation, playerHitbox);
+        patterns.get(currentIndex).update(delta, self, sprite, rectangle, enemyBullets, bulletAnimation, playerHitbox);
     }
 
     @Override
