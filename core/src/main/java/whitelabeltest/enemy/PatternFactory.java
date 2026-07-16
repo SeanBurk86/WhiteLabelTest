@@ -19,6 +19,17 @@ import whitelabeltest.gamemanagers.EnemySpawnRegistry;
 
 public class PatternFactory {
     public static MovementPattern createMovement(MovementPatternDef def, float worldHeight, float spawnCenterX) {
+        return createMovement(def, worldHeight, spawnCenterX, Float.NaN, Float.NaN);
+    }
+
+    /** @param formationOffsetX, formationOffsetY where this specific spawn sits in its formation -
+     *  NaN means "no override", so a Squadron pattern falls back to its own offsetX/offsetY (the
+     *  old way of baking one offset into the pattern, still supported for a formation that only
+     *  ever spawns one member at that slot). Passing a real value here is what lets a single
+     *  shared Squadron pattern be reused by every member of a squad, each supplying its own slot's
+     *  offset at spawn time instead of needing its own copy of the pattern (see
+     *  GenericEnemy.initWithDefinition and SpawnScheduler.SpawnEvent.offsetX/offsetY). */
+    public static MovementPattern createMovement(MovementPatternDef def, float worldHeight, float spawnCenterX, float formationOffsetX, float formationOffsetY) {
         if (def == null || "None".equals(def.type)) return new NoMovement();
 
         if ("Sequence".equals(def.type)) {
@@ -27,7 +38,7 @@ public class PatternFactory {
             float[] durations = new float[def.patterns.size];
             for (int i = 0; i < def.patterns.size; i++) {
                 MovementPatternDef sub = def.patterns.get(i);
-                mps.add(createMovement(sub, worldHeight, spawnCenterX));
+                mps.add(createMovement(sub, worldHeight, spawnCenterX, formationOffsetX, formationOffsetY));
                 durations[i] = sub.duration > 0 ? sub.duration : 3.0f;
             }
             return new SequencedMovementPattern(mps, durations);
@@ -35,8 +46,10 @@ public class PatternFactory {
 
         if ("Squadron".equals(def.type)) {
             if (def.pattern == null) return new NoMovement();
-            MovementPattern leader = createMovement(def.pattern, worldHeight, spawnCenterX - def.offsetX);
-            return new SquadronMovement(leader, def.offsetX, def.offsetY);
+            float offsetX = !Float.isNaN(formationOffsetX) ? formationOffsetX : def.offsetX;
+            float offsetY = !Float.isNaN(formationOffsetY) ? formationOffsetY : def.offsetY;
+            MovementPattern leader = createMovement(def.pattern, worldHeight, spawnCenterX - offsetX);
+            return new SquadronMovement(leader, offsetX, offsetY);
         }
 
         float speed = def.speed > 0 ? def.speed : 0f;

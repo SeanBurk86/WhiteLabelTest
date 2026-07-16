@@ -19,6 +19,16 @@ public class GenericEnemy extends BaseEnemy {
     public void initWithDefinition(EnemyDefinition def, Texture texture, Texture bulletTexture,
                                     Texture spawnTexture, Texture deathTexture,
                                     float worldWidth, float worldHeight, float startX, float startY) {
+        initWithDefinition(def, texture, bulletTexture, spawnTexture, deathTexture, worldWidth, worldHeight, startX, startY, Float.NaN, Float.NaN);
+    }
+
+    /** @param formationOffsetX, formationOffsetY this spawn's slot in a squad formation, passed
+     *  straight through to PatternFactory.createMovement - see its javadoc. NaN (the other
+     *  overload above) means "not part of a formation spawned this way". */
+    public void initWithDefinition(EnemyDefinition def, Texture texture, Texture bulletTexture,
+                                    Texture spawnTexture, Texture deathTexture,
+                                    float worldWidth, float worldHeight, float startX, float startY,
+                                    float formationOffsetX, float formationOffsetY) {
         this.def = def;
         this.worldWidth = worldWidth;
         this.worldHeight = worldHeight;
@@ -63,7 +73,7 @@ public class GenericEnemy extends BaseEnemy {
         this.maxHealth = def.health;
         this.animationTime = 0;
 
-        this.movement = PatternFactory.createMovement(PatternRegistry.getMovement(def.movementPattern), worldHeight, sprite.getX() + sprite.getWidth() / 2f);
+        this.movement = PatternFactory.createMovement(PatternRegistry.getMovement(def.movementPattern), worldHeight, sprite.getX() + sprite.getWidth() / 2f, formationOffsetX, formationOffsetY);
         this.firing = PatternFactory.createFiring(def, PatternRegistry.getFiring(def.firingPattern));
 
         this.spawnDuration = def.spawnDuration;

@@ -21,6 +21,12 @@ public class SpawnScheduler {
         public boolean inverseMovement = false;
         public boolean spawned = false;
 
+        // This spawn's slot in a squad formation - see PatternFactory.createMovement's javadoc.
+        // NaN (the default) means "not a formation member", so a Squadron-type movement pattern
+        // falls back to whatever offsetX/offsetY it has baked in.
+        public float offsetX = Float.NaN;
+        public float offsetY = Float.NaN;
+
         public SpawnEvent() {}
     }
 
@@ -101,7 +107,7 @@ public class SpawnScheduler {
 
         def.inverseMovement = event.inverseMovement;
 
-        enemy.initWithDefinition(def, tex, bulletTex, spawnTex, deathTex, worldWidth, worldHeight, event.x, event.y);
+        enemy.initWithDefinition(def, tex, bulletTex, spawnTex, deathTex, worldWidth, worldHeight, event.x, event.y, event.offsetX, event.offsetY);
 
         if (event.powerup != null) enemy.setGuaranteedPowerup(event.powerup);
         entityManager.getEnemies().add(enemy);
