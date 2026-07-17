@@ -19,6 +19,8 @@ public class AimedFiring implements FiringPattern {
     private final float offsetX;
     private final float offsetY;
     private final int bulletDamage;
+    private final float targetOffsetX;
+    private final float targetOffsetY;
     private float shootTimer;
 
     private static final float DEFAULT_SPEED = 5f;
@@ -48,6 +50,13 @@ public class AimedFiring implements FiringPattern {
     /** @param bulletDamage damage dealt to the player on hit (and reflected back at the source
      *  enemy at the same value, if the player's shield bounces this bullet) */
     public AimedFiring(float fireRate, float bulletSize, float bulletSpeed, Animation<TextureRegion> spriteOverride, float offsetX, float offsetY, int bulletDamage) {
+        this(fireRate, bulletSize, bulletSpeed, spriteOverride, offsetX, offsetY, bulletDamage, 0f, 0f);
+    }
+
+    /** @param targetOffsetX, targetOffsetY offset from the player's position that bullets are
+     *  aimed at, in world units - lets shots lead/trail the player or aim at a point near them
+     *  instead of dead-on */
+    public AimedFiring(float fireRate, float bulletSize, float bulletSpeed, Animation<TextureRegion> spriteOverride, float offsetX, float offsetY, int bulletDamage, float targetOffsetX, float targetOffsetY) {
         this.fireRate = fireRate;
         this.bulletSize = bulletSize;
         this.bulletSpeed = bulletSpeed;
@@ -55,6 +64,8 @@ public class AimedFiring implements FiringPattern {
         this.offsetX = offsetX;
         this.offsetY = offsetY;
         this.bulletDamage = bulletDamage;
+        this.targetOffsetX = targetOffsetX;
+        this.targetOffsetY = targetOffsetY;
         this.shootTimer = 0;
     }
 
@@ -63,8 +74,8 @@ public class AimedFiring implements FiringPattern {
         shootTimer += delta;
         if (shootTimer >= fireRate) {
             shootTimer = 0;
-            float targetX = playerHitbox.x;
-            float targetY = playerHitbox.y;
+            float targetX = playerHitbox.x + targetOffsetX;
+            float targetY = playerHitbox.y + targetOffsetY;
             Animation<TextureRegion> animation = spriteOverride != null ? spriteOverride : bulletAnimation;
 
             AimedEnemyBullet b = ObjectPools.aimedBulletPool.obtain();

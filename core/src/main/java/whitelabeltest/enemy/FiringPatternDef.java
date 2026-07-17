@@ -38,6 +38,8 @@ public class FiringPatternDef implements Json.Serializable {
     public float fireAngle = Float.NaN;
     public float targetX = Float.NaN;
     public float targetY = Float.NaN;
+    public float targetOffsetX = 0f;
+    public float targetOffsetY = 0f;
     public float sweepDuration = -1f;
     public float sweepStartAngle = Float.NaN;
     public float sweepEndAngle = Float.NaN;
@@ -70,6 +72,8 @@ public class FiringPatternDef implements Json.Serializable {
         if (!Float.isNaN(fireAngle)) json.writeValue("fireAngle", fireAngle);
         if (!Float.isNaN(targetX)) json.writeValue("targetX", targetX);
         if (!Float.isNaN(targetY)) json.writeValue("targetY", targetY);
+        if (targetOffsetX != 0f) json.writeValue("targetOffsetX", targetOffsetX);
+        if (targetOffsetY != 0f) json.writeValue("targetOffsetY", targetOffsetY);
         if (sweepDuration > 0) json.writeValue("sweepDuration", sweepDuration);
         if (!Float.isNaN(sweepStartAngle)) json.writeValue("sweepStartAngle", sweepStartAngle);
         if (!Float.isNaN(sweepEndAngle)) json.writeValue("sweepEndAngle", sweepEndAngle);
@@ -101,6 +105,8 @@ public class FiringPatternDef implements Json.Serializable {
         fireAngle = data.getFloat("fireAngle", Float.NaN);
         targetX = data.getFloat("targetX", Float.NaN);
         targetY = data.getFloat("targetY", Float.NaN);
+        targetOffsetX = data.getFloat("targetOffsetX", 0f);
+        targetOffsetY = data.getFloat("targetOffsetY", 0f);
         sweepDuration = data.getFloat("sweepDuration", -1f);
         sweepStartAngle = data.getFloat("sweepStartAngle", Float.NaN);
         sweepEndAngle = data.getFloat("sweepEndAngle", Float.NaN);

@@ -85,12 +85,9 @@ public class PatternFactory {
         if (type == null) return new NoFiring();
 
         switch (type) {
-            case "Aimed": return new AimedFiring(fireRate, resolve(bulletSize, 0.25f), resolve(bulletSpeed, 5f), spriteOverride, offsetX, offsetY, bulletDamage);
             case "SelfDestruct": return new SelfDestructFiring(3.0f, resolve(bulletSize, 0.25f), resolve(bulletSpeed, 4f), spriteOverride, offsetX, offsetY, bulletDamage);
             case "ExplodingAimed": return new ExplodingAimedFiring(fireRate, resolve(bulletSize, 0.25f), resolve(bulletSpeed, 6f), spriteOverride, offsetX, offsetY, bulletDamage);
             case "BurstAimed": return new BurstAimedFiring(fireRate, resolve(bulletSize, 0.25f), resolve(bulletSpeed, 5f), spriteOverride, offsetX, offsetY, bulletDamage);
-            case "QuarterCircle": return new QuarterCircleFiring(fireRate, resolve(bulletSize, 0.25f), resolve(bulletSpeed, 5f), spriteOverride,
-                resolve(spreadDegrees, 90f), resolve(numBullets, 9), offsetX, offsetY, bulletDamage);
             case "Sweep": return new SweepFiring(fireRate, resolve(bulletSize, 0.25f), resolve(bulletSpeed, 5f), spriteOverride, offsetX, offsetY, bulletDamage);
             case "SineWave": return new SineWaveFiring(fireRate, resolve(bulletSize, 0.2f), resolve(bulletSpeed, 5f), spriteOverride, offsetX, offsetY, bulletDamage);
             case "Orbiting": return new OrbitingFiring(fireRate, resolve(bulletSize, 0.5f), resolve(bulletSpeed, 4f), spriteOverride, offsetX, offsetY, bulletDamage);
@@ -123,6 +120,17 @@ public class PatternFactory {
             }
             case "SpawnEnemy":
                 return new SpawnEnemyFiring(def.spawnType, def.fireRate, def.offsetX, def.offsetY);
+            case "Aimed": {
+                BulletDef bulletDef = PatternRegistry.getBullet(def.bulletId);
+                Animation<TextureRegion> spriteOverride = buildBulletAnimation(enemyDef, def, bulletDef);
+                return new AimedFiring(def.fireRate, resolve(bulletSize(def, bulletDef), 0.25f), resolve(bulletSpeed(def, bulletDef), 5f), spriteOverride, def.offsetX, def.offsetY, bulletDamage(def, bulletDef), def.targetOffsetX, def.targetOffsetY);
+            }
+            case "QuarterCircle": {
+                BulletDef bulletDef = PatternRegistry.getBullet(def.bulletId);
+                Animation<TextureRegion> spriteOverride = buildBulletAnimation(enemyDef, def, bulletDef);
+                return new QuarterCircleFiring(def.fireRate, resolve(bulletSize(def, bulletDef), 0.25f), resolve(bulletSpeed(def, bulletDef), 5f), spriteOverride,
+                    resolve(def.spreadDegrees, 90f), resolve(def.numBullets, 9), def.offsetX, def.offsetY, bulletDamage(def, bulletDef), def.targetOffsetX, def.targetOffsetY);
+            }
             case "AimedAtPoint": {
                 BulletDef bulletDef = PatternRegistry.getBullet(def.bulletId);
                 Animation<TextureRegion> spriteOverride = buildBulletAnimation(enemyDef, def, bulletDef);

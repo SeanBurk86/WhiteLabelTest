@@ -26,6 +26,8 @@ public class QuarterCircleFiring implements FiringPattern {
     private final float offsetX;
     private final float offsetY;
     private final int bulletDamage;
+    private final float targetOffsetX;
+    private final float targetOffsetY;
 
     public QuarterCircleFiring(float fireRate) {
         this(fireRate, 0.25f, DEFAULT_SPEED, null);
@@ -57,6 +59,13 @@ public class QuarterCircleFiring implements FiringPattern {
     }
 
     public QuarterCircleFiring(float fireRate, float bulletSize, float bulletSpeed, Animation<TextureRegion> spriteOverride, float spreadDegrees, int numBullets, float offsetX, float offsetY, int bulletDamage) {
+        this(fireRate, bulletSize, bulletSpeed, spriteOverride, spreadDegrees, numBullets, offsetX, offsetY, bulletDamage, 0f, 0f);
+    }
+
+    /** @param targetOffsetX, targetOffsetY offset from the player's position that the fan is
+     *  centered on, in world units - lets the spread lead/trail the player or center on a point
+     *  near them instead of dead-on */
+    public QuarterCircleFiring(float fireRate, float bulletSize, float bulletSpeed, Animation<TextureRegion> spriteOverride, float spreadDegrees, int numBullets, float offsetX, float offsetY, int bulletDamage, float targetOffsetX, float targetOffsetY) {
         this.fireRate = fireRate;
         this.bulletSize = bulletSize;
         this.bulletSpeed = bulletSpeed;
@@ -66,6 +75,8 @@ public class QuarterCircleFiring implements FiringPattern {
         this.offsetX = offsetX;
         this.offsetY = offsetY;
         this.bulletDamage = bulletDamage;
+        this.targetOffsetX = targetOffsetX;
+        this.targetOffsetY = targetOffsetY;
         this.shootTimer = 0;
     }
 
@@ -77,8 +88,8 @@ public class QuarterCircleFiring implements FiringPattern {
 
         float centerX = sprite.getX() + sprite.getWidth() / 2 + offsetX;
         float centerY = sprite.getY() + sprite.getHeight() / 2 + offsetY;
-        float playerX = playerHitbox.x;
-        float playerY = playerHitbox.y;
+        float playerX = playerHitbox.x + targetOffsetX;
+        float playerY = playerHitbox.y + targetOffsetY;
         Animation<TextureRegion> animation = spriteOverride != null ? spriteOverride : bulletAnimation;
 
         float aimAngle = new Vector2(playerX - centerX, playerY - centerY).angleDeg();
