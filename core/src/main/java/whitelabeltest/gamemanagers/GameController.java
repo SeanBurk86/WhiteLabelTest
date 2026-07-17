@@ -7,6 +7,7 @@ import com.badlogic.gdx.utils.Disposable;
 import whitelabeltest.enemy.Enemy;
 import whitelabeltest.enemy.ExplosionPatternDef;
 import whitelabeltest.enemy.PatternRegistry;
+import whitelabeltest.player.Player;
 import whitelabeltest.player.powerups.Powerup;
 import whitelabeltest.player.powerups.WeaponPowerup;
 
@@ -33,6 +34,16 @@ public class GameController implements Disposable {
     private float debugMenuSeekTime;
 
     private static final float DEBUG_MENU_SCRUB_SPEED = 5f;
+
+    // Debug menu row layout: 0 = seek-time editor, 1-2 = weapon slot pickers, 3-6 = weapon
+    // levels, 7+ = saved bookmarks. Kept in sync with UIManager.drawDebugMenu's own row constants.
+    private static final int ROW_SEEK = 0;
+    private static final int ROW_SLOT1 = 1;
+    private static final int ROW_SLOT2 = 2;
+    private static final int ROW_LEVELS_START = 3;
+    private static final String[] WEAPON_LEVEL_IDS = {"BasicWeapon", "WaveBlastWeapon", "Thunderbolt", "OrbitWeapon"};
+    private static final int ROW_BOOKMARKS_START = ROW_LEVELS_START + WEAPON_LEVEL_IDS.length;
+    private static final String[] SLOT_WEAPON_OPTIONS = {null, "BasicWeapon", "WaveBlastWeapon", "OrbitWeapon", "Thunderbolt"};
 
     private static final float BOMB_COOLDOWN = 15f;
 
@@ -139,7 +150,7 @@ public class GameController implements Disposable {
 
     private void handleDebugMenuInput(float delta) {
         int bookmarkCount = debugSaveStateManager.getSaveStates().size;
-        int totalRows = 1 + bookmarkCount; // row 0 = seek-time editor, rows 1..N = bookmarks
+        int totalRows = ROW_BOOKMARKS_START + bookmarkCount;
 
         if (input.isDebugMenuUpJustPressed()) {
             debugMenuSelectedIndex = (debugMenuSelectedIndex - 1 + totalRows) % totalRows;
@@ -148,13 +159,22 @@ public class GameController implements Disposable {
             debugMenuSelectedIndex = (debugMenuSelectedIndex + 1) % totalRows;
         }
 
-        if (debugMenuSelectedIndex == 0) {
+        if (debugMenuSelectedIndex == ROW_SEEK) {
             if (input.isDebugMenuLeftPressed()) debugMenuSeekTime = Math.max(0f, debugMenuSeekTime - DEBUG_MENU_SCRUB_SPEED * delta);
             if (input.isDebugMenuRightPressed()) debugMenuSeekTime += DEBUG_MENU_SCRUB_SPEED * delta;
             if (input.isDebugMenuConfirmJustPressed()) seekToTime(debugMenuSeekTime);
             if (input.isDebugMenuNewBookmarkJustPressed()) debugSaveStateManager.addSaveState("Bookmark", debugMenuSeekTime);
+        } else if (debugMenuSelectedIndex == ROW_SLOT1 || debugMenuSelectedIndex == ROW_SLOT2) {
+            int slot = debugMenuSelectedIndex - ROW_SLOT1;
+            if (input.isDebugMenuLeftJustPressed()) cycleSlotWeapon(slot, -1);
+            if (input.isDebugMenuRightJustPressed()) cycleSlotWeapon(slot, 1);
+        } else if (debugMenuSelectedIndex < ROW_BOOKMARKS_START) {
+            String weaponId = WEAPON_LEVEL_IDS[debugMenuSelectedIndex - ROW_LEVELS_START];
+            Player player = entities.getPlayer();
+            if (input.isDebugMenuLeftJustPressed()) player.setWeaponLevel(weaponId, player.getWeaponLevel(weaponId) - 1);
+            if (input.isDebugMenuRightJustPressed()) player.setWeaponLevel(weaponId, player.getWeaponLevel(weaponId) + 1);
         } else {
-            int bookmarkIndex = debugMenuSelectedIndex - 1;
+            int bookmarkIndex = debugMenuSelectedIndex - ROW_BOOKMARKS_START;
             if (input.isDebugMenuConfirmJustPressed()) {
                 seekToTime(debugSaveStateManager.getSaveStates().get(bookmarkIndex).time);
             }
@@ -163,6 +183,17 @@ public class GameController implements Disposable {
                 debugMenuSelectedIndex = Math.max(0, debugMenuSelectedIndex - 1);
             }
         }
+    }
+
+    private void cycleSlotWeapon(int slot, int direction) {
+        Player player = entities.getPlayer();
+        String current = player.getSlotWeaponId(slot);
+        int idx = 0;
+        for (int i = 0; i < SLOT_WEAPON_OPTIONS.length; i++) {
+            if (java.util.Objects.equals(SLOT_WEAPON_OPTIONS[i], current)) { idx = i; break; }
+        }
+        int next = (idx + direction + SLOT_WEAPON_OPTIONS.length) % SLOT_WEAPON_OPTIONS.length;
+        player.setSlotWeapon(slot, SLOT_WEAPON_OPTIONS[next]);
     }
 
     private void seekToTime(float targetTime) {

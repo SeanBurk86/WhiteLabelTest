@@ -131,9 +131,19 @@ public class UIManager implements Disposable {
         }
     }
 
-    // Debug-only: F1 menu for jumping the spawn schedule clock to a chosen time or a saved bookmark.
+    // Row layout must match GameController's ROW_* constants.
+    private static final int DEBUG_ROW_SEEK = 0;
+    private static final int DEBUG_ROW_SLOT1 = 1;
+    private static final int DEBUG_ROW_SLOT2 = 2;
+    private static final int DEBUG_ROW_LEVELS_START = 3;
+    private static final String[] DEBUG_WEAPON_LEVEL_IDS = {"BasicWeapon", "WaveBlastWeapon", "Thunderbolt", "OrbitWeapon"};
+    private static final String[] DEBUG_WEAPON_LEVEL_LABELS = {"Basic Lvl", "Fast Lvl", "Bolt Lvl", "Orbit Lvl"};
+    private static final int DEBUG_ROW_BOOKMARKS_START = DEBUG_ROW_LEVELS_START + DEBUG_WEAPON_LEVEL_IDS.length;
+
+    // Debug-only: F1 menu for jumping the spawn schedule clock to a chosen time or a saved
+    // bookmark, and for setting equipped weapons/slots and their levels.
     public void drawDebugMenu(SpriteBatch batch, float worldWidth, float worldHeight, float scheduleTime,
-                               float seekTime, int selectedIndex, Array<DebugSaveState> saveStates) {
+                               float seekTime, int selectedIndex, Array<DebugSaveState> saveStates, Player player) {
         batch.setColor(0f, 0f, 0f, 0.75f);
         batch.draw(whitePixel, 0, 0, worldWidth, worldHeight);
         batch.setColor(Color.WHITE);
@@ -149,11 +159,32 @@ public class UIManager implements Disposable {
         font.draw(batch, String.format("Schedule time: %.2fs", scheduleTime), x, y);
         y -= lineHeight * 1.5f;
 
-        font.setColor(selectedIndex == 0 ? Color.YELLOW : Color.WHITE);
-        font.draw(batch, (selectedIndex == 0 ? "> " : "  ") + String.format("Jump to time: %.2fs", seekTime), x, y);
+        font.setColor(selectedIndex == DEBUG_ROW_SEEK ? Color.YELLOW : Color.WHITE);
+        font.draw(batch, (selectedIndex == DEBUG_ROW_SEEK ? "> " : "  ") + String.format("Jump to time: %.2fs", seekTime), x, y);
         y -= lineHeight;
         font.setColor(Color.GRAY);
         font.draw(batch, "  </> scrub   Enter = go   N = save bookmark here", x, y);
+        y -= lineHeight * 1.5f;
+
+        font.setColor(selectedIndex == DEBUG_ROW_SLOT1 ? Color.YELLOW : Color.WHITE);
+        font.draw(batch, (selectedIndex == DEBUG_ROW_SLOT1 ? "> " : "  ") + "Slot 1: " + weaponLabel(player.getSlotWeaponId(0)), x, y);
+        y -= lineHeight;
+        font.setColor(selectedIndex == DEBUG_ROW_SLOT2 ? Color.YELLOW : Color.WHITE);
+        font.draw(batch, (selectedIndex == DEBUG_ROW_SLOT2 ? "> " : "  ") + "Slot 2: " + weaponLabel(player.getSlotWeaponId(1)), x, y);
+        y -= lineHeight;
+        font.setColor(Color.GRAY);
+        font.draw(batch, "  </> cycle weapon", x, y);
+        y -= lineHeight * 1.5f;
+
+        for (int i = 0; i < DEBUG_WEAPON_LEVEL_IDS.length; i++) {
+            int rowIndex = DEBUG_ROW_LEVELS_START + i;
+            boolean selected = selectedIndex == rowIndex;
+            font.setColor(selected ? Color.YELLOW : Color.WHITE);
+            font.draw(batch, (selected ? "> " : "  ") + DEBUG_WEAPON_LEVEL_LABELS[i] + ": " + player.getWeaponLevel(DEBUG_WEAPON_LEVEL_IDS[i]) + "/" + player.getMaxWeaponLevel(), x, y);
+            y -= lineHeight;
+        }
+        font.setColor(Color.GRAY);
+        font.draw(batch, "  </> adjust level", x, y);
         y -= lineHeight * 1.5f;
 
         font.setColor(Color.WHITE);
@@ -167,7 +198,7 @@ public class UIManager implements Disposable {
         } else {
             for (int i = 0; i < saveStates.size; i++) {
                 DebugSaveState state = saveStates.get(i);
-                boolean selected = selectedIndex == i + 1;
+                boolean selected = selectedIndex == i + DEBUG_ROW_BOOKMARKS_START;
                 font.setColor(selected ? Color.YELLOW : Color.WHITE);
                 font.draw(batch, (selected ? "> " : "  ") + state.label + String.format(" @ %.2fs", state.time), x, y);
                 y -= lineHeight;

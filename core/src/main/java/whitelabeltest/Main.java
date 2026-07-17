@@ -131,7 +131,8 @@ public class Main extends ApplicationAdapter {
 
         if (game.isDebugMode() && game.isDebugMenuOpen()) {
             ui.drawDebugMenu(spriteBatch, PLAY_AREA_WIDTH, PLAY_AREA_HEIGHT, game.getSpawnScheduleTotalTime(),
-                game.getDebugMenuSeekTime(), game.getDebugMenuSelectedIndex(), game.getDebugSaveStates());
+                game.getDebugMenuSeekTime(), game.getDebugMenuSelectedIndex(), game.getDebugSaveStates(),
+                game.getEntities().getPlayer());
         }
         spriteBatch.end();
 

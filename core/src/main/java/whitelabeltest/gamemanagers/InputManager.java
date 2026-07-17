@@ -20,6 +20,8 @@ public class InputManager {
     private boolean debugMenuDownJustPressed;
     private boolean debugMenuLeftPressed;
     private boolean debugMenuRightPressed;
+    private boolean debugMenuLeftJustPressed;
+    private boolean debugMenuRightJustPressed;
     private boolean debugMenuConfirmJustPressed;
     private boolean debugMenuDeleteJustPressed;
     private boolean debugMenuNewBookmarkJustPressed;
@@ -46,6 +48,8 @@ public class InputManager {
         debugMenuDownJustPressed = false;
         debugMenuLeftPressed = false;
         debugMenuRightPressed = false;
+        debugMenuLeftJustPressed = false;
+        debugMenuRightJustPressed = false;
         debugMenuConfirmJustPressed = false;
         debugMenuDeleteJustPressed = false;
         debugMenuNewBookmarkJustPressed = false;
@@ -100,6 +104,8 @@ public class InputManager {
         debugMenuDownJustPressed = Gdx.input.isKeyJustPressed(Input.Keys.DOWN);
         debugMenuLeftPressed = Gdx.input.isKeyPressed(Input.Keys.LEFT);
         debugMenuRightPressed = Gdx.input.isKeyPressed(Input.Keys.RIGHT);
+        debugMenuLeftJustPressed = Gdx.input.isKeyJustPressed(Input.Keys.LEFT);
+        debugMenuRightJustPressed = Gdx.input.isKeyJustPressed(Input.Keys.RIGHT);
         debugMenuConfirmJustPressed = Gdx.input.isKeyJustPressed(Input.Keys.ENTER);
         debugMenuDeleteJustPressed = Gdx.input.isKeyJustPressed(Input.Keys.FORWARD_DEL);
         debugMenuNewBookmarkJustPressed = Gdx.input.isKeyJustPressed(Input.Keys.N);
@@ -122,6 +128,8 @@ public class InputManager {
     public boolean isDebugMenuDownJustPressed() { return debugMenuDownJustPressed; }
     public boolean isDebugMenuLeftPressed() { return debugMenuLeftPressed; }
     public boolean isDebugMenuRightPressed() { return debugMenuRightPressed; }
+    public boolean isDebugMenuLeftJustPressed() { return debugMenuLeftJustPressed; }
+    public boolean isDebugMenuRightJustPressed() { return debugMenuRightJustPressed; }
     public boolean isDebugMenuConfirmJustPressed() { return debugMenuConfirmJustPressed; }
     public boolean isDebugMenuDeleteJustPressed() { return debugMenuDeleteJustPressed; }
     public boolean isDebugMenuNewBookmarkJustPressed() { return debugMenuNewBookmarkJustPressed; }

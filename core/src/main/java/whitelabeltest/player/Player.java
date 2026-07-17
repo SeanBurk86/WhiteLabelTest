@@ -351,13 +351,7 @@ public class Player {
      *  either slot, it's placed into the unequipped slot, replacing whatever weapon was there -
      *  a weapon is never allowed to occupy both slots at once. */
     public void levelUpWeapon(String weaponId) {
-        Weapon target = switch (weaponId) {
-            case "BasicWeapon" -> basicWeapon;
-            case "WaveBlastWeapon" -> waveBlastWeapon;
-            case "OrbitWeapon" -> orbitWeapon;
-            case "Thunderbolt" -> thunderboltWeapon;
-            default -> null;
-        };
+        Weapon target = weaponById(weaponId);
 
         if (target != null) {
             target.setLevel(Math.min(target.getLevel() + 1, MAX_WEAPON_LEVEL));
@@ -368,13 +362,39 @@ public class Player {
     }
 
     public int getWeaponLevel(String weaponId) {
+        Weapon target = weaponById(weaponId);
+        return target != null ? target.getLevel() : 0;
+    }
+
+    private Weapon weaponById(String weaponId) {
+        if (weaponId == null) return null;
         return switch (weaponId) {
-            case "BasicWeapon" -> basicWeapon.getLevel();
-            case "WaveBlastWeapon" -> waveBlastWeapon.getLevel();
-            case "OrbitWeapon" -> orbitWeapon.getLevel();
-            case "Thunderbolt" -> thunderboltWeapon.getLevel();
-            default -> 0;
+            case "BasicWeapon" -> basicWeapon;
+            case "WaveBlastWeapon" -> waveBlastWeapon;
+            case "OrbitWeapon" -> orbitWeapon;
+            case "Thunderbolt" -> thunderboltWeapon;
+            default -> null;
         };
+    }
+
+    // Debug-only: sets a weapon's level directly (unlike levelUpWeapon, doesn't equip it into a slot).
+    public void setWeaponLevel(String weaponId, int level) {
+        Weapon target = weaponById(weaponId);
+        if (target != null) target.setLevel(MathUtils.clamp(level, 0, MAX_WEAPON_LEVEL));
+    }
+
+    public int getMaxWeaponLevel() { return MAX_WEAPON_LEVEL; }
+
+    /** Debug-only: directly assigns which weapon occupies a slot (null clears it). Refuses to
+     *  leave both slots empty, and bumps the same weapon out of the other slot if it's there -
+     *  same "never in both slots at once" invariant levelUpWeapon keeps. */
+    public void setSlotWeapon(int slot, String weaponId) {
+        Weapon target = weaponById(weaponId);
+        int other = 1 - slot;
+        if (target == null && weaponSlots[other] == null) return;
+        if (target != null && weaponSlots[other] == target) weaponSlots[other] = null;
+        weaponSlots[slot] = target;
+        if (weaponSlots[activeSlot] == null) activeSlot = other;
     }
 
     public void triggerGrazeFlash() {
