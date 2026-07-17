@@ -208,6 +208,23 @@ public class EntityManager {
         player.reset();
     }
 
+    /** Debug-only: wipes every non-player entity so a spawn-schedule seek doesn't leave stale
+     *  enemies/bullets from the old point in time on screen. Player (weapons/score/lives) is untouched. */
+    public void clearWorld() {
+        for (Enemy e : enemies) ObjectPools.freeEnemy(e);
+        enemies.clear();
+        for (Weapon b : bullets) ObjectPools.freeWeapon(b);
+        bullets.clear();
+        for (EnemyBullet eb : enemyBullets) ObjectPools.freeEnemyBullet(eb);
+        enemyBullets.clear();
+        for (Powerup p : powerups) ObjectPools.freePowerup(p);
+        powerups.clear();
+        for (ExplosionEffect e : explosions) ObjectPools.freeExplosion(e);
+        explosions.clear();
+        for (HitEffect h : hitEffects) ObjectPools.freeHitEffect(h);
+        hitEffects.clear();
+    }
+
     public void destroyAllPlayerBullets() {
         for (int i = bullets.size - 1; i >= 0; i--) {
             ObjectPools.freeWeapon(bullets.get(i));

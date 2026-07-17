@@ -89,6 +89,20 @@ public class SpawnScheduler {
 
     public Array<TextCue> getTextCues() { return textCues; }
 
+    public float getTotalTime() { return totalTime; }
+
+    public Array<SpawnEvent> getSchedule() { return schedule; }
+
+    /** Debug-only: jumps the schedule clock to targetTime, marking every event on the far side of
+     *  it as (un)spawned so the normal update() loop picks back up correctly from there - forward
+     *  seeks skip past events without spawning them, rewinds let already-passed events fire again. */
+    public void seekTo(float targetTime) {
+        totalTime = Math.max(0f, targetTime);
+        if (schedule != null) {
+            for (SpawnEvent event : schedule) event.spawned = event.time <= totalTime;
+        }
+    }
+
     public void update(float delta, EntityManager entityManager) {
         totalTime += delta;
         for (SpawnEvent event : schedule) {

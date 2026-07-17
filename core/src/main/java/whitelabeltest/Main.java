@@ -128,6 +128,11 @@ public class Main extends ApplicationAdapter {
         } else if (game.isLevelComplete()) {
             ui.drawLevelComplete(spriteBatch, PLAY_AREA_WIDTH, PLAY_AREA_HEIGHT, game.getScore());
         }
+
+        if (game.isDebugMode() && game.isDebugMenuOpen()) {
+            ui.drawDebugMenu(spriteBatch, PLAY_AREA_WIDTH, PLAY_AREA_HEIGHT, game.getSpawnScheduleTotalTime(),
+                game.getDebugMenuSeekTime(), game.getDebugMenuSelectedIndex(), game.getDebugSaveStates());
+        }
         spriteBatch.end();
 
         if (game.isDebugMode()) {

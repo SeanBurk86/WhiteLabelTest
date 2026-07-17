@@ -131,6 +131,55 @@ public class UIManager implements Disposable {
         }
     }
 
+    // Debug-only: F1 menu for jumping the spawn schedule clock to a chosen time or a saved bookmark.
+    public void drawDebugMenu(SpriteBatch batch, float worldWidth, float worldHeight, float scheduleTime,
+                               float seekTime, int selectedIndex, Array<DebugSaveState> saveStates) {
+        batch.setColor(0f, 0f, 0f, 0.75f);
+        batch.draw(whitePixel, 0, 0, worldWidth, worldHeight);
+        batch.setColor(Color.WHITE);
+
+        float x = 0.4f;
+        float y = worldHeight - 0.5f;
+        float lineHeight = 0.4f;
+
+        font.setColor(Color.YELLOW);
+        font.draw(batch, "DEBUG MENU (F1 to close)", x, y);
+        y -= lineHeight;
+        font.setColor(Color.WHITE);
+        font.draw(batch, String.format("Schedule time: %.2fs", scheduleTime), x, y);
+        y -= lineHeight * 1.5f;
+
+        font.setColor(selectedIndex == 0 ? Color.YELLOW : Color.WHITE);
+        font.draw(batch, (selectedIndex == 0 ? "> " : "  ") + String.format("Jump to time: %.2fs", seekTime), x, y);
+        y -= lineHeight;
+        font.setColor(Color.GRAY);
+        font.draw(batch, "  </> scrub   Enter = go   N = save bookmark here", x, y);
+        y -= lineHeight * 1.5f;
+
+        font.setColor(Color.WHITE);
+        font.draw(batch, "Bookmarks:", x, y);
+        y -= lineHeight;
+
+        if (saveStates.size == 0) {
+            font.setColor(Color.GRAY);
+            font.draw(batch, "  (none saved)", x, y);
+            y -= lineHeight;
+        } else {
+            for (int i = 0; i < saveStates.size; i++) {
+                DebugSaveState state = saveStates.get(i);
+                boolean selected = selectedIndex == i + 1;
+                font.setColor(selected ? Color.YELLOW : Color.WHITE);
+                font.draw(batch, (selected ? "> " : "  ") + state.label + String.format(" @ %.2fs", state.time), x, y);
+                y -= lineHeight;
+            }
+        }
+
+        font.setColor(Color.GRAY);
+        font.draw(batch, "  Enter = jump   Del = remove", x, y);
+
+        font.setColor(Color.WHITE);
+    }
+
     private String weaponLabel(String weaponId) {
         if (weaponId == null) return "-";
         return switch (weaponId) {

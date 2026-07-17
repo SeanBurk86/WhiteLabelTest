@@ -27,6 +27,13 @@ public class GameController implements Disposable {
     private float bombCooldownTimer;
     private final float worldWidth, worldHeight;
 
+    private final DebugSaveStateManager debugSaveStateManager;
+    private boolean debugMenuOpen;
+    private int debugMenuSelectedIndex;
+    private float debugMenuSeekTime;
+
+    private static final float DEBUG_MENU_SCRUB_SPEED = 5f;
+
     private static final float BOMB_COOLDOWN = 15f;
 
     public GameController(float worldWidth, float worldHeight) {
@@ -41,6 +48,7 @@ public class GameController implements Disposable {
 
         this.scoreManager = new ScoreManager();
         this.spawnScheduler = new SpawnScheduler(worldWidth, worldHeight, assets);
+        this.debugSaveStateManager = new DebugSaveStateManager();
 
         if (System.getProperty("debug") != null ||
             java.lang.management.ManagementFactory.getRuntimeMXBean().getInputArguments().toString().contains("-agentlib:jdwp")) {
@@ -64,6 +72,19 @@ public class GameController implements Disposable {
 
         if (debugMode && input.isDebugRestartJustPressed()) {
             reset();
+            return;
+        }
+
+        if (debugMode && input.isDebugMenuToggleJustPressed()) {
+            debugMenuOpen = !debugMenuOpen;
+            if (debugMenuOpen) {
+                debugMenuSeekTime = spawnScheduler.getTotalTime();
+                debugMenuSelectedIndex = 0;
+            }
+        }
+
+        if (debugMenuOpen) {
+            handleDebugMenuInput(delta);
             return;
         }
 
@@ -114,6 +135,40 @@ public class GameController implements Disposable {
         collisionManager.checkBulletPowerupCollisions(entities.getBullets(), entities.getPowerups(), assets);
 
         collisionManager.checkBulletEnemyCollisions(entities.getBullets(), entities.getEnemies(), audio, entities, assets, worldWidth, worldHeight, scoreManager);
+    }
+
+    private void handleDebugMenuInput(float delta) {
+        int bookmarkCount = debugSaveStateManager.getSaveStates().size;
+        int totalRows = 1 + bookmarkCount; // row 0 = seek-time editor, rows 1..N = bookmarks
+
+        if (input.isDebugMenuUpJustPressed()) {
+            debugMenuSelectedIndex = (debugMenuSelectedIndex - 1 + totalRows) % totalRows;
+        }
+        if (input.isDebugMenuDownJustPressed()) {
+            debugMenuSelectedIndex = (debugMenuSelectedIndex + 1) % totalRows;
+        }
+
+        if (debugMenuSelectedIndex == 0) {
+            if (input.isDebugMenuLeftPressed()) debugMenuSeekTime = Math.max(0f, debugMenuSeekTime - DEBUG_MENU_SCRUB_SPEED * delta);
+            if (input.isDebugMenuRightPressed()) debugMenuSeekTime += DEBUG_MENU_SCRUB_SPEED * delta;
+            if (input.isDebugMenuConfirmJustPressed()) seekToTime(debugMenuSeekTime);
+            if (input.isDebugMenuNewBookmarkJustPressed()) debugSaveStateManager.addSaveState("Bookmark", debugMenuSeekTime);
+        } else {
+            int bookmarkIndex = debugMenuSelectedIndex - 1;
+            if (input.isDebugMenuConfirmJustPressed()) {
+                seekToTime(debugSaveStateManager.getSaveStates().get(bookmarkIndex).time);
+            }
+            if (input.isDebugMenuDeleteJustPressed()) {
+                debugSaveStateManager.removeSaveState(bookmarkIndex);
+                debugMenuSelectedIndex = Math.max(0, debugMenuSelectedIndex - 1);
+            }
+        }
+    }
+
+    private void seekToTime(float targetTime) {
+        spawnScheduler.seekTo(targetTime);
+        entities.clearWorld();
+        debugMenuOpen = false;
     }
 
     private void handleGameOverInput() {
@@ -230,6 +285,11 @@ public class GameController implements Disposable {
     public boolean isGameOver() { return gameOver; }
     public boolean isLevelComplete() { return levelComplete; }
     public boolean isDebugMode() { return debugMode; }
+    public boolean isDebugMenuOpen() { return debugMenuOpen; }
+    public int getDebugMenuSelectedIndex() { return debugMenuSelectedIndex; }
+    public float getDebugMenuSeekTime() { return debugMenuSeekTime; }
+    public float getSpawnScheduleTotalTime() { return spawnScheduler.getTotalTime(); }
+    public Array<DebugSaveState> getDebugSaveStates() { return debugSaveStateManager.getSaveStates(); }
     public float getLevelStartTimer() { return levelStartTimer; }
     public Array<TextCue> getTextCues() { return spawnScheduler.getTextCues(); }
     public float getBombCooldownTimer() { return Math.max(bombCooldownTimer, 0f); }

@@ -15,6 +15,14 @@ public class InputManager {
     private boolean quitJustPressed;
     private boolean debugToggleJustPressed;
     private boolean debugRestartJustPressed;
+    private boolean debugMenuToggleJustPressed;
+    private boolean debugMenuUpJustPressed;
+    private boolean debugMenuDownJustPressed;
+    private boolean debugMenuLeftPressed;
+    private boolean debugMenuRightPressed;
+    private boolean debugMenuConfirmJustPressed;
+    private boolean debugMenuDeleteJustPressed;
+    private boolean debugMenuNewBookmarkJustPressed;
 
     private InputType activeInput = InputType.KEYBOARD;
     private boolean prevBombButton;
@@ -33,6 +41,14 @@ public class InputManager {
         quitJustPressed = false;
         debugToggleJustPressed = false;
         debugRestartJustPressed = false;
+        debugMenuToggleJustPressed = false;
+        debugMenuUpJustPressed = false;
+        debugMenuDownJustPressed = false;
+        debugMenuLeftPressed = false;
+        debugMenuRightPressed = false;
+        debugMenuConfirmJustPressed = false;
+        debugMenuDeleteJustPressed = false;
+        debugMenuNewBookmarkJustPressed = false;
 
         if (activeInput == InputType.KEYBOARD) {
             if (Gdx.input.isKeyPressed(Input.Keys.LEFT)) moveDirection.x -= 1;
@@ -76,9 +92,17 @@ public class InputManager {
             }
         }
 
-        // Debug toggle/restart always available regardless of input mode
+        // Debug toggle/restart/menu always available regardless of input mode
         debugToggleJustPressed = Gdx.input.isKeyJustPressed(Input.Keys.F12);
         debugRestartJustPressed = Gdx.input.isKeyJustPressed(Input.Keys.F9);
+        debugMenuToggleJustPressed = Gdx.input.isKeyJustPressed(Input.Keys.F1);
+        debugMenuUpJustPressed = Gdx.input.isKeyJustPressed(Input.Keys.UP);
+        debugMenuDownJustPressed = Gdx.input.isKeyJustPressed(Input.Keys.DOWN);
+        debugMenuLeftPressed = Gdx.input.isKeyPressed(Input.Keys.LEFT);
+        debugMenuRightPressed = Gdx.input.isKeyPressed(Input.Keys.RIGHT);
+        debugMenuConfirmJustPressed = Gdx.input.isKeyJustPressed(Input.Keys.ENTER);
+        debugMenuDeleteJustPressed = Gdx.input.isKeyJustPressed(Input.Keys.FORWARD_DEL);
+        debugMenuNewBookmarkJustPressed = Gdx.input.isKeyJustPressed(Input.Keys.N);
 
         if (moveDirection.len() > 1.0f) {
             moveDirection.nor();
@@ -93,4 +117,12 @@ public class InputManager {
     public boolean isQuitJustPressed() { return quitJustPressed; }
     public boolean isDebugToggleJustPressed() { return debugToggleJustPressed; }
     public boolean isDebugRestartJustPressed() { return debugRestartJustPressed; }
+    public boolean isDebugMenuToggleJustPressed() { return debugMenuToggleJustPressed; }
+    public boolean isDebugMenuUpJustPressed() { return debugMenuUpJustPressed; }
+    public boolean isDebugMenuDownJustPressed() { return debugMenuDownJustPressed; }
+    public boolean isDebugMenuLeftPressed() { return debugMenuLeftPressed; }
+    public boolean isDebugMenuRightPressed() { return debugMenuRightPressed; }
+    public boolean isDebugMenuConfirmJustPressed() { return debugMenuConfirmJustPressed; }
+    public boolean isDebugMenuDeleteJustPressed() { return debugMenuDeleteJustPressed; }
+    public boolean isDebugMenuNewBookmarkJustPressed() { return debugMenuNewBookmarkJustPressed; }
 }
