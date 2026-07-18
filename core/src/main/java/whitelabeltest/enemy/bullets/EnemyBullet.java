@@ -18,6 +18,12 @@ public interface EnemyBullet extends Pool.Poolable {
      *  code should treat that as a plain AABB check and only do rotated-rect math otherwise. */
     default float getRotation() { return 0f; }
 
+    /** Radius of a circular hitbox centered on getRectangle()'s center, for a bullet round enough
+     *  that a circle fits it better than its bounding box. -1 (the default) means "not circular" -
+     *  collision code falls back to getRectangle() (and getRotation(), if set) instead. A beam
+     *  like LaserBullet stays rectangular since a circle can't represent its shape. */
+    default float getHitRadius() { return -1f; }
+
     /** The enemy that fired this bullet, if any - lets the player's reflect shield bounce a
      *  bullet back at its own source. May be stale (the enemy could since have died and its
      *  pooled instance been reused) - callers should check isActive() before homing on it. */

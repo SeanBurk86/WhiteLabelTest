@@ -60,6 +60,11 @@ public class BasicEnemyBullet implements EnemyBullet {
     }
 
     @Override
+    public float getHitRadius() {
+        return Math.min(rectangle.width, rectangle.height) / 2f;
+    }
+
+    @Override
     public int getDamage() {
         return damage;
     }

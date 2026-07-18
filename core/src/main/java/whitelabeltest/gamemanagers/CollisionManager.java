@@ -87,6 +87,15 @@ public class CollisionManager {
 
     private boolean overlaps(Circle circle, EnemyBullet bullet) {
         Rectangle rect = bullet.getRectangle();
+
+        float hitRadius = bullet.getHitRadius();
+        if (hitRadius >= 0f) {
+            float dx = circle.x - (rect.x + rect.width / 2f);
+            float dy = circle.y - (rect.y + rect.height / 2f);
+            float radiusSum = circle.radius + hitRadius;
+            return dx * dx + dy * dy <= radiusSum * radiusSum;
+        }
+
         float rotation = bullet.getRotation();
         if (rotation == 0f) return Intersector.overlaps(circle, rect);
 
