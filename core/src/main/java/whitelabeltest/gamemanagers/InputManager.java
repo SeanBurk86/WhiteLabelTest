@@ -25,6 +25,7 @@ public class InputManager {
     private boolean debugMenuConfirmJustPressed;
     private boolean debugMenuDeleteJustPressed;
     private boolean debugMenuNewBookmarkJustPressed;
+    private boolean debugMuteJustPressed;
 
     private InputType activeInput = InputType.KEYBOARD;
     private boolean prevBombButton;
@@ -53,6 +54,7 @@ public class InputManager {
         debugMenuConfirmJustPressed = false;
         debugMenuDeleteJustPressed = false;
         debugMenuNewBookmarkJustPressed = false;
+        debugMuteJustPressed = false;
 
         if (activeInput == InputType.KEYBOARD) {
             if (Gdx.input.isKeyPressed(Input.Keys.LEFT)) moveDirection.x -= 1;
@@ -109,6 +111,7 @@ public class InputManager {
         debugMenuConfirmJustPressed = Gdx.input.isKeyJustPressed(Input.Keys.ENTER);
         debugMenuDeleteJustPressed = Gdx.input.isKeyJustPressed(Input.Keys.FORWARD_DEL);
         debugMenuNewBookmarkJustPressed = Gdx.input.isKeyJustPressed(Input.Keys.N);
+        debugMuteJustPressed = Gdx.input.isKeyJustPressed(Input.Keys.M);
 
         if (moveDirection.len() > 1.0f) {
             moveDirection.nor();
@@ -133,4 +136,5 @@ public class InputManager {
     public boolean isDebugMenuConfirmJustPressed() { return debugMenuConfirmJustPressed; }
     public boolean isDebugMenuDeleteJustPressed() { return debugMenuDeleteJustPressed; }
     public boolean isDebugMenuNewBookmarkJustPressed() { return debugMenuNewBookmarkJustPressed; }
+    public boolean isDebugMuteJustPressed() { return debugMuteJustPressed; }
 }

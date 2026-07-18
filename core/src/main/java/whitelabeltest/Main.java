@@ -129,10 +129,14 @@ public class Main extends ApplicationAdapter {
             ui.drawLevelComplete(spriteBatch, PLAY_AREA_WIDTH, PLAY_AREA_HEIGHT, game.getScore());
         }
 
+        if (game.isDebugMode() && game.isAudioMuted() && !game.isDebugMenuOpen()) {
+            ui.drawDebugMuteIndicator(spriteBatch, leftX, PLAY_AREA_HEIGHT);
+        }
+
         if (game.isDebugMode() && game.isDebugMenuOpen()) {
             ui.drawDebugMenu(spriteBatch, PLAY_AREA_WIDTH, PLAY_AREA_HEIGHT, game.getSpawnScheduleTotalTime(),
                 game.getDebugMenuSeekTime(), game.getDebugMenuSelectedIndex(), game.getDebugSaveStates(),
-                game.getEntities().getPlayer());
+                game.getEntities().getPlayer(), game.isAudioMuted());
         }
         spriteBatch.end();
 

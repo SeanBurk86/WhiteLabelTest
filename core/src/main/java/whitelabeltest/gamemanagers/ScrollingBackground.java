@@ -11,6 +11,7 @@ public class ScrollingBackground {
     private final float worldWidth;
     private final float worldHeight;
     private boolean stopped;
+    private boolean muted;
 
     public ScrollingBackground(float worldWidth, float worldHeight) {
         this.worldWidth = worldWidth;
@@ -26,10 +27,16 @@ public class ScrollingBackground {
             String videoFile = "level1.webm";
             videoPlayer.load(Gdx.files.internal(videoFile));
             videoPlayer.setLooping(true);
+            videoPlayer.setVolume(muted ? 0f : 1f);
             videoPlayer.play();
         } catch (Exception e) {
             Gdx.app.error("Video", "Could not play background video file", e);
         }
+    }
+
+    public void setMuted(boolean muted) {
+        this.muted = muted;
+        if (videoPlayer != null) videoPlayer.setVolume(muted ? 0f : 1f);
     }
 
     /** Stops the background video (e.g. on game over) until reset() restarts it. */

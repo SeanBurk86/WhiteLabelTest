@@ -140,10 +140,18 @@ public class UIManager implements Disposable {
     private static final String[] DEBUG_WEAPON_LEVEL_LABELS = {"Basic Lvl", "Fast Lvl", "Bolt Lvl", "Orbit Lvl"};
     private static final int DEBUG_ROW_BOOKMARKS_START = DEBUG_ROW_LEVELS_START + DEBUG_WEAPON_LEVEL_IDS.length;
 
+    // Debug-only: shows a "MUTED" badge in the left panel when audio is silenced.
+    public void drawDebugMuteIndicator(SpriteBatch batch, float leftPanelX, float worldHeight) {
+        font.setColor(Color.ORANGE);
+        font.draw(batch, "MUTED", leftPanelX + 0.2f, worldHeight * 0.5f);
+        font.setColor(Color.WHITE);
+    }
+
     // Debug-only: F1 menu for jumping the spawn schedule clock to a chosen time or a saved
     // bookmark, and for setting equipped weapons/slots and their levels.
     public void drawDebugMenu(SpriteBatch batch, float worldWidth, float worldHeight, float scheduleTime,
-                               float seekTime, int selectedIndex, Array<DebugSaveState> saveStates, Player player) {
+                               float seekTime, int selectedIndex, Array<DebugSaveState> saveStates, Player player,
+                               boolean audioMuted) {
         batch.setColor(0f, 0f, 0f, 0.75f);
         batch.draw(whitePixel, 0, 0, worldWidth, worldHeight);
         batch.setColor(Color.WHITE);
@@ -154,6 +162,9 @@ public class UIManager implements Disposable {
 
         font.setColor(Color.YELLOW);
         font.draw(batch, "DEBUG MENU (F1 to close)", x, y);
+        y -= lineHeight;
+        font.setColor(audioMuted ? Color.ORANGE : Color.GRAY);
+        font.draw(batch, (audioMuted ? "Sound: MUTED" : "Sound: ON") + "  (M to toggle)", x, y);
         y -= lineHeight;
         font.setColor(Color.WHITE);
         font.draw(batch, String.format("Schedule time: %.2fs", scheduleTime), x, y);

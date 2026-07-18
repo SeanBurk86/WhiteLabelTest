@@ -81,6 +81,12 @@ public class GameController implements Disposable {
             debugMode = !debugMode;
         }
 
+        if (debugMode && input.isDebugMuteJustPressed()) {
+            boolean nowMuted = !audio.isMuted();
+            audio.setMuted(nowMuted);
+            background.setMuted(nowMuted);
+        }
+
         if (debugMode && input.isDebugRestartJustPressed()) {
             reset();
             return;
@@ -327,4 +333,5 @@ public class GameController implements Disposable {
     public float getBombCooldownFraction() { return Math.max(bombCooldownTimer, 0f) / BOMB_COOLDOWN; }
     public EntityManager getEntities() { return entities; }
     public CollisionManager getCollisionManager() { return collisionManager; }
+    public boolean isAudioMuted() { return audio.isMuted(); }
 }

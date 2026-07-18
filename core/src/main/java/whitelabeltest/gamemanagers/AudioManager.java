@@ -9,6 +9,8 @@ import com.badlogic.gdx.utils.Json;
 import com.badlogic.gdx.utils.ObjectMap;
 
 public class AudioManager implements Disposable {
+    private boolean muted;
+
     private final Sound playerDeathSound;
     private final Sound bombSound;
     private final Sound gameOverSound;
@@ -66,24 +68,27 @@ public class AudioManager implements Disposable {
         soundsArray.put(sBank.level, tempArray);
     }
 
+    public void setMuted(boolean muted) { this.muted = muted; }
+    public boolean isMuted() { return muted; }
+
     public void playPlayerDeath() {
-        playerDeathSound.play();
+        if (!muted) playerDeathSound.play();
     }
 
     public void playBomb() {
-        bombSound.play();
+        if (!muted) bombSound.play();
     }
 
     public void playGameOver() {
-        gameOverSound.play();
+        if (!muted) gameOverSound.play();
     }
 
     public void playPowerup() {
-        powerupSound.play();
+        if (!muted) powerupSound.play();
     }
 
     public void playVictory() {
-        victoryFanfare.play();
+        if (!muted) victoryFanfare.play();
     }
 
     public void stopVictory() {
@@ -92,23 +97,23 @@ public class AudioManager implements Disposable {
     }
 
     public void playExplosion() {
-        if (explosionSounds != null) explosionSounds.get(1).random().play();
+        if (!muted && explosionSounds != null) explosionSounds.get(1).random().play();
     }
 
     public void playBasicWeaponSound(int level) {
-        if (basicWeaponSounds != null && basicWeaponSounds.containsKey(level)) basicWeaponSounds.get(level).random().play();
+        if (!muted && basicWeaponSounds != null && basicWeaponSounds.containsKey(level)) basicWeaponSounds.get(level).random().play();
     }
 
     public void playWaveBlastWeaponSound(int level) {
-        if (waveBlastWeaponSounds != null && waveBlastWeaponSounds.containsKey(level)) waveBlastWeaponSounds.get(level).random().play();
+        if (!muted && waveBlastWeaponSounds != null && waveBlastWeaponSounds.containsKey(level)) waveBlastWeaponSounds.get(level).random().play();
     }
 
     public void playOrbitWeaponSound(int level) {
-        if (orbitWeaponSounds != null && orbitWeaponSounds.containsKey(level)) orbitWeaponSounds.get(level).random().play();
+        if (!muted && orbitWeaponSounds != null && orbitWeaponSounds.containsKey(level)) orbitWeaponSounds.get(level).random().play();
     }
 
     public void playThunderboltWeaponSound(int level) {
-        if (thunderboltWeaponSounds != null && thunderboltWeaponSounds.containsKey(level)) thunderboltWeaponSounds.get(level).random().play();
+        if (!muted && thunderboltWeaponSounds != null && thunderboltWeaponSounds.containsKey(level)) thunderboltWeaponSounds.get(level).random().play();
     }
 
     @Override
