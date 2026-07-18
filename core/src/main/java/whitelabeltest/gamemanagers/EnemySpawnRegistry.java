@@ -29,11 +29,11 @@ public final class EnemySpawnRegistry {
         return (assets != null && path != null) ? assets.getTexture(path) : null;
     }
 
-    public static void spawn(String enemyTypeId, float x, float y) {
-        if (assets == null || enemies == null || enemyTypeId == null) return;
+    public static GenericEnemy spawn(String enemyTypeId, float x, float y) {
+        if (assets == null || enemies == null || enemyTypeId == null) return null;
 
         EnemyDefinition def = assets.getEnemyDefinition(enemyTypeId);
-        if (def == null) return;
+        if (def == null) return null;
 
         Texture texture = assets.getTexture(def.texture);
         Texture bulletTexture = assets.getTexture(def.bulletTexture);
@@ -43,5 +43,6 @@ public final class EnemySpawnRegistry {
         GenericEnemy enemy = ObjectPools.genericEnemyPool.obtain();
         enemy.initWithDefinition(def, texture, bulletTexture, spawnTexture, deathTexture, worldWidth, worldHeight, x, y);
         enemies.add(enemy);
+        return enemy;
     }
 }

@@ -29,6 +29,7 @@ public class GameController implements Disposable {
     private final float worldWidth, worldHeight;
 
     private final DebugSaveStateManager debugSaveStateManager;
+    private final PatternPreviewer patternPreviewer = new PatternPreviewer();
     private boolean debugMenuOpen;
     private int debugMenuSelectedIndex;
     private float debugMenuSeekTime;
@@ -36,13 +37,14 @@ public class GameController implements Disposable {
     private static final float DEBUG_MENU_SCRUB_SPEED = 5f;
 
     // Debug menu row layout: 0 = seek-time editor, 1-2 = weapon slot pickers, 3-6 = weapon
-    // levels, 7+ = saved bookmarks. Kept in sync with UIManager.drawDebugMenu's own row constants.
+    // levels, 7 = pattern previewer, 8+ = saved bookmarks. Kept in sync with UIManager.drawDebugMenu's own row constants.
     private static final int ROW_SEEK = 0;
     private static final int ROW_SLOT1 = 1;
     private static final int ROW_SLOT2 = 2;
     private static final int ROW_LEVELS_START = 3;
     private static final String[] WEAPON_LEVEL_IDS = {"BasicWeapon", "WaveBlastWeapon", "Thunderbolt", "OrbitWeapon"};
-    private static final int ROW_BOOKMARKS_START = ROW_LEVELS_START + WEAPON_LEVEL_IDS.length;
+    private static final int ROW_PATTERN_PREVIEW = ROW_LEVELS_START + WEAPON_LEVEL_IDS.length;
+    private static final int ROW_BOOKMARKS_START = ROW_PATTERN_PREVIEW + 1;
     private static final String[] SLOT_WEAPON_OPTIONS = {null, "BasicWeapon", "WaveBlastWeapon", "OrbitWeapon", "Thunderbolt"};
 
     private static final float BOMB_COOLDOWN = 15f;
@@ -97,11 +99,14 @@ public class GameController implements Disposable {
             if (debugMenuOpen) {
                 debugMenuSeekTime = spawnScheduler.getTotalTime();
                 debugMenuSelectedIndex = 0;
+            } else {
+                patternPreviewer.close(entities);
             }
         }
 
         if (debugMenuOpen) {
             handleDebugMenuInput(delta);
+            patternPreviewer.tick(delta, entities);
             return;
         }
 
@@ -155,6 +160,14 @@ public class GameController implements Disposable {
     }
 
     private void handleDebugMenuInput(float delta) {
+        if (patternPreviewer.isActive()) {
+            patternPreviewer.handleInput(input);
+            if (input.isDebugMenuDeleteJustPressed()) {
+                patternPreviewer.close(entities);
+            }
+            return;
+        }
+
         int bookmarkCount = debugSaveStateManager.getSaveStates().size;
         int totalRows = ROW_BOOKMARKS_START + bookmarkCount;
 
@@ -174,6 +187,10 @@ public class GameController implements Disposable {
             int slot = debugMenuSelectedIndex - ROW_SLOT1;
             if (input.isDebugMenuLeftJustPressed()) cycleSlotWeapon(slot, -1);
             if (input.isDebugMenuRightJustPressed()) cycleSlotWeapon(slot, 1);
+        } else if (debugMenuSelectedIndex == ROW_PATTERN_PREVIEW) {
+            if (input.isDebugMenuConfirmJustPressed()) {
+                patternPreviewer.open(entities, worldWidth, worldHeight);
+            }
         } else if (debugMenuSelectedIndex < ROW_BOOKMARKS_START) {
             String weaponId = WEAPON_LEVEL_IDS[debugMenuSelectedIndex - ROW_LEVELS_START];
             Player player = entities.getPlayer();
@@ -299,6 +316,7 @@ public class GameController implements Disposable {
         levelStartTimer = 0f;
         bombCooldownTimer = 0f;
         audio.stopVictory();
+        patternPreviewer.close(entities);
         entities.reset();
         collisionManager.reset();
         background.reset();
@@ -332,6 +350,8 @@ public class GameController implements Disposable {
     public float getBombCooldownTimer() { return Math.max(bombCooldownTimer, 0f); }
     public float getBombCooldownFraction() { return Math.max(bombCooldownTimer, 0f) / BOMB_COOLDOWN; }
     public EntityManager getEntities() { return entities; }
+    public boolean isPatternPreviewActive() { return patternPreviewer.isActive(); }
+    public PatternPreviewer getPatternPreviewer() { return patternPreviewer; }
     public CollisionManager getCollisionManager() { return collisionManager; }
     public boolean isAudioMuted() { return audio.isMuted(); }
 }

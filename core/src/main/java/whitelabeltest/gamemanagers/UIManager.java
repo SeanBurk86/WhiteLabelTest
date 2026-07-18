@@ -138,7 +138,8 @@ public class UIManager implements Disposable {
     private static final int DEBUG_ROW_LEVELS_START = 3;
     private static final String[] DEBUG_WEAPON_LEVEL_IDS = {"BasicWeapon", "WaveBlastWeapon", "Thunderbolt", "OrbitWeapon"};
     private static final String[] DEBUG_WEAPON_LEVEL_LABELS = {"Basic Lvl", "Fast Lvl", "Bolt Lvl", "Orbit Lvl"};
-    private static final int DEBUG_ROW_BOOKMARKS_START = DEBUG_ROW_LEVELS_START + DEBUG_WEAPON_LEVEL_IDS.length;
+    private static final int DEBUG_ROW_PATTERN_PREVIEW = DEBUG_ROW_LEVELS_START + DEBUG_WEAPON_LEVEL_IDS.length;
+    private static final int DEBUG_ROW_BOOKMARKS_START = DEBUG_ROW_PATTERN_PREVIEW + 1;
 
     // Debug-only: shows a "MUTED" badge in the left panel when audio is silenced.
     public void drawDebugMuteIndicator(SpriteBatch batch, float leftPanelX, float worldHeight) {
@@ -198,6 +199,14 @@ public class UIManager implements Disposable {
         font.draw(batch, "  </> adjust level", x, y);
         y -= lineHeight * 1.5f;
 
+        boolean previewSelected = selectedIndex == DEBUG_ROW_PATTERN_PREVIEW;
+        font.setColor(previewSelected ? Color.YELLOW : Color.WHITE);
+        font.draw(batch, (previewSelected ? "> " : "  ") + "Pattern Preview", x, y);
+        y -= lineHeight;
+        font.setColor(Color.GRAY);
+        font.draw(batch, "  Enter = open live pattern editor", x, y);
+        y -= lineHeight * 1.5f;
+
         font.setColor(Color.WHITE);
         font.draw(batch, "Bookmarks:", x, y);
         y -= lineHeight;
@@ -218,6 +227,76 @@ public class UIManager implements Disposable {
 
         font.setColor(Color.GRAY);
         font.draw(batch, "  Enter = jump   Del = remove", x, y);
+
+        font.setColor(Color.WHITE);
+    }
+
+    // Debug-only: live editor for a movement/firing pattern's numeric fields, opened from the
+    // "Pattern Preview" row of the main debug menu. See PatternPreviewer for the row layout.
+    public void drawPatternPreview(SpriteBatch batch, float worldWidth, float worldHeight, PatternPreviewer previewer) {
+        batch.setColor(0f, 0f, 0f, 0.75f);
+        batch.draw(whitePixel, 0, 0, worldWidth, worldHeight);
+        batch.setColor(Color.WHITE);
+
+        float x = 0.4f;
+        float y = worldHeight - 0.5f;
+        float lineHeight = 0.4f;
+
+        font.setColor(Color.YELLOW);
+        font.draw(batch, "PATTERN PREVIEW (Del to close)", x, y);
+        y -= lineHeight * 1.5f;
+
+        int selectedRow = previewer.getSelectedRow();
+
+        font.setColor(selectedRow == PatternPreviewer.ROW_MOVEMENT_ID ? Color.YELLOW : Color.WHITE);
+        font.draw(batch, (selectedRow == PatternPreviewer.ROW_MOVEMENT_ID ? "> " : "  ") + "Movement: " + previewer.getMovementId(), x, y);
+        y -= lineHeight;
+        font.setColor(selectedRow == PatternPreviewer.ROW_FIRING_ID ? Color.YELLOW : Color.WHITE);
+        font.draw(batch, (selectedRow == PatternPreviewer.ROW_FIRING_ID ? "> " : "  ") + "Firing: " + previewer.getFiringId(), x, y);
+        y -= lineHeight;
+        font.setColor(Color.GRAY);
+        font.draw(batch, "  </> cycle pattern id", x, y);
+        y -= lineHeight * 1.5f;
+
+        Array<String> movementFields = previewer.getMovementFieldLabels();
+        Array<String> firingFields = previewer.getFiringFieldLabels();
+
+        font.setColor(Color.WHITE);
+        font.draw(batch, "Movement fields:", x, y);
+        y -= lineHeight;
+        if (movementFields.size == 0) {
+            font.setColor(Color.GRAY);
+            font.draw(batch, "  (none editable for this pattern type)", x, y);
+            y -= lineHeight;
+        } else {
+            for (int i = 0; i < movementFields.size; i++) {
+                boolean selected = selectedRow == PatternPreviewer.FIELD_ROWS_START + i;
+                font.setColor(selected ? Color.YELLOW : Color.WHITE);
+                font.draw(batch, (selected ? "> " : "  ") + movementFields.get(i), x, y);
+                y -= lineHeight;
+            }
+        }
+        y -= lineHeight * 0.5f;
+
+        font.setColor(Color.WHITE);
+        font.draw(batch, "Firing fields:", x, y);
+        y -= lineHeight;
+        if (firingFields.size == 0) {
+            font.setColor(Color.GRAY);
+            font.draw(batch, "  (none editable for this pattern type)", x, y);
+            y -= lineHeight;
+        } else {
+            for (int i = 0; i < firingFields.size; i++) {
+                boolean selected = selectedRow == PatternPreviewer.FIELD_ROWS_START + movementFields.size + i;
+                font.setColor(selected ? Color.YELLOW : Color.WHITE);
+                font.draw(batch, (selected ? "> " : "  ") + firingFields.get(i), x, y);
+                y -= lineHeight;
+            }
+        }
+        y -= lineHeight * 0.5f;
+
+        font.setColor(Color.GRAY);
+        font.draw(batch, "  </> adjust value   Up/Down = select row", x, y);
 
         font.setColor(Color.WHITE);
     }
