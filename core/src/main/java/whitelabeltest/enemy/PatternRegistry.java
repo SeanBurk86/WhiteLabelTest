@@ -46,6 +46,30 @@ public final class PatternRegistry {
         return id != null ? firingPatterns.get(id) : null;
     }
 
+    /** Registers (or overwrites) a movement pattern under an id — used by the debug pattern
+     *  previewer to install a live-edited working copy without touching the JSON-loaded set. */
+    public static void putMovement(String id, MovementPatternDef def) {
+        movementPatterns.put(id, def);
+    }
+
+    /** Registers (or overwrites) a firing pattern under an id — used by the debug pattern
+     *  previewer to install a live-edited working copy without touching the JSON-loaded set. */
+    public static void putFiring(String id, FiringPatternDef def) {
+        firingPatterns.put(id, def);
+    }
+
+    public static Array<String> getMovementIds() {
+        Array<String> ids = movementPatterns.keys().toArray();
+        ids.sort();
+        return ids;
+    }
+
+    public static Array<String> getFiringIds() {
+        Array<String> ids = firingPatterns.keys().toArray();
+        ids.sort();
+        return ids;
+    }
+
     public static BulletDef getBullet(String id) {
         return id != null ? bulletDefs.get(id) : null;
     }
