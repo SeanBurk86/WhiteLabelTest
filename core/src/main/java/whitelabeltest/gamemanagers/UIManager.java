@@ -201,10 +201,10 @@ public class UIManager implements Disposable {
 
         boolean previewSelected = selectedIndex == DEBUG_ROW_PATTERN_PREVIEW;
         font.setColor(previewSelected ? Color.YELLOW : Color.WHITE);
-        font.draw(batch, (previewSelected ? "> " : "  ") + "Pattern Preview", x, y);
+        font.draw(batch, (previewSelected ? "> " : "  ") + "Enemy / Pattern Editor", x, y);
         y -= lineHeight;
         font.setColor(Color.GRAY);
-        font.draw(batch, "  Enter = open live pattern editor", x, y);
+        font.draw(batch, "  Enter = create/edit enemies and patterns live", x, y);
         y -= lineHeight * 1.5f;
 
         font.setColor(Color.WHITE);
@@ -231,8 +231,13 @@ public class UIManager implements Disposable {
         font.setColor(Color.WHITE);
     }
 
-    // Debug-only: live editor for a movement/firing pattern's numeric fields, opened from the
-    // "Pattern Preview" row of the main debug menu. See PatternPreviewer for the row layout.
+    // Debug-only: live editor for enemies and their movement/firing pattern trees, opened from
+    // the "Enemy / Pattern Editor" row of the main debug menu. See PatternPreviewer for the row
+    // model - each row is either a header, a numeric/boolean/id field, a type switcher, or an
+    // action ("+ New X", "+ Add sub-pattern", "Save"). The row list can be long for a deeply
+    // nested boss pattern, so this scrolls a fixed-size window around the selected row.
+    private static final int PATTERN_EDITOR_VISIBLE_ROWS = 24;
+
     public void drawPatternPreview(SpriteBatch batch, float worldWidth, float worldHeight, PatternPreviewer previewer) {
         batch.setColor(0f, 0f, 0f, 0.75f);
         batch.draw(whitePixel, 0, 0, worldWidth, worldHeight);
@@ -240,63 +245,46 @@ public class UIManager implements Disposable {
 
         float x = 0.4f;
         float y = worldHeight - 0.5f;
-        float lineHeight = 0.4f;
+        float lineHeight = 0.35f;
 
         font.setColor(Color.YELLOW);
-        font.draw(batch, "PATTERN PREVIEW (Del to close)", x, y);
+        font.draw(batch, "ENEMY / PATTERN EDITOR", x, y);
         y -= lineHeight * 1.5f;
 
+        Array<PatternPreviewer.DisplayRow> displayRows = previewer.getDisplayRows();
         int selectedRow = previewer.getSelectedRow();
 
-        font.setColor(selectedRow == PatternPreviewer.ROW_MOVEMENT_ID ? Color.YELLOW : Color.WHITE);
-        font.draw(batch, (selectedRow == PatternPreviewer.ROW_MOVEMENT_ID ? "> " : "  ") + "Movement: " + previewer.getMovementId(), x, y);
-        y -= lineHeight;
-        font.setColor(selectedRow == PatternPreviewer.ROW_FIRING_ID ? Color.YELLOW : Color.WHITE);
-        font.draw(batch, (selectedRow == PatternPreviewer.ROW_FIRING_ID ? "> " : "  ") + "Firing: " + previewer.getFiringId(), x, y);
-        y -= lineHeight;
-        font.setColor(Color.GRAY);
-        font.draw(batch, "  </> cycle pattern id", x, y);
-        y -= lineHeight * 1.5f;
-
-        Array<String> movementFields = previewer.getMovementFieldLabels();
-        Array<String> firingFields = previewer.getFiringFieldLabels();
-
-        font.setColor(Color.WHITE);
-        font.draw(batch, "Movement fields:", x, y);
-        y -= lineHeight;
-        if (movementFields.size == 0) {
-            font.setColor(Color.GRAY);
-            font.draw(batch, "  (none editable for this pattern type)", x, y);
-            y -= lineHeight;
-        } else {
-            for (int i = 0; i < movementFields.size; i++) {
-                boolean selected = selectedRow == PatternPreviewer.FIELD_ROWS_START + i;
-                font.setColor(selected ? Color.YELLOW : Color.WHITE);
-                font.draw(batch, (selected ? "> " : "  ") + movementFields.get(i), x, y);
-                y -= lineHeight;
-            }
+        int start = 0;
+        if (displayRows.size > PATTERN_EDITOR_VISIBLE_ROWS) {
+            start = MathUtils.clamp(selectedRow - PATTERN_EDITOR_VISIBLE_ROWS / 2, 0, displayRows.size - PATTERN_EDITOR_VISIBLE_ROWS);
         }
-        y -= lineHeight * 0.5f;
+        int end = Math.min(displayRows.size, start + PATTERN_EDITOR_VISIBLE_ROWS);
 
-        font.setColor(Color.WHITE);
-        font.draw(batch, "Firing fields:", x, y);
-        y -= lineHeight;
-        if (firingFields.size == 0) {
+        if (start > 0) {
             font.setColor(Color.GRAY);
-            font.draw(batch, "  (none editable for this pattern type)", x, y);
+            font.draw(batch, "  ^ more above ^", x, y);
             y -= lineHeight;
-        } else {
-            for (int i = 0; i < firingFields.size; i++) {
-                boolean selected = selectedRow == PatternPreviewer.FIELD_ROWS_START + movementFields.size + i;
-                font.setColor(selected ? Color.YELLOW : Color.WHITE);
-                font.draw(batch, (selected ? "> " : "  ") + firingFields.get(i), x, y);
-                y -= lineHeight;
-            }
         }
-        y -= lineHeight * 0.5f;
 
+        for (int i = start; i < end; i++) {
+            PatternPreviewer.DisplayRow row = displayRows.get(i);
+            boolean selected = i == selectedRow;
+            font.setColor(selected ? Color.YELLOW : Color.WHITE);
+            font.draw(batch, (selected ? "> " : "  ") + "  ".repeat(row.indent) + row.label, x, y);
+            y -= lineHeight;
+        }
+
+        if (end < displayRows.size) {
+            font.setColor(Color.GRAY);
+            font.draw(batch, "  v more below v", x, y);
+            y -= lineHeight;
+        }
+
+        y -= lineHeight * 0.5f;
         font.setColor(Color.GRAY);
-        font.draw(batch, "  </> adjust value   Up/Down = select row", x, y);
+        font.draw(batch, "Up/Down select   </> adjust or cycle   Enter = confirm/new id", x, y);
+        y -= lineHeight;
+        font.draw(batch, "Del = remove sub-pattern (or close screen if nothing to remove)", x, y);
 
         font.setColor(Color.WHITE);
     }

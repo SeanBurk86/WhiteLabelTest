@@ -37,7 +37,7 @@ public class GameController implements Disposable {
     private static final float DEBUG_MENU_SCRUB_SPEED = 5f;
 
     // Debug menu row layout: 0 = seek-time editor, 1-2 = weapon slot pickers, 3-6 = weapon
-    // levels, 7 = pattern previewer, 8+ = saved bookmarks. Kept in sync with UIManager.drawDebugMenu's own row constants.
+    // levels, 7 = enemy/pattern editor, 8+ = saved bookmarks. Kept in sync with UIManager.drawDebugMenu's own row constants.
     private static final int ROW_SEEK = 0;
     private static final int ROW_SLOT1 = 1;
     private static final int ROW_SLOT2 = 2;
@@ -161,8 +161,8 @@ public class GameController implements Disposable {
 
     private void handleDebugMenuInput(float delta) {
         if (patternPreviewer.isActive()) {
-            patternPreviewer.handleInput(input);
-            if (input.isDebugMenuDeleteJustPressed()) {
+            boolean deleteConsumed = patternPreviewer.handleInput(input);
+            if (input.isDebugMenuDeleteJustPressed() && !deleteConsumed) {
                 patternPreviewer.close(entities);
             }
             return;
@@ -189,7 +189,7 @@ public class GameController implements Disposable {
             if (input.isDebugMenuRightJustPressed()) cycleSlotWeapon(slot, 1);
         } else if (debugMenuSelectedIndex == ROW_PATTERN_PREVIEW) {
             if (input.isDebugMenuConfirmJustPressed()) {
-                patternPreviewer.open(entities, worldWidth, worldHeight);
+                patternPreviewer.open(entities, assets, worldWidth, worldHeight);
             }
         } else if (debugMenuSelectedIndex < ROW_BOOKMARKS_START) {
             String weaponId = WEAPON_LEVEL_IDS[debugMenuSelectedIndex - ROW_LEVELS_START];

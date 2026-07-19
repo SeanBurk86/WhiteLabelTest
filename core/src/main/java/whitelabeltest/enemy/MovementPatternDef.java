@@ -30,8 +30,8 @@ public class MovementPatternDef implements Json.Serializable {
         if (!Float.isNaN(targetX)) json.writeValue("targetX", targetX);
         if (!Float.isNaN(targetY)) json.writeValue("targetY", targetY);
         json.writeValue("duration", duration);
-        if (patterns != null) json.writeValue("patterns", patterns);
-        if (pattern != null) json.writeValue("pattern", pattern);
+        if (patterns != null) json.writeValue("patterns", patterns, Array.class, MovementPatternDef.class);
+        if (pattern != null) json.writeValue("pattern", pattern, MovementPatternDef.class);
         if (offsetX != 0f) json.writeValue("offsetX", offsetX);
         if (offsetY != 0f) json.writeValue("offsetY", offsetY);
     }

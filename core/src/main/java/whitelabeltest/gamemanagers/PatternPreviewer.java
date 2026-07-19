@@ -1,7 +1,14 @@
 package whitelabeltest.gamemanagers;
 
+import com.badlogic.gdx.Gdx;
+import com.badlogic.gdx.Input;
+import com.badlogic.gdx.files.FileHandle;
+import com.badlogic.gdx.math.MathUtils;
 import com.badlogic.gdx.utils.Array;
+import com.badlogic.gdx.utils.Json;
+import com.badlogic.gdx.utils.JsonWriter;
 import whitelabeltest.enemy.BulletDef;
+import whitelabeltest.enemy.EnemyDefinition;
 import whitelabeltest.enemy.FiringPatternDef;
 import whitelabeltest.enemy.GenericEnemy;
 import whitelabeltest.enemy.MovementPatternDef;
@@ -13,70 +20,96 @@ import whitelabeltest.enemy.movementpatterns.MovementPattern;
 import whitelabeltest.enemy.movementpatterns.MoveToPointMovement;
 import whitelabeltest.enemy.movementpatterns.SeekingMovement;
 
-/** Debug-only tool: pick a movement/firing pattern id from the JSON-loaded registry, tweak its
- *  numeric fields, and watch a dedicated preview enemy react live. Every edit installs the
- *  working copy into PatternRegistry (see putMovement/putFiring) and rebuilds the preview
- *  enemy's running pattern instances via GenericEnemy.refreshPreviewPatterns, so the change is
- *  visible immediately without touching the JSON-loaded set or restarting the game.
- *
- *  Scoped to editing an existing pattern's numeric fields, not its type or nested
- *  sub-patterns (Sequence/Squadron/Combined) - those still require editing the JSON. */
-public class PatternPreviewer {
-    private static final String PREVIEW_ENEMY_TYPE = "BasicEnemy";
+import java.util.function.Consumer;
+import java.util.function.Supplier;
 
-    public static final int ROW_MOVEMENT_ID = 0;
-    public static final int ROW_FIRING_ID = 1;
-    public static final int FIELD_ROWS_START = 2;
+/** Debug-only tool: pick any enemy from the JSON-loaded registry (or create a brand-new one),
+ *  edit its stats and its movement/firing pattern trees - including switching a pattern's type
+ *  and adding/removing nested Sequence/Combined/Squadron sub-patterns - and watch a dedicated
+ *  preview enemy replay the result live. Every edit installs the working copy into
+ *  PatternRegistry/AssetManager (see applyChange) and fully respawns the preview enemy, so the
+ *  change is visible immediately. Nothing is written to the JSON files until the "Save All To
+ *  Disk" row is confirmed. */
+public class PatternPreviewer {
+    private static final String[] MOVEMENT_TYPES = {"None", "Straight", "ZigZag", "Seeking", "MoveToPoint", "Spline", "Sequence", "Squadron"};
+    private static final String[] FIRING_TYPES = {"None", "SelfDestruct", "ExplodingAimed", "BurstAimed", "Sweep", "SineWave", "Orbiting", "SpawnEnemy", "Aimed", "QuarterCircle", "AimedAtPoint", "Laser", "Sequence", "Combined"};
+    private static final String NONE_LABEL = "(none)";
 
     private interface FloatGetter { float get(); }
     private interface FloatSetter { void set(float value); }
+    private interface BoolGetter { boolean get(); }
+    private interface BoolSetter { void set(boolean value); }
 
-    private static final class Field {
-        final String name;
-        final FloatGetter getter;
-        final FloatSetter setter;
-        final float step;
-        final boolean isInt;
+    private static final class Row {
+        final int indent;
+        final Supplier<String> label;
+        final Runnable onLeft;
+        final Runnable onRight;
+        final Runnable onConfirm;
+        final Runnable onDelete;
 
-        Field(String name, FloatGetter getter, FloatSetter setter, float step, boolean isInt) {
-            this.name = name;
-            this.getter = getter;
-            this.setter = setter;
-            this.step = step;
-            this.isInt = isInt;
+        Row(int indent, Supplier<String> label, Runnable onLeft, Runnable onRight, Runnable onConfirm, Runnable onDelete) {
+            this.indent = indent;
+            this.label = label;
+            this.onLeft = onLeft;
+            this.onRight = onRight;
+            this.onConfirm = onConfirm;
+            this.onDelete = onDelete;
         }
+    }
 
-        String label() {
-            return isInt ? name + ": " + Math.round(getter.get()) : name + ": " + String.format("%.2f", getter.get());
+    public static final class DisplayRow {
+        public final int indent;
+        public final String label;
+
+        DisplayRow(int indent, String label) {
+            this.indent = indent;
+            this.label = label;
         }
     }
 
     private boolean active;
-    private int movementIndex;
-    private int firingIndex;
-    private int selectedRow;
+    private AssetManager assets;
+    private EntityManager entities;
+    private float worldWidth, worldHeight;
     private float spawnX, spawnY;
-    private MovementPatternDef movementDef;
-    private FiringPatternDef firingDef;
-    private final Array<Field> movementFields = new Array<>();
-    private final Array<Field> firingFields = new Array<>();
+    private String enemyId;
+    private EnemyDefinition workingEnemy;
+    private MovementPatternDef workingMovement;
+    private FiringPatternDef workingFiring;
     private GenericEnemy previewEnemy;
+    private final Array<Row> rows = new Array<>();
+    private int selectedRow;
+    private boolean dirty;
+    private String statusMessage;
+    private float statusMessageTimer;
+    private Array<String> textureFilesCache;
 
     public boolean isActive() { return active; }
+    public int getSelectedRow() { return selectedRow; }
 
-    public void open(EntityManager entities, float worldWidth, float worldHeight) {
+    public Array<DisplayRow> getDisplayRows() {
+        Array<DisplayRow> out = new Array<>(rows.size);
+        for (Row r : rows) out.add(new DisplayRow(r.indent, r.label.get()));
+        return out;
+    }
+
+    public void open(EntityManager entities, AssetManager assets, float worldWidth, float worldHeight) {
         active = true;
-        movementIndex = 0;
-        firingIndex = 0;
-        selectedRow = ROW_MOVEMENT_ID;
-        spawnX = worldWidth / 2f;
-        spawnY = worldHeight / 2f;
+        this.assets = assets;
+        this.entities = entities;
+        this.worldWidth = worldWidth;
+        this.worldHeight = worldHeight;
+        this.spawnX = worldWidth / 2f;
+        this.spawnY = worldHeight / 2f;
+        this.dirty = false;
+        this.statusMessage = null;
+        this.statusMessageTimer = 0f;
+        this.selectedRow = 0;
+        this.textureFilesCache = null;
 
-        previewEnemy = EnemySpawnRegistry.spawn(PREVIEW_ENEMY_TYPE, spawnX, spawnY);
-
-        loadMovementDef();
-        loadFiringDef();
-        applyToPreview();
+        Array<String> ids = assets.getEnemyIds();
+        selectEnemy(ids.size > 0 ? ids.first() : null);
     }
 
     public void close(EntityManager entities) {
@@ -89,34 +122,40 @@ public class PatternPreviewer {
         }
     }
 
-    public void handleInput(InputManager input) {
-        int totalRows = FIELD_ROWS_START + movementFields.size + firingFields.size;
-        if (input.isDebugMenuUpJustPressed()) selectedRow = (selectedRow - 1 + totalRows) % totalRows;
-        if (input.isDebugMenuDownJustPressed()) selectedRow = (selectedRow + 1) % totalRows;
+    /** @return true if the delete key was consumed by the selected row (e.g. removing a
+     *  sub-pattern) rather than falling through to closing the whole screen. */
+    public boolean handleInput(InputManager input) {
+        if (rows.size == 0) return false;
 
-        if (selectedRow == ROW_MOVEMENT_ID) {
-            Array<String> ids = PatternRegistry.getMovementIds();
-            if (ids.size == 0) return;
-            if (input.isDebugMenuLeftJustPressed()) { movementIndex = (movementIndex - 1 + ids.size) % ids.size; loadMovementDef(); applyToPreview(); }
-            if (input.isDebugMenuRightJustPressed()) { movementIndex = (movementIndex + 1) % ids.size; loadMovementDef(); applyToPreview(); }
-        } else if (selectedRow == ROW_FIRING_ID) {
-            Array<String> ids = PatternRegistry.getFiringIds();
-            if (ids.size == 0) return;
-            if (input.isDebugMenuLeftJustPressed()) { firingIndex = (firingIndex - 1 + ids.size) % ids.size; loadFiringDef(); applyToPreview(); }
-            if (input.isDebugMenuRightJustPressed()) { firingIndex = (firingIndex + 1) % ids.size; loadFiringDef(); applyToPreview(); }
-        } else {
-            int fieldRow = selectedRow - FIELD_ROWS_START;
-            Field field = fieldRow < movementFields.size ? movementFields.get(fieldRow) : firingFields.get(fieldRow - movementFields.size);
-            if (input.isDebugMenuLeftJustPressed()) { field.setter.set(field.getter.get() - field.step); applyToPreview(); }
-            if (input.isDebugMenuRightJustPressed()) { field.setter.set(field.getter.get() + field.step); applyToPreview(); }
+        if (input.isDebugMenuUpJustPressed()) selectedRow = (selectedRow - 1 + rows.size) % rows.size;
+        if (input.isDebugMenuDownJustPressed()) selectedRow = (selectedRow + 1) % rows.size;
+
+        Row row = rows.get(selectedRow);
+        if (input.isDebugMenuLeftJustPressed() && row.onLeft != null) row.onLeft.run();
+        if (input.isDebugMenuRightJustPressed() && row.onRight != null) row.onRight.run();
+        if (input.isDebugMenuConfirmJustPressed() && row.onConfirm != null) row.onConfirm.run();
+        if (input.isDebugMenuDeleteJustPressed() && row.onDelete != null) {
+            row.onDelete.run();
+            return true;
         }
+        return false;
     }
 
     /** Steps the preview enemy (and any bullets its firing pattern spawns) each frame, since the
-     *  rest of the game is frozen while the debug menu is open. Loops the enemy back to the
-     *  spawn point once its pattern carries it off-screen, so the demo keeps replaying. */
+     *  rest of the game is frozen while the debug menu is open. Respawns from a clean starting
+     *  point once its pattern carries it off-screen, so the demo keeps replaying. */
     public void tick(float delta, EntityManager entities) {
-        if (!active || previewEnemy == null) return;
+        if (!active) return;
+
+        if (statusMessageTimer > 0f) {
+            statusMessageTimer -= delta;
+            if (statusMessageTimer <= 0f) {
+                statusMessage = null;
+                rebuildRows();
+            }
+        }
+
+        if (previewEnemy == null) return;
 
         previewEnemy.update(delta, entities.getEnemyBullets(), entities.getPlayer().getHitbox());
 
@@ -130,86 +169,249 @@ public class PatternPreviewer {
             }
         }
 
-        if (previewEnemy.isOffScreen()) {
-            applyToPreview();
+        if (previewEnemy.isOffScreen()) respawnPreview();
+    }
+
+    // ---- Selection / creation ----------------------------------------------------------------
+
+    private void selectEnemy(String id) {
+        this.enemyId = id;
+        EnemyDefinition src = id != null ? assets.getEnemyDefinition(id) : null;
+        workingEnemy = cloneEnemy(src, id);
+        loadMovementDef(workingEnemy.movementPattern);
+        loadFiringDef(workingEnemy.firingPattern);
+        applyChange();
+    }
+
+    private void selectMovementId(String id) {
+        loadMovementDef(id);
+        applyChange();
+    }
+
+    private void selectFiringId(String id) {
+        loadFiringDef(id);
+        applyChange();
+    }
+
+    private void loadMovementDef(String id) {
+        workingMovement = cloneMovement(PatternRegistry.getMovement(id), id);
+        resolveMovementSentinels(workingMovement);
+    }
+
+    private void loadFiringDef(String id) {
+        workingFiring = cloneFiring(PatternRegistry.getFiring(id), id);
+        resolveFiringSentinels(workingFiring);
+    }
+
+    private void createNewEnemy(String id) {
+        if (id == null || id.isBlank()) return;
+        assets.putEnemyDefinition(cloneEnemy(null, id));
+        selectEnemy(id);
+    }
+
+    private void createNewMovement(String id) {
+        if (id == null || id.isBlank()) return;
+        MovementPatternDef fresh = new MovementPatternDef();
+        fresh.id = id;
+        fresh.type = "Straight";
+        PatternRegistry.putMovement(id, fresh);
+        selectMovementId(id);
+    }
+
+    private void createNewFiring(String id) {
+        if (id == null || id.isBlank()) return;
+        FiringPatternDef fresh = new FiringPatternDef();
+        fresh.id = id;
+        fresh.type = "None";
+        PatternRegistry.putFiring(id, fresh);
+        selectFiringId(id);
+    }
+
+    private void promptNewId(String title, Consumer<String> onEntered) {
+        Gdx.input.getTextInput(new Input.TextInputListener() {
+            @Override
+            public void input(String text) {
+                if (text == null) return;
+                String id = text.trim();
+                if (id.isEmpty()) return;
+                Gdx.app.postRunnable(() -> onEntered.accept(id));
+            }
+
+            @Override
+            public void canceled() {}
+        }, title, "", "");
+    }
+
+    // ---- Apply / respawn / save ---------------------------------------------------------------
+
+    /** Commits the working copies into the live registries, rebuilds the editable row list (its
+     *  structure can change - a type switch or add/remove sub-pattern changes which rows exist)
+     *  and fully respawns the preview enemy from the edited definition. Called after every single
+     *  edit; this is a debug tool, not a hot path, so simplicity wins over incremental updates. */
+    private void applyChange() {
+        dirty = true;
+        workingEnemy.movementPattern = workingMovement.id;
+        workingEnemy.firingPattern = workingFiring.id;
+        PatternRegistry.putMovement(workingMovement.id, workingMovement);
+        PatternRegistry.putFiring(workingFiring.id, workingFiring);
+        assets.putEnemyDefinition(workingEnemy);
+        rebuildRows();
+        respawnPreview();
+    }
+
+    private void respawnPreview() {
+        if (entities == null) return;
+        if (previewEnemy != null) {
+            entities.getEnemies().removeValue(previewEnemy, true);
+            ObjectPools.freeEnemy(previewEnemy);
+            previewEnemy = null;
         }
+        if (workingEnemy.id == null) return;
+
+        assets.ensureTexture(workingEnemy.texture);
+        assets.ensureTexture(workingEnemy.bulletTexture);
+        assets.ensureTexture(workingEnemy.spawnTexture);
+        assets.ensureTexture(workingEnemy.deathTexture);
+
+        previewEnemy = EnemySpawnRegistry.spawn(workingEnemy.id, spawnX, spawnY);
     }
 
-    private void applyToPreview() {
-        PatternRegistry.putMovement(movementDef.id, movementDef);
-        PatternRegistry.putFiring(firingDef.id, firingDef);
-        if (previewEnemy != null) previewEnemy.refreshPreviewPatterns(movementDef, firingDef, spawnX, spawnY);
+    /** Writes every registered movement pattern, firing pattern and enemy definition (including
+     *  whatever's been live-edited this session) back to the real assets/ JSON files. Only
+     *  resolves to the true source files when launched via `gradlew run`/`:lwjgl3:run`, which
+     *  pins the working directory to assets/ (see lwjgl3/build.gradle) - the same mechanism
+     *  DebugSaveStateManager already relies on for debug_savestates.json. */
+    private void saveAll() {
+        Json json = new Json();
+        json.setOutputType(JsonWriter.OutputType.json);
+
+        Gdx.files.local("movement_patterns.json").writeString(
+            json.prettyPrint(json.toJson(PatternRegistry.getAllMovementDefsSorted(), Array.class, MovementPatternDef.class)), false);
+        Gdx.files.local("firing_patterns.json").writeString(
+            json.prettyPrint(json.toJson(PatternRegistry.getAllFiringDefsSorted(), Array.class, FiringPatternDef.class)), false);
+        Gdx.files.local("enemies.json").writeString(
+            json.prettyPrint(json.toJson(assets.getAllEnemyDefinitionsSorted(), Array.class, EnemyDefinition.class)), false);
+
+        dirty = false;
+        statusMessage = "Saved to disk.";
+        statusMessageTimer = 3f;
+        rebuildRows();
     }
 
-    private void loadMovementDef() {
-        Array<String> ids = PatternRegistry.getMovementIds();
-        String id = ids.get(movementIndex);
-        movementDef = cloneMovement(PatternRegistry.getMovement(id));
-        resolveMovementSentinels(movementDef);
-        buildMovementFields();
-    }
+    // ---- Cloning / defaults --------------------------------------------------------------------
 
-    private void loadFiringDef() {
-        Array<String> ids = PatternRegistry.getFiringIds();
-        String id = ids.get(firingIndex);
-        firingDef = cloneFiring(PatternRegistry.getFiring(id));
-        resolveFiringSentinels(firingDef);
-        buildFiringFields();
-    }
-
-    private static MovementPatternDef cloneMovement(MovementPatternDef src) {
-        MovementPatternDef d = new MovementPatternDef();
-        d.id = src.id;
-        d.type = src.type;
-        d.speed = src.speed;
-        d.movementAngle = src.movementAngle;
-        d.stopDistance = src.stopDistance;
-        d.targetX = src.targetX;
-        d.targetY = src.targetY;
-        d.duration = src.duration;
-        d.patterns = src.patterns;
-        d.pattern = src.pattern;
-        d.offsetX = src.offsetX;
-        d.offsetY = src.offsetY;
+    private EnemyDefinition cloneEnemy(EnemyDefinition src, String fallbackId) {
+        EnemyDefinition d = new EnemyDefinition();
+        if (src != null) {
+            d.id = src.id;
+            d.texture = src.texture;
+            d.bulletTexture = src.bulletTexture;
+            d.frameCount = src.frameCount;
+            d.columns = src.columns;
+            d.rows = src.rows;
+            d.frameDuration = src.frameDuration;
+            d.size = src.size;
+            d.health = src.health;
+            d.movementPattern = src.movementPattern;
+            d.inverseMovement = src.inverseMovement;
+            d.rotateWithMovement = src.rotateWithMovement;
+            d.isBoss = src.isBoss;
+            d.isGround = src.isGround;
+            d.score = src.score;
+            d.firingPattern = src.firingPattern;
+            d.explosionPattern = src.explosionPattern;
+            d.spawnTexture = src.spawnTexture;
+            d.spawnFrameCount = src.spawnFrameCount;
+            d.spawnColumns = src.spawnColumns;
+            d.spawnRows = src.spawnRows;
+            d.spawnDuration = src.spawnDuration;
+            d.deathTexture = src.deathTexture;
+            d.deathFrameCount = src.deathFrameCount;
+            d.deathColumns = src.deathColumns;
+            d.deathRows = src.deathRows;
+            d.deathDuration = src.deathDuration;
+        } else {
+            d.id = fallbackId;
+            Array<String> textures = listTextureFiles();
+            d.texture = textures.size > 0 ? textures.first() : null;
+            d.frameCount = 1;
+            d.columns = 0;
+            d.rows = 1;
+            d.frameDuration = 0.1f;
+            d.size = 1f;
+            d.health = 10;
+            d.movementPattern = "None";
+            d.firingPattern = "NoFiring";
+            d.explosionPattern = PatternRegistry.getExplosionIds().size > 0 ? PatternRegistry.getExplosionIds().first() : null;
+            d.score = 10;
+        }
         return d;
     }
 
-    private static FiringPatternDef cloneFiring(FiringPatternDef src) {
+    private static MovementPatternDef cloneMovement(MovementPatternDef src, String fallbackId) {
+        MovementPatternDef d = new MovementPatternDef();
+        if (src != null) {
+            d.id = src.id;
+            d.type = src.type;
+            d.speed = src.speed;
+            d.movementAngle = src.movementAngle;
+            d.stopDistance = src.stopDistance;
+            d.targetX = src.targetX;
+            d.targetY = src.targetY;
+            d.duration = src.duration;
+            d.patterns = src.patterns;
+            d.pattern = src.pattern;
+            d.offsetX = src.offsetX;
+            d.offsetY = src.offsetY;
+        } else {
+            d.id = fallbackId != null ? fallbackId : "NewMovement";
+            d.type = "Straight";
+        }
+        return d;
+    }
+
+    private static FiringPatternDef cloneFiring(FiringPatternDef src, String fallbackId) {
         FiringPatternDef d = new FiringPatternDef();
-        d.id = src.id;
-        d.type = src.type;
-        d.fireRate = src.fireRate;
-        d.duration = src.duration;
-        d.spawnType = src.spawnType;
-        d.bulletId = src.bulletId;
-        d.bulletSize = src.bulletSize;
-        d.bulletSpeed = src.bulletSpeed;
-        d.bulletDamage = src.bulletDamage;
-        d.bulletTexture = src.bulletTexture;
-        d.bulletFrameCount = src.bulletFrameCount;
-        d.bulletColumns = src.bulletColumns;
-        d.bulletRows = src.bulletRows;
-        d.bulletFrameDuration = src.bulletFrameDuration;
-        d.spreadDegrees = src.spreadDegrees;
-        d.numBullets = src.numBullets;
-        d.offsetX = src.offsetX;
-        d.offsetY = src.offsetY;
-        d.length = src.length;
-        d.angularSpeed = src.angularSpeed;
-        d.fireAngle = src.fireAngle;
-        d.targetX = src.targetX;
-        d.targetY = src.targetY;
-        d.targetOffsetX = src.targetOffsetX;
-        d.targetOffsetY = src.targetOffsetY;
-        d.sweepDuration = src.sweepDuration;
-        d.sweepStartAngle = src.sweepStartAngle;
-        d.sweepEndAngle = src.sweepEndAngle;
-        d.patterns = src.patterns;
+        if (src != null) {
+            d.id = src.id;
+            d.type = src.type;
+            d.fireRate = src.fireRate;
+            d.duration = src.duration;
+            d.spawnType = src.spawnType;
+            d.bulletId = src.bulletId;
+            d.bulletSize = src.bulletSize;
+            d.bulletSpeed = src.bulletSpeed;
+            d.bulletDamage = src.bulletDamage;
+            d.bulletTexture = src.bulletTexture;
+            d.bulletFrameCount = src.bulletFrameCount;
+            d.bulletColumns = src.bulletColumns;
+            d.bulletRows = src.bulletRows;
+            d.bulletFrameDuration = src.bulletFrameDuration;
+            d.spreadDegrees = src.spreadDegrees;
+            d.numBullets = src.numBullets;
+            d.offsetX = src.offsetX;
+            d.offsetY = src.offsetY;
+            d.length = src.length;
+            d.angularSpeed = src.angularSpeed;
+            d.fireAngle = src.fireAngle;
+            d.targetX = src.targetX;
+            d.targetY = src.targetY;
+            d.targetOffsetX = src.targetOffsetX;
+            d.targetOffsetY = src.targetOffsetY;
+            d.sweepDuration = src.sweepDuration;
+            d.sweepStartAngle = src.sweepStartAngle;
+            d.sweepEndAngle = src.sweepEndAngle;
+            d.patterns = src.patterns;
+        } else {
+            d.id = fallbackId != null ? fallbackId : "NewFiring";
+            d.type = "None";
+        }
         return d;
     }
 
     /** Materializes "use the default" sentinels (-1, NaN) into concrete numbers so the field
-     *  steppers below have something real to adjust from. */
+     *  steppers below have something real to adjust from, and seeds an empty Sequence/Squadron
+     *  with a first sub-pattern so switching to that type immediately has something editable. */
     private void resolveMovementSentinels(MovementPatternDef d) {
         if (d.speed <= 0) d.speed = 1.5f;
         if (Float.isNaN(d.movementAngle)) d.movementAngle = MovementPattern.DEFAULT_ANGLE_DEG;
@@ -218,6 +420,16 @@ public class PatternPreviewer {
         }
         if (Float.isNaN(d.targetX)) d.targetX = spawnX;
         if (Float.isNaN(d.targetY)) d.targetY = 0f;
+        if ("Sequence".equals(d.type) && (d.patterns == null || d.patterns.size == 0)) {
+            d.patterns = new Array<>();
+            MovementPatternDef first = new MovementPatternDef();
+            first.type = "Straight";
+            d.patterns.add(first);
+        }
+        if ("Squadron".equals(d.type) && d.pattern == null) {
+            d.pattern = new MovementPatternDef();
+            d.pattern.type = "Straight";
+        }
     }
 
     private void resolveFiringSentinels(FiringPatternDef d) {
@@ -233,111 +445,303 @@ public class PatternPreviewer {
         if (d.sweepDuration <= 0) d.sweepDuration = SweepFiring.DEFAULT_SWEEP_DURATION;
         if (Float.isNaN(d.sweepStartAngle)) d.sweepStartAngle = SweepFiring.DEFAULT_START_ANGLE;
         if (Float.isNaN(d.sweepEndAngle)) d.sweepEndAngle = SweepFiring.DEFAULT_END_ANGLE;
+        if (d.bulletId == null) {
+            Array<String> bulletIds = PatternRegistry.getBulletIds();
+            if (bulletIds.size > 0) d.bulletId = bulletIds.first();
+        }
+        if (("Sequence".equals(d.type) || "Combined".equals(d.type)) && (d.patterns == null || d.patterns.size == 0)) {
+            d.patterns = new Array<>();
+            FiringPatternDef first = new FiringPatternDef();
+            first.type = "None";
+            d.patterns.add(first);
+        }
     }
 
-    private void buildMovementFields() {
-        movementFields.clear();
-        MovementPatternDef d = movementDef;
-        switch (d.type) {
+    private Array<String> listTextureFiles() {
+        if (textureFilesCache == null) {
+            textureFilesCache = new Array<>();
+            FileHandle dir = Gdx.files.local(".");
+            if (dir.exists() && dir.isDirectory()) {
+                for (FileHandle f : dir.list(".png")) textureFilesCache.add(f.name());
+            }
+            textureFilesCache.sort();
+        }
+        return textureFilesCache;
+    }
+
+    // ---- Row tree building ----------------------------------------------------------------------
+
+    private void rebuildRows() {
+        int prevSelected = selectedRow;
+        rows.clear();
+
+        rows.add(idPickRow(0, "Enemy", () -> enemyId, assets.getEnemyIds(), this::selectEnemy));
+        rows.add(actionRow(1, () -> "[+ New Enemy]", () -> promptNewId("New enemy id", this::createNewEnemy)));
+        rows.add(actionRow(0, () -> dirty ? "[ SAVE ALL TO DISK ]  *unsaved*" : "[ SAVE ALL TO DISK ]", this::saveAll));
+        if (statusMessage != null) rows.add(headerRow(0, statusMessage));
+        rows.add(headerRow(0, ""));
+
+        rows.add(headerRow(0, "-- Enemy Definition --"));
+        appendEnemyFieldRows();
+        rows.add(headerRow(0, ""));
+
+        rows.add(headerRow(0, "-- Movement Pattern --"));
+        rows.add(idPickRow(0, "Movement Id", () -> workingMovement.id, PatternRegistry.getMovementIds(), this::selectMovementId));
+        rows.add(actionRow(1, () -> "[+ New Movement Pattern]", () -> promptNewId("New movement pattern id", this::createNewMovement)));
+        appendMovementRows(workingMovement, 1, null);
+        rows.add(headerRow(0, ""));
+
+        rows.add(headerRow(0, "-- Firing Pattern --"));
+        rows.add(idPickRow(0, "Firing Id", () -> workingFiring.id, PatternRegistry.getFiringIds(), this::selectFiringId));
+        rows.add(actionRow(1, () -> "[+ New Firing Pattern]", () -> promptNewId("New firing pattern id", this::createNewFiring)));
+        appendFiringRows(workingFiring, 1, null);
+
+        selectedRow = rows.size == 0 ? 0 : MathUtils.clamp(prevSelected, 0, rows.size - 1);
+    }
+
+    private void appendEnemyFieldRows() {
+        EnemyDefinition d = workingEnemy;
+        rows.add(texturePickRow(1, "Texture", () -> d.texture, v -> d.texture = v, false));
+        rows.add(texturePickRow(1, "Bullet Texture", () -> d.bulletTexture, v -> d.bulletTexture = v, true));
+        rows.add(numberRow(1, "Frame Count", () -> (float) d.frameCount, v -> d.frameCount = Math.round(v), 1f, true));
+        rows.add(numberRow(1, "Columns", () -> (float) d.columns, v -> d.columns = Math.round(v), 1f, true));
+        rows.add(numberRow(1, "Rows", () -> (float) d.rows, v -> d.rows = Math.round(v), 1f, true));
+        rows.add(numberRow(1, "Frame Duration", () -> d.frameDuration, v -> d.frameDuration = v, 0.01f, false));
+        rows.add(numberRow(1, "Size", () -> d.size, v -> d.size = v, 0.1f, false));
+        rows.add(numberRow(1, "Health", () -> (float) d.health, v -> d.health = Math.round(v), 5f, true));
+        rows.add(numberRow(1, "Score", () -> (float) d.score, v -> d.score = Math.round(v), 10f, true));
+        rows.add(toggleRow(1, "Inverse Movement", () -> d.inverseMovement, v -> d.inverseMovement = v));
+        rows.add(toggleRow(1, "Rotate With Movement", () -> d.rotateWithMovement, v -> d.rotateWithMovement = v));
+        rows.add(toggleRow(1, "Is Boss", () -> d.isBoss, v -> d.isBoss = v));
+        rows.add(toggleRow(1, "Is Ground", () -> d.isGround, v -> d.isGround = v));
+        rows.add(idPickRow(1, "Explosion Pattern", () -> d.explosionPattern, PatternRegistry.getExplosionIds(), v -> { d.explosionPattern = v; applyChange(); }));
+
+        rows.add(headerRow(1, "Spawn animation:"));
+        rows.add(texturePickRow(2, "Spawn Texture", () -> d.spawnTexture, v -> d.spawnTexture = v, true));
+        rows.add(numberRow(2, "Spawn Frame Count", () -> (float) d.spawnFrameCount, v -> d.spawnFrameCount = Math.round(v), 1f, true));
+        rows.add(numberRow(2, "Spawn Columns", () -> (float) d.spawnColumns, v -> d.spawnColumns = Math.round(v), 1f, true));
+        rows.add(numberRow(2, "Spawn Rows", () -> (float) d.spawnRows, v -> d.spawnRows = Math.round(v), 1f, true));
+        rows.add(numberRow(2, "Spawn Duration", () -> d.spawnDuration, v -> d.spawnDuration = v, 0.05f, false));
+
+        rows.add(headerRow(1, "Death animation:"));
+        rows.add(texturePickRow(2, "Death Texture", () -> d.deathTexture, v -> d.deathTexture = v, true));
+        rows.add(numberRow(2, "Death Frame Count", () -> (float) d.deathFrameCount, v -> d.deathFrameCount = Math.round(v), 1f, true));
+        rows.add(numberRow(2, "Death Columns", () -> (float) d.deathColumns, v -> d.deathColumns = Math.round(v), 1f, true));
+        rows.add(numberRow(2, "Death Rows", () -> (float) d.deathRows, v -> d.deathRows = Math.round(v), 1f, true));
+        rows.add(numberRow(2, "Death Duration", () -> d.deathDuration, v -> d.deathDuration = v, 0.05f, false));
+    }
+
+    private void appendMovementRows(MovementPatternDef node, int indent, Runnable removeSelf) {
+        rows.add(typeRow(indent, () -> node.type, MOVEMENT_TYPES,
+            t -> { node.type = t; resolveMovementSentinels(node); applyChange(); },
+            removeSelf == null ? null : () -> { removeSelf.run(); applyChange(); }));
+        if (removeSelf != null) {
+            rows.add(numberRow(indent, "Duration", () -> node.duration, v -> node.duration = v, 0.25f, false));
+        }
+
+        switch (node.type) {
             case "Straight":
             case "ZigZag":
-                movementFields.add(field("Speed", () -> d.speed, v -> d.speed = v, 0.25f, false));
-                movementFields.add(field("Angle", () -> d.movementAngle, v -> d.movementAngle = v, 5f, false));
+                rows.add(numberRow(indent, "Speed", () -> node.speed, v -> node.speed = v, 0.25f, false));
+                rows.add(numberRow(indent, "Angle", () -> node.movementAngle, v -> node.movementAngle = v, 5f, false));
                 break;
             case "Seeking":
-                movementFields.add(field("Speed", () -> d.speed, v -> d.speed = v, 0.25f, false));
-                movementFields.add(field("Angle", () -> d.movementAngle, v -> d.movementAngle = v, 5f, false));
-                movementFields.add(field("Stop Dist", () -> d.stopDistance, v -> d.stopDistance = v, 0.25f, false));
+                rows.add(numberRow(indent, "Speed", () -> node.speed, v -> node.speed = v, 0.25f, false));
+                rows.add(numberRow(indent, "Angle", () -> node.movementAngle, v -> node.movementAngle = v, 5f, false));
+                rows.add(numberRow(indent, "Stop Dist", () -> node.stopDistance, v -> node.stopDistance = v, 0.25f, false));
                 break;
             case "MoveToPoint":
-                movementFields.add(field("Speed", () -> d.speed, v -> d.speed = v, 0.25f, false));
-                movementFields.add(field("Target X", () -> d.targetX, v -> d.targetX = v, 0.25f, false));
-                movementFields.add(field("Target Y", () -> d.targetY, v -> d.targetY = v, 0.25f, false));
-                movementFields.add(field("Stop Dist", () -> d.stopDistance, v -> d.stopDistance = v, 0.25f, false));
+                rows.add(numberRow(indent, "Speed", () -> node.speed, v -> node.speed = v, 0.25f, false));
+                rows.add(numberRow(indent, "Target X", () -> node.targetX, v -> node.targetX = v, 0.25f, false));
+                rows.add(numberRow(indent, "Target Y", () -> node.targetY, v -> node.targetY = v, 0.25f, false));
+                rows.add(numberRow(indent, "Stop Dist", () -> node.stopDistance, v -> node.stopDistance = v, 0.25f, false));
                 break;
             case "Spline":
-                movementFields.add(field("Angle", () -> d.movementAngle, v -> d.movementAngle = v, 5f, false));
+                rows.add(numberRow(indent, "Angle", () -> node.movementAngle, v -> node.movementAngle = v, 5f, false));
+                break;
+            case "Sequence": {
+                int count = node.patterns != null ? node.patterns.size : 0;
+                rows.add(headerRow(indent, "Sub-patterns (" + count + "):"));
+                if (node.patterns != null) {
+                    for (int i = 0; i < node.patterns.size; i++) {
+                        int idx = i;
+                        appendMovementRows(node.patterns.get(i), indent + 1, () -> node.patterns.removeIndex(idx));
+                    }
+                }
+                rows.add(actionRow(indent + 1, () -> "[+ Add sub-pattern]", () -> {
+                    if (node.patterns == null) node.patterns = new Array<>();
+                    MovementPatternDef fresh = new MovementPatternDef();
+                    fresh.type = "Straight";
+                    node.patterns.add(fresh);
+                    applyChange();
+                }));
+                break;
+            }
+            case "Squadron":
+                rows.add(numberRow(indent, "Offset X", () -> node.offsetX, v -> node.offsetX = v, 0.1f, false));
+                rows.add(numberRow(indent, "Offset Y", () -> node.offsetY, v -> node.offsetY = v, 0.1f, false));
+                if (node.pattern == null) {
+                    node.pattern = new MovementPatternDef();
+                    node.pattern.type = "Straight";
+                }
+                rows.add(headerRow(indent, "Pattern:"));
+                appendMovementRows(node.pattern, indent + 1, null);
                 break;
             default:
                 break;
         }
     }
 
-    private void buildFiringFields() {
-        firingFields.clear();
-        FiringPatternDef d = firingDef;
-        switch (d.type) {
+    private void appendFiringRows(FiringPatternDef node, int indent, Runnable removeSelf) {
+        rows.add(typeRow(indent, () -> node.type, FIRING_TYPES,
+            t -> { node.type = t; resolveFiringSentinels(node); applyChange(); },
+            removeSelf == null ? null : () -> { removeSelf.run(); applyChange(); }));
+        if (removeSelf != null) {
+            rows.add(numberRow(indent, "Duration", () -> node.duration, v -> node.duration = v, 0.25f, false));
+        }
+
+        switch (node.type) {
             case "SpawnEnemy":
-                firingFields.add(field("Fire Rate", () -> d.fireRate, v -> d.fireRate = v, 0.1f, false));
+                rows.add(numberRow(indent, "Fire Rate", () -> node.fireRate, v -> node.fireRate = v, 0.1f, false));
+                rows.add(idPickRow(indent, "Spawn Type", () -> node.spawnType, assets.getEnemyIds(), v -> { node.spawnType = v; applyChange(); }));
+                rows.add(numberRow(indent, "Offset X", () -> node.offsetX, v -> node.offsetX = v, 0.1f, false));
+                rows.add(numberRow(indent, "Offset Y", () -> node.offsetY, v -> node.offsetY = v, 0.1f, false));
                 break;
             case "Aimed":
-                addCommonBulletFields(d);
-                firingFields.add(field("Target Off X", () -> d.targetOffsetX, v -> d.targetOffsetX = v, 0.1f, false));
-                firingFields.add(field("Target Off Y", () -> d.targetOffsetY, v -> d.targetOffsetY = v, 0.1f, false));
+                appendCommonBulletRows(node, indent);
+                rows.add(numberRow(indent, "Target Off X", () -> node.targetOffsetX, v -> node.targetOffsetX = v, 0.1f, false));
+                rows.add(numberRow(indent, "Target Off Y", () -> node.targetOffsetY, v -> node.targetOffsetY = v, 0.1f, false));
                 break;
             case "QuarterCircle":
-                addCommonBulletFields(d);
-                firingFields.add(field("Spread Deg", () -> d.spreadDegrees, v -> d.spreadDegrees = v, 5f, false));
-                firingFields.add(field("Num Bullets", () -> (float) d.numBullets, v -> d.numBullets = Math.round(v), 1f, true));
-                firingFields.add(field("Target Off X", () -> d.targetOffsetX, v -> d.targetOffsetX = v, 0.1f, false));
-                firingFields.add(field("Target Off Y", () -> d.targetOffsetY, v -> d.targetOffsetY = v, 0.1f, false));
+                appendCommonBulletRows(node, indent);
+                rows.add(numberRow(indent, "Spread Deg", () -> node.spreadDegrees, v -> node.spreadDegrees = v, 5f, false));
+                rows.add(numberRow(indent, "Num Bullets", () -> (float) node.numBullets, v -> node.numBullets = Math.round(v), 1f, true));
+                rows.add(numberRow(indent, "Target Off X", () -> node.targetOffsetX, v -> node.targetOffsetX = v, 0.1f, false));
+                rows.add(numberRow(indent, "Target Off Y", () -> node.targetOffsetY, v -> node.targetOffsetY = v, 0.1f, false));
                 break;
             case "AimedAtPoint":
-                addCommonBulletFields(d);
-                firingFields.add(field("Target X", () -> d.targetX, v -> d.targetX = v, 0.25f, false));
-                firingFields.add(field("Target Y", () -> d.targetY, v -> d.targetY = v, 0.25f, false));
+                appendCommonBulletRows(node, indent);
+                rows.add(numberRow(indent, "Target X", () -> node.targetX, v -> node.targetX = v, 0.25f, false));
+                rows.add(numberRow(indent, "Target Y", () -> node.targetY, v -> node.targetY = v, 0.25f, false));
                 break;
             case "Laser":
-                firingFields.add(field("Fire Rate", () -> d.fireRate, v -> d.fireRate = v, 0.1f, false));
-                firingFields.add(field("Thickness", () -> d.bulletSize, v -> d.bulletSize = v, 0.05f, false));
-                firingFields.add(field("Length", () -> d.length, v -> d.length = v, 0.5f, false));
-                firingFields.add(field("Angular Spd", () -> d.angularSpeed, v -> d.angularSpeed = v, 5f, false));
-                firingFields.add(field("Fire Angle", () -> d.fireAngle, v -> d.fireAngle = v, 5f, false));
-                firingFields.add(field("Duration", () -> d.duration, v -> d.duration = v, 0.25f, false));
+                rows.add(numberRow(indent, "Fire Rate", () -> node.fireRate, v -> node.fireRate = v, 0.1f, false));
+                rows.add(idPickRow(indent, "Bullet", () -> node.bulletId, PatternRegistry.getBulletIds(), v -> { node.bulletId = v; applyChange(); }));
+                rows.add(numberRow(indent, "Thickness", () -> node.bulletSize, v -> node.bulletSize = v, 0.05f, false));
+                rows.add(numberRow(indent, "Length", () -> node.length, v -> node.length = v, 0.5f, false));
+                rows.add(numberRow(indent, "Angular Spd", () -> node.angularSpeed, v -> node.angularSpeed = v, 5f, false));
+                rows.add(numberRow(indent, "Fire Angle", () -> node.fireAngle, v -> node.fireAngle = v, 5f, false));
+                rows.add(numberRow(indent, "Offset X", () -> node.offsetX, v -> node.offsetX = v, 0.1f, false));
+                rows.add(numberRow(indent, "Offset Y", () -> node.offsetY, v -> node.offsetY = v, 0.1f, false));
                 break;
             case "Sweep":
-                addCommonBulletFields(d);
-                firingFields.add(field("Sweep Dur", () -> d.sweepDuration, v -> d.sweepDuration = v, 0.25f, false));
-                firingFields.add(field("Start Angle", () -> d.sweepStartAngle, v -> d.sweepStartAngle = v, 5f, false));
-                firingFields.add(field("End Angle", () -> d.sweepEndAngle, v -> d.sweepEndAngle = v, 5f, false));
+                appendCommonBulletRows(node, indent);
+                rows.add(numberRow(indent, "Sweep Dur", () -> node.sweepDuration, v -> node.sweepDuration = v, 0.25f, false));
+                rows.add(numberRow(indent, "Start Angle", () -> node.sweepStartAngle, v -> node.sweepStartAngle = v, 5f, false));
+                rows.add(numberRow(indent, "End Angle", () -> node.sweepEndAngle, v -> node.sweepEndAngle = v, 5f, false));
                 break;
             case "SelfDestruct":
             case "ExplodingAimed":
             case "BurstAimed":
             case "SineWave":
             case "Orbiting":
-                addCommonBulletFields(d);
+                appendCommonBulletRows(node, indent);
                 break;
+            case "Sequence":
+            case "Combined": {
+                int count = node.patterns != null ? node.patterns.size : 0;
+                rows.add(headerRow(indent, "Sub-patterns (" + count + "):"));
+                if (node.patterns != null) {
+                    for (int i = 0; i < node.patterns.size; i++) {
+                        int idx = i;
+                        appendFiringRows(node.patterns.get(i), indent + 1, () -> node.patterns.removeIndex(idx));
+                    }
+                }
+                rows.add(actionRow(indent + 1, () -> "[+ Add sub-pattern]", () -> {
+                    if (node.patterns == null) node.patterns = new Array<>();
+                    FiringPatternDef fresh = new FiringPatternDef();
+                    fresh.type = "None";
+                    node.patterns.add(fresh);
+                    applyChange();
+                }));
+                break;
+            }
             default:
                 break;
         }
     }
 
-    private void addCommonBulletFields(FiringPatternDef d) {
-        firingFields.add(field("Fire Rate", () -> d.fireRate, v -> d.fireRate = v, 0.1f, false));
-        firingFields.add(field("Bullet Size", () -> d.bulletSize, v -> d.bulletSize = v, 0.05f, false));
-        firingFields.add(field("Bullet Speed", () -> d.bulletSpeed, v -> d.bulletSpeed = v, 0.25f, false));
-        firingFields.add(field("Offset X", () -> d.offsetX, v -> d.offsetX = v, 0.1f, false));
-        firingFields.add(field("Offset Y", () -> d.offsetY, v -> d.offsetY = v, 0.1f, false));
+    private void appendCommonBulletRows(FiringPatternDef node, int indent) {
+        rows.add(numberRow(indent, "Fire Rate", () -> node.fireRate, v -> node.fireRate = v, 0.1f, false));
+        rows.add(idPickRow(indent, "Bullet", () -> node.bulletId, PatternRegistry.getBulletIds(), v -> { node.bulletId = v; applyChange(); }));
+        rows.add(numberRow(indent, "Bullet Size", () -> node.bulletSize, v -> node.bulletSize = v, 0.05f, false));
+        rows.add(numberRow(indent, "Bullet Speed", () -> node.bulletSpeed, v -> node.bulletSpeed = v, 0.25f, false));
+        rows.add(numberRow(indent, "Offset X", () -> node.offsetX, v -> node.offsetX = v, 0.1f, false));
+        rows.add(numberRow(indent, "Offset Y", () -> node.offsetY, v -> node.offsetY = v, 0.1f, false));
     }
 
-    private static Field field(String name, FloatGetter getter, FloatSetter setter, float step, boolean isInt) {
-        return new Field(name, getter, setter, step, isInt);
+    // ---- Row factories ---------------------------------------------------------------------------
+
+    private Row headerRow(int indent, String text) {
+        return new Row(indent, () -> text, null, null, null, null);
     }
 
-    public String getMovementId() { return movementDef != null ? movementDef.id : "-"; }
-    public String getFiringId() { return firingDef != null ? firingDef.id : "-"; }
-    public int getSelectedRow() { return selectedRow; }
-
-    public Array<String> getMovementFieldLabels() {
-        Array<String> labels = new Array<>();
-        for (Field f : movementFields) labels.add(f.label());
-        return labels;
+    private Row actionRow(int indent, Supplier<String> label, Runnable onConfirm) {
+        return new Row(indent, label, null, null, onConfirm, null);
     }
 
-    public Array<String> getFiringFieldLabels() {
-        Array<String> labels = new Array<>();
-        for (Field f : firingFields) labels.add(f.label());
-        return labels;
+    private Row numberRow(int indent, String name, FloatGetter getter, FloatSetter setter, float step, boolean isInt) {
+        Supplier<String> label = () -> name + ": " + (isInt ? String.valueOf(Math.round(getter.get())) : String.format("%.2f", getter.get()));
+        Runnable dec = () -> { setter.set(getter.get() - step); applyChange(); };
+        Runnable inc = () -> { setter.set(getter.get() + step); applyChange(); };
+        return new Row(indent, label, dec, inc, null, null);
+    }
+
+    private Row toggleRow(int indent, String name, BoolGetter getter, BoolSetter setter) {
+        Supplier<String> label = () -> name + ": " + (getter.get() ? "true" : "false");
+        Runnable flip = () -> { setter.set(!getter.get()); applyChange(); };
+        return new Row(indent, label, flip, flip, flip, null);
+    }
+
+    private Row idPickRow(int indent, String name, Supplier<String> current, Array<String> ids, Consumer<String> onSelect) {
+        Supplier<String> label = () -> name + ": " + (current.get() != null ? current.get() : "-");
+        Runnable prev = () -> cycleId(ids, current.get(), -1, onSelect);
+        Runnable next = () -> cycleId(ids, current.get(), 1, onSelect);
+        return new Row(indent, label, prev, next, null, null);
+    }
+
+    private Row texturePickRow(int indent, String name, Supplier<String> current, Consumer<String> setter, boolean includeNone) {
+        Array<String> options = new Array<>();
+        if (includeNone) options.add(NONE_LABEL);
+        options.addAll(listTextureFiles());
+        Supplier<String> label = () -> name + ": " + (current.get() != null ? current.get() : NONE_LABEL);
+        Consumer<String> onSelect = v -> { setter.accept(NONE_LABEL.equals(v) ? null : v); applyChange(); };
+        Runnable prev = () -> cycleId(options, current.get() != null ? current.get() : NONE_LABEL, -1, onSelect);
+        Runnable next = () -> cycleId(options, current.get() != null ? current.get() : NONE_LABEL, 1, onSelect);
+        return new Row(indent, label, prev, next, null, null);
+    }
+
+    private Row typeRow(int indent, Supplier<String> currentType, String[] allTypes, Consumer<String> onTypeChange, Runnable onRemove) {
+        Supplier<String> label = () -> "Type: " + currentType.get();
+        Runnable prev = () -> cycleType(allTypes, currentType.get(), -1, onTypeChange);
+        Runnable next = () -> cycleType(allTypes, currentType.get(), 1, onTypeChange);
+        return new Row(indent, label, prev, next, null, onRemove);
+    }
+
+    private static void cycleId(Array<String> ids, String currentId, int dir, Consumer<String> onSelect) {
+        if (ids.size == 0) return;
+        int idx = ids.indexOf(currentId, false);
+        if (idx < 0) idx = 0;
+        int next = (idx + dir + ids.size) % ids.size;
+        onSelect.accept(ids.get(next));
+    }
+
+    private static void cycleType(String[] types, String current, int dir, Consumer<String> onChange) {
+        int idx = 0;
+        for (int i = 0; i < types.length; i++) {
+            if (types[i].equals(current)) { idx = i; break; }
+        }
+        int next = (idx + dir + types.length) % types.length;
+        onChange.accept(types[next]);
     }
 }

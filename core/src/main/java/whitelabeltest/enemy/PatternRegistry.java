@@ -78,11 +78,39 @@ public final class PatternRegistry {
         return bulletDefs.values();
     }
 
+    public static Array<String> getBulletIds() {
+        Array<String> ids = bulletDefs.keys().toArray();
+        ids.sort();
+        return ids;
+    }
+
     public static ExplosionPatternDef getExplosion(String id) {
         return id != null ? explosionPatterns.get(id) : null;
     }
 
     public static ObjectMap.Values<ExplosionPatternDef> getExplosionDefs() {
         return explosionPatterns.values();
+    }
+
+    public static Array<String> getExplosionIds() {
+        Array<String> ids = explosionPatterns.keys().toArray();
+        ids.sort();
+        return ids;
+    }
+
+    /** All movement patterns currently registered (including live-edited working copies from the
+     *  debug editor), sorted by id — used when writing movement_patterns.json back to disk. */
+    public static Array<MovementPatternDef> getAllMovementDefsSorted() {
+        Array<MovementPatternDef> out = new Array<>();
+        for (String id : getMovementIds()) out.add(movementPatterns.get(id));
+        return out;
+    }
+
+    /** All firing patterns currently registered, sorted by id — used when writing
+     *  firing_patterns.json back to disk. */
+    public static Array<FiringPatternDef> getAllFiringDefsSorted() {
+        Array<FiringPatternDef> out = new Array<>();
+        for (String id : getFiringIds()) out.add(firingPatterns.get(id));
+        return out;
     }
 }

@@ -108,16 +108,6 @@ public class GenericEnemy extends BaseEnemy {
         initWithDefinition(null, texture, null, null, null, worldWidth, worldHeight, startX, startY);
     }
 
-    /** Debug-only: rebuilds this enemy's movement/firing pattern instances from the given defs
-     *  and resets its position - used by the pattern previewer to replay a live-edited working
-     *  copy from a clean starting point on every change, instead of respawning a new enemy. */
-    public void refreshPreviewPatterns(MovementPatternDef movementDef, FiringPatternDef firingDef, float x, float y) {
-        sprite.setPosition(x, y);
-        rectangle.set(sprite.getX(), sprite.getY(), sprite.getWidth(), sprite.getHeight());
-        this.movement = PatternFactory.createMovement(movementDef, worldHeight, sprite.getX() + sprite.getWidth() / 2f);
-        this.firing = PatternFactory.createFiring(def, firingDef);
-    }
-
     @Override
     public boolean isOffScreen() {
         if (lifecycleState == LifecycleState.DYING) return isDeathAnimationFinished();

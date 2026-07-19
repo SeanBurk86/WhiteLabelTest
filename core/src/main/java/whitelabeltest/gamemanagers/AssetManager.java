@@ -129,7 +129,17 @@ public class AssetManager implements Disposable {
     }
 
     public Texture getTexture(String path) {
-        return textures.get(path);
+        return path != null ? textures.get(path) : null;
+    }
+
+    /** Loads the texture at this asset path if it isn't already cached, then returns it — used by
+     *  the debug enemy/pattern editor when previewing an enemy whose texture wasn't referenced by
+     *  any enemy loaded at startup (e.g. a brand-new enemy definition, or one whose texture field
+     *  was just changed). */
+    public Texture ensureTexture(String path) {
+        if (path == null) return null;
+        loadTexture(path);
+        return getTexture(path);
     }
 
     public WeaponDefinition getWeaponDefinition(String id) {
@@ -138,6 +148,27 @@ public class AssetManager implements Disposable {
 
     public EnemyDefinition getEnemyDefinition(String id) {
         return enemyDefinitions.get(id);
+    }
+
+    public Array<String> getEnemyIds() {
+        Array<String> ids = enemyDefinitions.keys().toArray();
+        ids.sort();
+        return ids;
+    }
+
+    /** Registers (or overwrites) an enemy definition under an id — used by the debug enemy/pattern
+     *  editor to install a live-edited or brand-new working copy without touching the JSON-loaded
+     *  set, the same way PatternRegistry.putMovement/putFiring work for patterns. */
+    public void putEnemyDefinition(EnemyDefinition def) {
+        enemyDefinitions.put(def.id, def);
+    }
+
+    /** All enemy definitions currently registered, sorted by id — used when writing enemies.json
+     *  back to disk. */
+    public Array<EnemyDefinition> getAllEnemyDefinitionsSorted() {
+        Array<EnemyDefinition> out = new Array<>();
+        for (String id : getEnemyIds()) out.add(enemyDefinitions.get(id));
+        return out;
     }
 
     public PlayerDefinition getPlayerDefinition() {

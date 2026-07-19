@@ -77,7 +77,7 @@ public class FiringPatternDef implements Json.Serializable {
         if (sweepDuration > 0) json.writeValue("sweepDuration", sweepDuration);
         if (!Float.isNaN(sweepStartAngle)) json.writeValue("sweepStartAngle", sweepStartAngle);
         if (!Float.isNaN(sweepEndAngle)) json.writeValue("sweepEndAngle", sweepEndAngle);
-        if (patterns != null) json.writeValue("patterns", patterns);
+        if (patterns != null) json.writeValue("patterns", patterns, Array.class, FiringPatternDef.class);
     }
 
     @Override
