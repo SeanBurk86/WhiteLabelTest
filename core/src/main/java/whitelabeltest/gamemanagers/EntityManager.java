@@ -171,8 +171,9 @@ public class EntityManager {
         for (Weapon b : bullets) b.draw(batch);
 
         for (Enemy e : enemies) e.drawShadow(batch);
-        for (Enemy e : enemies) e.draw(batch);
+        for (Enemy e : enemies) if (e.isGround()) e.draw(batch);
         for (ExplosionEffect e : explosions) e.draw(batch);
+        for (Enemy e : enemies) if (!e.isGround()) e.draw(batch);
         for (HitEffect h : hitEffects) h.draw(batch);
         for (EnemyBullet eb : enemyBullets) eb.draw(batch);
         if (bombActive) {
