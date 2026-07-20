@@ -95,6 +95,10 @@ public class EntityManager {
             PlayerTrailEffect trail = ObjectPools.trailPool.obtain();
             trail.init(player.getCurrentFrame(), player.getX(), player.getY(), player.getWidth(), player.getHeight());
             trails.add(trail);
+
+            PlayerTrailEffect haloTrail = ObjectPools.trailPool.obtain();
+            haloTrail.init(player.getHaloFrame(), player.getHaloX(), player.getHaloY(), player.getHaloWidth(), player.getHaloHeight());
+            trails.add(haloTrail);
         }
     }
 

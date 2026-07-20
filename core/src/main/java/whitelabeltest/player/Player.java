@@ -342,6 +342,11 @@ public class Player {
     public float getWidth() { return sprite.getWidth(); }
     public float getHeight() { return sprite.getHeight(); }
     public TextureRegion getCurrentFrame() { return sprite; }
+    public TextureRegion getHaloFrame() { return haloAnimation.getKeyFrame(haloAnimationTime); }
+    public float getHaloX() { return sprite.getX() + sprite.getWidth() / 2f - haloDrawWidth / 2f; }
+    public float getHaloY() { return sprite.getY() + sprite.getHeight() / 2f - haloDrawHeight / 2f; }
+    public float getHaloWidth() { return haloDrawWidth; }
+    public float getHaloHeight() { return haloDrawHeight; }
     public Vector2 getBulletSpawnPoint() { return new Vector2(getCenterX(), sprite.getY() + bulletSpawnOffsetY); }
     public Weapon getWeaponPrototype() { return getCurrentWeapon(); }
     public int getActiveSlot() { return activeSlot; }
