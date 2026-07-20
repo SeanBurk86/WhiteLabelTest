@@ -243,6 +243,11 @@ public class UIManager implements Disposable {
         batch.draw(whitePixel, 0, 0, worldWidth, worldHeight);
         batch.setColor(Color.WHITE);
 
+        if (previewer.isTextEntryActive()) {
+            drawTextEntryPrompt(batch, worldWidth, worldHeight, previewer);
+            return;
+        }
+
         float x = 0.4f;
         float y = worldHeight - 0.5f;
         float lineHeight = 0.35f;
@@ -285,6 +290,27 @@ public class UIManager implements Disposable {
         font.draw(batch, "Up/Down select   </> adjust or cycle   Enter = confirm/new id", x, y);
         y -= lineHeight;
         font.draw(batch, "Del = remove sub-pattern (or close screen if nothing to remove)", x, y);
+
+        font.setColor(Color.WHITE);
+    }
+
+    /** Modal id-entry field shown in place of the row list while PatternPreviewer is waiting on
+     *  a new enemy/movement/firing pattern id (see PatternPreviewer.promptNewId). */
+    private void drawTextEntryPrompt(SpriteBatch batch, float worldWidth, float worldHeight, PatternPreviewer previewer) {
+        float x = 0.4f;
+        float y = worldHeight / 2f + 0.7f;
+        float lineHeight = 0.4f;
+
+        font.setColor(Color.YELLOW);
+        font.draw(batch, previewer.getTextEntryTitle() + ":", x, y);
+        y -= lineHeight;
+
+        font.setColor(Color.WHITE);
+        font.draw(batch, "> " + previewer.getTextEntryText() + "_", x, y);
+        y -= lineHeight * 1.5f;
+
+        font.setColor(Color.GRAY);
+        font.draw(batch, "Enter = confirm   Esc = cancel   Backspace = delete", x, y);
 
         font.setColor(Color.WHITE);
     }

@@ -2,6 +2,8 @@ package whitelabeltest.gamemanagers;
 
 import com.badlogic.gdx.Gdx;
 import com.badlogic.gdx.Input;
+import com.badlogic.gdx.InputAdapter;
+import com.badlogic.gdx.InputProcessor;
 import com.badlogic.gdx.files.FileHandle;
 import com.badlogic.gdx.math.MathUtils;
 import com.badlogic.gdx.utils.Array;
@@ -85,8 +87,23 @@ public class PatternPreviewer {
     private float statusMessageTimer;
     private Array<String> textureFilesCache;
 
+    // ---- In-menu text entry (new enemy/movement/firing id prompts) ----------------------------
+    // Gdx.input.getTextInput is a no-op on the lwjgl3 desktop backend (it just calls canceled()
+    // immediately, no dialog is shown), so id entry is done with a small text field built into
+    // this screen instead: a temporary InputProcessor captures keystrokes while active, and the
+    // normal row navigation in handleInput() is suppressed until it's confirmed or cancelled.
+    private boolean textEntryActive;
+    private String textEntryTitle;
+    private StringBuilder textEntryBuffer;
+    private Consumer<String> textEntryCallback;
+    private InputProcessor previousInputProcessor;
+    private boolean suppressNextMenuInput;
+
     public boolean isActive() { return active; }
     public int getSelectedRow() { return selectedRow; }
+    public boolean isTextEntryActive() { return textEntryActive; }
+    public String getTextEntryTitle() { return textEntryTitle; }
+    public String getTextEntryText() { return textEntryBuffer != null ? textEntryBuffer.toString() : ""; }
 
     public Array<DisplayRow> getDisplayRows() {
         Array<DisplayRow> out = new Array<>(rows.size);
@@ -114,6 +131,7 @@ public class PatternPreviewer {
 
     public void close(EntityManager entities) {
         if (!active) return;
+        if (textEntryActive) finishTextEntry(false);
         active = false;
         if (previewEnemy != null) {
             entities.getEnemies().removeValue(previewEnemy, true);
@@ -125,6 +143,15 @@ public class PatternPreviewer {
     /** @return true if the delete key was consumed by the selected row (e.g. removing a
      *  sub-pattern) rather than falling through to closing the whole screen. */
     public boolean handleInput(InputManager input) {
+        if (textEntryActive) return false;
+        if (suppressNextMenuInput) {
+            // The same physical Enter press that just confirmed/cancelled the text field would
+            // otherwise also register as a menu confirm this frame (both the InputProcessor
+            // callback and InputManager's polling see the same keypress) and immediately re-fire
+            // whichever row opened the prompt.
+            suppressNextMenuInput = false;
+            return false;
+        }
         if (rows.size == 0) return false;
 
         if (input.isDebugMenuUpJustPressed()) selectedRow = (selectedRow - 1 + rows.size) % rows.size;
@@ -228,18 +255,53 @@ public class PatternPreviewer {
     }
 
     private void promptNewId(String title, Consumer<String> onEntered) {
-        Gdx.input.getTextInput(new Input.TextInputListener() {
+        textEntryActive = true;
+        textEntryTitle = title;
+        textEntryBuffer = new StringBuilder();
+        textEntryCallback = onEntered;
+        previousInputProcessor = Gdx.input.getInputProcessor();
+        Gdx.input.setInputProcessor(new InputAdapter() {
+            // A single input drain can deliver multiple queued events against this same
+            // processor instance (e.g. Enter fires both KEY_DOWN and KEY_TYPED('\r')), so every
+            // callback must no-op once finishTextEntry() has already run and cleared the buffer.
             @Override
-            public void input(String text) {
-                if (text == null) return;
-                String id = text.trim();
-                if (id.isEmpty()) return;
-                Gdx.app.postRunnable(() -> onEntered.accept(id));
+            public boolean keyTyped(char character) {
+                if (!textEntryActive) return false;
+                if (textEntryBuffer.length() < 40 && (Character.isLetterOrDigit(character) || character == '_' || character == '-')) {
+                    textEntryBuffer.append(character);
+                }
+                return true;
             }
 
             @Override
-            public void canceled() {}
-        }, title, "", "");
+            public boolean keyDown(int keycode) {
+                if (!textEntryActive) return false;
+                if (keycode == Input.Keys.BACKSPACE) {
+                    if (textEntryBuffer.length() > 0) textEntryBuffer.setLength(textEntryBuffer.length() - 1);
+                    return true;
+                }
+                if (keycode == Input.Keys.ENTER) {
+                    finishTextEntry(true);
+                    return true;
+                }
+                if (keycode == Input.Keys.ESCAPE) {
+                    finishTextEntry(false);
+                    return true;
+                }
+                return false;
+            }
+        });
+    }
+
+    private void finishTextEntry(boolean confirmed) {
+        Gdx.input.setInputProcessor(previousInputProcessor);
+        textEntryActive = false;
+        suppressNextMenuInput = true;
+        String id = confirmed && textEntryBuffer != null ? textEntryBuffer.toString().trim() : null;
+        Consumer<String> callback = textEntryCallback;
+        textEntryCallback = null;
+        textEntryBuffer = null;
+        if (id != null && !id.isEmpty() && callback != null) callback.accept(id);
     }
 
     // ---- Apply / respawn / save ---------------------------------------------------------------
