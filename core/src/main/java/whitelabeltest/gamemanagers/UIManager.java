@@ -21,11 +21,14 @@ public class UIManager implements Disposable {
     private final GlyphLayout gameOverLayout;
     private final GlyphLayout levelCompleteLayout;
     private final GlyphLayout textCueLayout;
+    private final GlyphLayout chainTextLayout;
     private final Texture whitePixel;
     private final InputType inputType;
+    private final ChainFireEffect chainFireEffect;
 
     public UIManager(InputType inputType) {
         this.inputType = inputType;
+        this.chainFireEffect = new ChainFireEffect();
 
         FreeTypeFontGenerator generator = new FreeTypeFontGenerator(Gdx.files.internal("VT323-Regular.ttf"));
         FreeTypeFontParameter fontParams = new FreeTypeFontParameter();
@@ -38,6 +41,7 @@ public class UIManager implements Disposable {
         gameOverLayout = new GlyphLayout();
         levelCompleteLayout = new GlyphLayout();
         textCueLayout = new GlyphLayout();
+        chainTextLayout = new GlyphLayout();
 
         Pixmap pixmap = new Pixmap(1, 1, Pixmap.Format.RGBA8888);
         pixmap.setColor(Color.WHITE);
@@ -47,62 +51,78 @@ public class UIManager implements Disposable {
     }
 
     public void drawHUD(SpriteBatch batch, ScoreManager scoreManager, Player player, float worldHeight, float leftPanelX, float bombCooldownTimer, float bombCooldownFraction) {
+        chainFireEffect.update(Gdx.graphics.getDeltaTime(), scoreManager.getChainCount());
+
         float textX = leftPanelX + 0.2f;
         float barWidth = -leftPanelX - 0.4f;
 
         font.setColor(Color.WHITE);
         font.draw(batch, "Score: " + scoreManager.getScore(), textX, worldHeight - 0.2f);
 
-        if (scoreManager.getChainCount() > 0) {
-            font.setColor(Color.YELLOW);
-            font.draw(batch, "Chain x" + scoreManager.getChainCount(), textX, worldHeight - 0.45f);
-            font.setColor(Color.WHITE);
+        // Everything below the chain block is shifted down by this much to make room for it.
+        float lowerSectionShift = 1.5f;
 
-            drawChainMeter(batch, scoreManager.getChainTimerFraction(), textX, worldHeight - 0.58f, barWidth);
+        float chainMeterWidth = 0.24f;
+        float chainMeterHeight = 0.68f;
+        float chainFlameWidth = 3.6f;
+        float chainFlameHeight = 1.84f;
+        float chainBottomY = worldHeight - 0.35f - chainFlameHeight;
+
+        float chainFlameX = textX + chainMeterWidth + 0.12f;
+
+        // Rendered unconditionally (not gated on chain count) so it can fade out smoothly after the chain breaks.
+        chainFireEffect.render(batch, whitePixel, chainFlameX, chainBottomY, chainFlameWidth, chainFlameHeight);
+
+        if (scoreManager.getChainCount() > 0) {
+            drawChainMeterVertical(batch, scoreManager.getChainTimerFraction(), textX, chainBottomY, chainMeterWidth, chainMeterHeight);
+
+            // Drawn after the flame so the counter renders in front of it, scaled and centered to fill the flame box.
+            drawChainCounterFitted(batch, "Chain x" + scoreManager.getChainCount(),
+                chainFlameX, chainBottomY, chainFlameWidth, chainFlameHeight);
         }
 
-        font.draw(batch, "Basic Lvl: " + player.getWeaponLevel("BasicWeapon"), textX, worldHeight - 0.8f);
-        font.draw(batch, "Fast Lvl: " + player.getWeaponLevel("WaveBlastWeapon"), textX, worldHeight - 1.2f);
-        font.draw(batch, "Bolt Lvl: " + player.getWeaponLevel("Thunderbolt"), textX, worldHeight - 1.6f);
-        font.draw(batch, "Orbit Lvl: " + player.getWeaponLevel("OrbitWeapon"), textX, worldHeight - 2.0f);
+        font.draw(batch, "Basic Lvl: " + player.getWeaponLevel("BasicWeapon"), textX, worldHeight - 0.8f - lowerSectionShift);
+        font.draw(batch, "Fast Lvl: " + player.getWeaponLevel("WaveBlastWeapon"), textX, worldHeight - 1.2f - lowerSectionShift);
+        font.draw(batch, "Bolt Lvl: " + player.getWeaponLevel("Thunderbolt"), textX, worldHeight - 1.6f - lowerSectionShift);
+        font.draw(batch, "Orbit Lvl: " + player.getWeaponLevel("OrbitWeapon"), textX, worldHeight - 2.0f - lowerSectionShift);
 
         if (player.getWeaponLevel("OrbitWeapon") > 0) {
             if (player.isShieldActive()) {
                 font.setColor(Color.CYAN);
-                font.draw(batch, "Shield: Active", textX, worldHeight - 2.13f);
+                font.draw(batch, "Shield: Active", textX, worldHeight - 2.13f - lowerSectionShift);
                 font.setColor(Color.WHITE);
             } else if (player.getShieldCooldownTimer() > 0) {
                 font.setColor(Color.GRAY);
-                font.draw(batch, String.format("Shield Cooldown: %.1fs", player.getShieldCooldownTimer()), textX, worldHeight - 2.13f);
+                font.draw(batch, String.format("Shield Cooldown: %.1fs", player.getShieldCooldownTimer()), textX, worldHeight - 2.13f - lowerSectionShift);
                 font.setColor(Color.WHITE);
-                drawShieldCooldownMeter(batch, 1f - player.getShieldCooldownFraction(), textX, worldHeight - 2.26f, barWidth);
+                drawShieldCooldownMeter(batch, 1f - player.getShieldCooldownFraction(), textX, worldHeight - 2.26f - lowerSectionShift, barWidth);
             } else {
                 font.setColor(Color.GREEN);
-                font.draw(batch, "Shield: Ready", textX, worldHeight - 2.13f);
+                font.draw(batch, "Shield: Ready", textX, worldHeight - 2.13f - lowerSectionShift);
                 font.setColor(Color.WHITE);
             }
         }
 
-        font.draw(batch, "# of Bombs: " + player.getNumBombs(), textX, worldHeight - 2.4f);
+        font.draw(batch, "# of Bombs: " + player.getNumBombs(), textX, worldHeight - 2.4f - lowerSectionShift);
 
         if (bombCooldownTimer > 0) {
             font.setColor(Color.GRAY);
-            font.draw(batch, String.format("Bomb Cooldown: %.1fs", bombCooldownTimer), textX, worldHeight - 2.5f);
+            font.draw(batch, String.format("Bomb Cooldown: %.1fs", bombCooldownTimer), textX, worldHeight - 2.5f - lowerSectionShift);
             font.setColor(Color.WHITE);
-            drawBombCooldownMeter(batch, 1f - bombCooldownFraction, textX, worldHeight - 2.63f, barWidth);
+            drawBombCooldownMeter(batch, 1f - bombCooldownFraction, textX, worldHeight - 2.63f - lowerSectionShift, barWidth);
         }
 
         font.setColor(Color.CYAN);
-        font.draw(batch, "Graze:", textX, worldHeight - 2.85f);
+        font.draw(batch, "Graze:", textX, worldHeight - 2.85f - lowerSectionShift);
         font.setColor(Color.WHITE);
-        drawGrazeMeter(batch, Math.min(player.getGrazePoints() / 100f, 1f), textX, worldHeight - 2.98f, barWidth);
+        drawGrazeMeter(batch, Math.min(player.getGrazePoints() / 100f, 1f), textX, worldHeight - 2.98f - lowerSectionShift, barWidth);
 
-        font.draw(batch, "# of Lives: " + player.getNumLives(), textX, worldHeight - 3.25f);
+        font.draw(batch, "# of Lives: " + player.getNumLives(), textX, worldHeight - 3.25f - lowerSectionShift);
 
         font.setColor(player.getActiveSlot() == 0 ? Color.YELLOW : Color.WHITE);
-        font.draw(batch, "Slot 1: " + weaponLabel(player.getSlotWeaponId(0)) + (player.getActiveSlot() == 0 ? " <" : ""), textX, worldHeight - 3.6f);
+        font.draw(batch, "Slot 1: " + weaponLabel(player.getSlotWeaponId(0)) + (player.getActiveSlot() == 0 ? " <" : ""), textX, worldHeight - 3.6f - lowerSectionShift);
         font.setColor(player.getActiveSlot() == 1 ? Color.YELLOW : Color.WHITE);
-        font.draw(batch, "Slot 2: " + weaponLabel(player.getSlotWeaponId(1)) + (player.getActiveSlot() == 1 ? " <" : ""), textX, worldHeight - 3.95f);
+        font.draw(batch, "Slot 2: " + weaponLabel(player.getSlotWeaponId(1)) + (player.getActiveSlot() == 1 ? " <" : ""), textX, worldHeight - 3.95f - lowerSectionShift);
         font.setColor(Color.WHITE);
     }
 
@@ -335,17 +355,38 @@ public class UIManager implements Disposable {
         };
     }
 
-    private void drawChainMeter(SpriteBatch batch, float fraction, float x, float y, float totalWidth) {
-        float height = 0.08f;
-
+    private void drawChainMeterVertical(SpriteBatch batch, float fraction, float x, float y, float width, float totalHeight) {
         batch.setColor(0.25f, 0.25f, 0.25f, 1f);
-        batch.draw(whitePixel, x, y, totalWidth, height);
+        batch.draw(whitePixel, x, y, width, totalHeight);
 
         Color fill = fraction > 0.5f ? Color.YELLOW : (fraction > 0.25f ? Color.ORANGE : Color.RED);
         batch.setColor(fill);
-        batch.draw(whitePixel, x, y, totalWidth * fraction, height);
+        batch.draw(whitePixel, x, y, width, totalHeight * fraction);
 
         batch.setColor(Color.WHITE);
+    }
+
+    /** Draws text scaled and centered to fill the given box (uniform scale, preserves aspect). */
+    private void drawChainCounterFitted(SpriteBatch batch, String text, float boxX, float boxY, float boxWidth, float boxHeight) {
+        float originalScaleX = font.getData().scaleX;
+        float originalScaleY = font.getData().scaleY;
+
+        chainTextLayout.setText(font, text);
+        float padding = 0.85f;
+        float scale = Math.min(boxWidth * padding / chainTextLayout.width, boxHeight * padding / chainTextLayout.height);
+
+        font.getData().setScale(originalScaleX * scale, originalScaleY * scale);
+        float scaledWidth = chainTextLayout.width * scale;
+        float scaledHeight = chainTextLayout.height * scale;
+
+        float x = boxX + (boxWidth - scaledWidth) / 2f;
+        float y = boxY + (boxHeight + scaledHeight) / 2f;
+
+        font.setColor(Color.YELLOW);
+        font.draw(batch, text, x, y);
+        font.setColor(Color.WHITE);
+
+        font.getData().setScale(originalScaleX, originalScaleY);
     }
 
     private void drawBombCooldownMeter(SpriteBatch batch, float fraction, float x, float y, float totalWidth) {
@@ -464,5 +505,6 @@ public class UIManager implements Disposable {
     public void dispose() {
         font.dispose();
         whitePixel.dispose();
+        chainFireEffect.dispose();
     }
 }
