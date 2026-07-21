@@ -130,7 +130,7 @@ public class Player {
         weaponSlots[1] = null;
         activeSlot = 0;
         numBombs = 1;
-        numLives = 3;
+        numLives = 6;
         grazePoints = 0;
         isInvincible = false;
     }
@@ -319,7 +319,7 @@ public class Player {
         thunderboltWeapon.resetShootTimer();
         animationTime = 0;
         numBombs = 1;
-        numLives = 3;
+        numLives = 6;
         isInvincible = false;
         isDead = false;
         deathTimer = 0f;

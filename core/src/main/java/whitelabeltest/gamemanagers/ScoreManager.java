@@ -33,16 +33,19 @@ public class ScoreManager {
         addScore(basePoints, currentChainWindow);
     }
 
-    /** Called on every weapon hit (not just kills) to keep the chain alive between kills - tops
-     *  the timer up by a bonus (see CollisionManager: half the weapon's fire rate) on top of
-     *  whatever a kill already refreshed it to (see addScore), capped at chainWindow so the meter
-     *  (chainTimer / currentChainWindow) never exceeds 100%. This is a supplement, not a
-     *  replacement, for the kill-triggered reset: a bonus alone can never sustain the chain, since
-     *  at a weapon's own max fire rate it always adds less (fireRate / 2) than the real time
-     *  (fireRate) that decays between hits. */
     public void registerWeaponHit(float chainTimerBonus, float chainWindow) {
         currentChainWindow = chainWindow;
         chainTimer = Math.min(chainTimer + chainTimerBonus, currentChainWindow);
+    }
+
+    public void addBonus(int points) {
+        score += points;
+        if (score > highScore) highScore = score;
+    }
+
+    public void multiplyScore(int factor) {
+        score *= factor;
+        if (score > highScore) highScore = score;
     }
 
     public void reset() {

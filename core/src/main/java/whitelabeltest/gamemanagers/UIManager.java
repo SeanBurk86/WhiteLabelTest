@@ -392,13 +392,18 @@ public class UIManager implements Disposable {
         font.setColor(Color.WHITE);
     }
 
-    public void drawLevelComplete(SpriteBatch batch, float worldWidth, float worldHeight, int score) {
+    public void drawLevelComplete(SpriteBatch batch, float worldWidth, float worldHeight, int score, int bombBonus, int livesMultiplier) {
         font.setColor(Color.RED);
+        StringBuilder text = new StringBuilder("LEVEL COMPLETE\n");
+        if (bombBonus > 0) text.append("Unused Bomb Bonus: +").append(bombBonus).append("\n");
+        if (livesMultiplier > 0) text.append("Lives Remaining Bonus: x").append(livesMultiplier).append("\n");
+        text.append("Your Score: ").append(score).append("\n");
         if (inputType == InputType.KEYBOARD) {
-            levelCompleteLayout.setText(font, "LEVEL COMPLETE\nYour Score: " + score + "\nPress R to Restart\nPress Q to Quit");
+            text.append("Press R to Restart\nPress Q to Quit");
         } else {
-            levelCompleteLayout.setText(font, "LEVEL COMPLETE\nYour Score: " + score + "\nPress Start to Restart\nPress Select to Quit");
+            text.append("Press Start to Restart\nPress Select to Quit");
         }
+        levelCompleteLayout.setText(font, text.toString());
         font.draw(batch, levelCompleteLayout, (worldWidth - levelCompleteLayout.width) / 2, (worldHeight + levelCompleteLayout.height) / 2);
         font.setColor(Color.WHITE);
     }

@@ -51,6 +51,9 @@ public class GameController implements Disposable {
     private static final int MAX_DEBUG_LIVES = 9;
 
     private static final float BOMB_COOLDOWN = 15f;
+    private static final int BOMB_BONUS_PER_UNUSED = 10000;
+    private int levelCompleteBombBonus;
+    private int levelCompleteLivesMultiplier;
 
     private static final float BOMB_SAVE_WINDOW = 0.125f;
     private float hitGraceTimer = -1f;
@@ -143,6 +146,7 @@ public class GameController implements Disposable {
             levelComplete = true;
             background.stop();
             audio.playVictory();
+            applyLevelCompleteBonus();
             return;
         }
 
@@ -242,6 +246,19 @@ public class GameController implements Disposable {
         spawnScheduler.seekTo(targetTime);
         entities.clearWorld();
         debugMenuOpen = false;
+    }
+
+    /** End-of-level tally: 10000 points per unused bomb, added as a flat bonus, then - only if the
+     *  player still has lives in reserve - the whole score (including that bonus) is multiplied by
+     *  the number of lives remaining. Stored for UIManager.drawLevelComplete to show the breakdown. */
+    private void applyLevelCompleteBonus() {
+        Player player = entities.getPlayer();
+
+        levelCompleteBombBonus = player.getNumBombs() * BOMB_BONUS_PER_UNUSED;
+        if (levelCompleteBombBonus > 0) scoreManager.addBonus(levelCompleteBombBonus);
+
+        levelCompleteLivesMultiplier = player.getNumLives();
+        if (levelCompleteLivesMultiplier > 0) scoreManager.multiplyScore(levelCompleteLivesMultiplier + 1);
     }
 
     private void handleGameOverInput() {
@@ -355,6 +372,8 @@ public class GameController implements Disposable {
         levelStartTimer = 0f;
         bombCooldownTimer = 0f;
         hitGraceTimer = -1f;
+        levelCompleteBombBonus = 0;
+        levelCompleteLivesMultiplier = 0;
         audio.stopVictory();
         patternPreviewer.close(entities);
         entities.reset();
@@ -379,6 +398,8 @@ public class GameController implements Disposable {
     public ScoreManager getScoreManager() { return scoreManager; }
     public boolean isGameOver() { return gameOver; }
     public boolean isLevelComplete() { return levelComplete; }
+    public int getLevelCompleteBombBonus() { return levelCompleteBombBonus; }
+    public int getLevelCompleteLivesMultiplier() { return levelCompleteLivesMultiplier; }
     public boolean isDebugMode() { return debugMode; }
     public boolean isDebugMenuOpen() { return debugMenuOpen; }
     public int getDebugMenuSelectedIndex() { return debugMenuSelectedIndex; }
