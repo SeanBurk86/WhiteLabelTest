@@ -161,6 +161,7 @@ public class CollisionManager {
 
                 if (!bullet.hasDamaged(enemy)) {
                     bullet.markDamaged(enemy);
+                    scoreManager.registerWeaponHit(bullet.getFireRate() / 2f, bullet.getChainWindow());
                     if (enemy.takeDamage(bullet.getDamage())) {
                         scoreManager.addScore(GameController.destroyEnemy(audio, entityManager, assets, worldWidth, worldHeight, enemy), bullet.getChainWindow());
                     }

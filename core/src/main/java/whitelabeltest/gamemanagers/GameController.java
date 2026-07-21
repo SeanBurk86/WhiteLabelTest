@@ -149,7 +149,7 @@ public class GameController implements Disposable {
         }
 
         if (collisionManager.checkGrazeCollisions(entities.getPlayer(), entities.getEnemyBullets())) {
-            entities.getPlayer().setGrazePoints(entities.getPlayer().getGrazePoints() + 0.25f);
+            entities.getPlayer().setGrazePoints(entities.getPlayer().getGrazePoints() + 0.5f);
             entities.getPlayer().triggerGrazeFlash();
         }
 

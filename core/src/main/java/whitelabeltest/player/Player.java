@@ -323,6 +323,7 @@ public class Player {
         isInvincible = false;
         isDead = false;
         deathTimer = 0f;
+        grazePoints = 0f;
     }
 
     public Circle getHitbox() { return hitbox; }
