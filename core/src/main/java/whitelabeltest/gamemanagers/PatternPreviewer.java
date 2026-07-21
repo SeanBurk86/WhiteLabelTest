@@ -184,7 +184,7 @@ public class PatternPreviewer {
 
         if (previewEnemy == null) return;
 
-        previewEnemy.update(delta, entities.getEnemyBullets(), entities.getPlayer().getHitbox());
+        previewEnemy.update(delta, entities.getEnemyBullets(), entities.getPlayer().getHitbox(), false);
 
         Array<EnemyBullet> enemyBullets = entities.getEnemyBullets();
         for (int i = enemyBullets.size - 1; i >= 0; i--) {

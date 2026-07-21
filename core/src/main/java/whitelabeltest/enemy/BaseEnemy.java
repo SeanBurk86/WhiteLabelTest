@@ -79,7 +79,7 @@ public abstract class BaseEnemy implements Enemy {
     public boolean isDying() { return lifecycleState == LifecycleState.DYING; }
 
     @Override
-    public void update(float delta, Array<EnemyBullet> enemyBullets, Circle playerHitbox) {
+    public void update(float delta, Array<EnemyBullet> enemyBullets, Circle playerHitbox, boolean firingPaused) {
         if (sprite == null) return;
 
         lifecycleTime += delta;
@@ -120,7 +120,10 @@ public abstract class BaseEnemy implements Enemy {
             if (!rotateWithMovement) sprite.setRotation(0);
         }
 
-        if (firing != null) {
+        // Skipped (not just no-op fired) while paused, so a firing pattern's internal cooldown
+        // timer stays frozen at its pre-pause value instead of overshooting and unloading the
+        // instant firing resumes - see EntityManager's firingPaused computation.
+        if (firing != null && !firingPaused) {
             firing.update(delta, this, sprite, rectangle, enemyBullets, bulletAnimation, playerHitbox);
         }
     }

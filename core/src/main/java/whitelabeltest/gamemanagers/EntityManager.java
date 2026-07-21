@@ -121,9 +121,12 @@ public class EntityManager {
             }
         }
 
+        // Enemies stop shooting while the player is dead or still in their post-respawn
+        // invincibility window, so nothing can hit a ship that isn't fully back in play yet.
+        boolean firingPaused = player.isDead() || player.isInvincible();
         for (int i = enemies.size - 1; i >= 0; i--) {
             Enemy e = enemies.get(i);
-            e.update(delta, enemyBullets, player.getHitbox());
+            e.update(delta, enemyBullets, player.getHitbox(), firingPaused);
 
             if (e.isOffScreen()) {
                 if (e.isBoss() && e.isDying()) notifyBossKilled();

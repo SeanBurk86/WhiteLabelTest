@@ -49,6 +49,9 @@ public class GameController implements Disposable {
 
     private static final float BOMB_COOLDOWN = 15f;
 
+    private static final float BOMB_SAVE_WINDOW = 0.125f;
+    private float hitGraceTimer = -1f;
+
     public GameController(float worldWidth, float worldHeight) {
         this.worldWidth = worldWidth;
         this.worldHeight = worldHeight;
@@ -111,7 +114,17 @@ public class GameController implements Disposable {
         }
 
         if (input.isBombJustPressed() && !entities.getPlayer().isDead()) {
-            handleBomb();
+            if (tryFireBomb() && hitGraceTimer >= 0f) {
+                hitGraceTimer = -1f; // panic bomb: fired in time, so the pending hit doesn't count
+            }
+        }
+
+        if (hitGraceTimer >= 0f) {
+            hitGraceTimer -= delta;
+            if (hitGraceTimer <= 0f) {
+                hitGraceTimer = -1f;
+                applyPlayerHit();
+            }
         }
 
         if (gameOver || levelComplete) {
@@ -132,18 +145,13 @@ public class GameController implements Disposable {
 
         collisionManager.checkShieldReflections(entities.getPlayer(), entities.getEnemyBullets(), entities.getBullets(), assets);
 
-        if (!entities.getPlayer().isInvincible() && !entities.getPlayer().isDead()) {
+        if (hitGraceTimer < 0f && !entities.getPlayer().isInvincible() && !entities.getPlayer().isDead()) {
             if (collisionManager.checkPlayerEnemyCollisions(entities.getPlayer(), entities.getEnemies()) ||
                 collisionManager.checkPlayerBulletCollisions(entities.getPlayer(), entities.getEnemyBullets())) {
-                if (entities.getPlayer().getNumLives() <= 0) {
-                    gameOver = true;
-                    background.stop();
-                    audio.playGameOver();
+                if (canFireBomb()) {
+                    hitGraceTimer = BOMB_SAVE_WINDOW;
                 } else {
-                    entities.getPlayer().setNumLives(entities.getPlayer().getNumLives() - 1);
-                    entities.getPlayer().startDeath();
-                    audio.playPlayerDeath();
-                    entities.destroyAllPlayerBullets();
+                    applyPlayerHit();
                 }
             }
         }
@@ -233,14 +241,34 @@ public class GameController implements Disposable {
         }
     }
 
-    private void handleBomb() {
-        if (entities.getPlayer().getNumBombs() > 0 && bombCooldownTimer <= 0 && !gameOver) {
-            sufferBombDamage(50, entities.getEnemies());
-            entities.destroyAllEnemyBullets();
-            entities.getPlayer().setNumBombs(entities.getPlayer().getNumBombs() - 1);
-            entities.triggerBombEffect();
-            audio.playBomb();
-            bombCooldownTimer = BOMB_COOLDOWN;
+    private boolean canFireBomb() {
+        return entities.getPlayer().getNumBombs() > 0 && bombCooldownTimer <= 0 && !gameOver;
+    }
+
+    private boolean tryFireBomb() {
+        if (!canFireBomb()) return false;
+        sufferBombDamage(50, entities.getEnemies());
+        entities.destroyAllEnemyBullets();
+        entities.getPlayer().setNumBombs(entities.getPlayer().getNumBombs() - 1);
+        entities.triggerBombEffect();
+        audio.playBomb();
+        bombCooldownTimer = BOMB_COOLDOWN;
+        return true;
+    }
+
+    /** Applies a hit's actual consequence (life loss/death, or game over) - called either
+     *  immediately on detection (no bomb available to save it) or after the panic-bomb grace
+     *  window (see hitGraceTimer) expires unused. */
+    private void applyPlayerHit() {
+        if (entities.getPlayer().getNumLives() <= 0) {
+            gameOver = true;
+            background.stop();
+            audio.playGameOver();
+        } else {
+            entities.getPlayer().setNumLives(entities.getPlayer().getNumLives() - 1);
+            entities.getPlayer().startDeath();
+            audio.playPlayerDeath();
+            entities.destroyAllPlayerBullets();
         }
     }
 
@@ -315,6 +343,7 @@ public class GameController implements Disposable {
         levelComplete = false;
         levelStartTimer = 0f;
         bombCooldownTimer = 0f;
+        hitGraceTimer = -1f;
         audio.stopVictory();
         patternPreviewer.close(entities);
         entities.reset();
