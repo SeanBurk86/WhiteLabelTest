@@ -25,6 +25,8 @@ public class OrbitingBullet implements EnemyBullet {
     private Animation<TextureRegion> animation;
     private float animationTime;
 
+    private final Vector2 tempVelocity = new Vector2();
+
     public OrbitingBullet() {
         this.rectangle = new Rectangle();
     }
@@ -67,7 +69,7 @@ public class OrbitingBullet implements EnemyBullet {
         // Instantaneous velocity = center velocity + tangential orbit velocity
         float vx = centerVx - orbitRadius * orbitSpeed * MathUtils.sin(angle);
         float vy = centerVy + orbitRadius * orbitSpeed * MathUtils.cos(angle);
-        sprite.setRotation(new Vector2(vx, vy).angleDeg() - 90);
+        sprite.setRotation(tempVelocity.set(vx, vy).angleDeg() - 90);
     }
 
     @Override

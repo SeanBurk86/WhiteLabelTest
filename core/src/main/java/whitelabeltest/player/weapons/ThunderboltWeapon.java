@@ -48,7 +48,9 @@ public class ThunderboltWeapon extends BaseWeapon {
     private static final int LAYER_COUNT = 3;
     private static final int SPRITES_PER_SEGMENT = SPRITES_PER_LAYER * LAYER_COUNT;
 
-    private static final int GL_MAX = 0x8008;
+    // Public: EntityManager batches the GL_MAX blend section across every active strike instead
+    // of each one flushing/toggling it independently - see drawBolts()/draw().
+    public static final int GL_MAX = 0x8008;
 
     private WeaponDefinition def;
     private Texture texture;
@@ -284,18 +286,30 @@ public class ThunderboltWeapon extends BaseWeapon {
         }
     }
 
+    /** Draws just this strike's sprites, with no blend-state changes of its own - callers that
+     *  have several active strikes (the common case: a level-4 fire spawns up to 6 at once) must
+     *  wrap the whole batch of them in a single GL_MAX blend section themselves (see
+     *  EntityManager.drawThunderboltBolts), so the flush()/glBlendEquation() cost - each a forced
+     *  GPU sync point - is paid once per frame instead of once per strike. */
+    public void drawBolts(SpriteBatch batch) {
+        int spriteCount = segCount * SPRITES_PER_SEGMENT;
+        for (int i = 0; i < spriteCount; i++) {
+            bolts.get(i).draw(batch);
+        }
+    }
+
+    /** Self-contained fallback for callers that draw a single strike in isolation - wraps
+     *  drawBolts() in its own GL_MAX blend section. EntityManager doesn't use this path; it calls
+     *  drawBolts() directly inside one shared section instead (see drawThunderboltBolts). */
     @Override
     public void draw(SpriteBatch batch) {
-        int spriteCount = segCount * SPRITES_PER_SEGMENT;
         int srcFunc = batch.getBlendSrcFunc();
         int dstFunc = batch.getBlendDstFunc();
 
         batch.flush();
         Gdx.gl.glBlendEquation(GL_MAX);
         batch.setBlendFunction(GL20.GL_SRC_ALPHA, GL20.GL_ONE);
-        for (int i = 0; i < spriteCount; i++) {
-            bolts.get(i).draw(batch);
-        }
+        drawBolts(batch);
 
         batch.flush();
         Gdx.gl.glBlendEquation(GL20.GL_FUNC_ADD);

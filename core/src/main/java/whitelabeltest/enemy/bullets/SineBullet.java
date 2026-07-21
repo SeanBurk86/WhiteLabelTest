@@ -25,6 +25,8 @@ public class SineBullet implements EnemyBullet {
     private Animation<TextureRegion> animation;
     private float animationTime;
 
+    private final Vector2 tempVelocity = new Vector2();
+
     public SineBullet() {
         this.rectangle = new Rectangle();
     }
@@ -69,7 +71,7 @@ public class SineBullet implements EnemyBullet {
         // Rotate sprite to face its direction of travel
         float vx = amplitude * frequency * MathUtils.cos(frequency * time + phase);
         float vy = -speed;
-        sprite.setRotation(new Vector2(vx, vy).angleDeg() - 90);
+        sprite.setRotation(tempVelocity.set(vx, vy).angleDeg() - 90);
 
         rectangle.setPosition(sprite.getX() + .036f, sprite.getY() + .036f);
     }

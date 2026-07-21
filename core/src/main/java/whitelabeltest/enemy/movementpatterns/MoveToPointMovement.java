@@ -16,6 +16,7 @@ public class MoveToPointMovement implements MovementPattern {
     private final float stopDistance;
     private boolean finished = false;
     private final Vector2 tempDir = new Vector2();
+    private final Vector2 tempPos = new Vector2();
 
     public MoveToPointMovement(float speed, float targetX, float targetY) {
         this(speed, targetX, targetY, DEFAULT_STOP_DISTANCE);
@@ -32,15 +33,15 @@ public class MoveToPointMovement implements MovementPattern {
     public void update(float delta, Sprite sprite, Rectangle rectangle, float worldWidth, float worldHeight, Circle playerHitbox, boolean inverseMovement) {
         if (finished) return;
 
-        Vector2 currentPos = new Vector2(sprite.getX() + sprite.getWidth() / 2, sprite.getY() + sprite.getHeight() / 2);
-        float dist = currentPos.dst(targetX, targetY);
+        tempPos.set(sprite.getX() + sprite.getWidth() / 2, sprite.getY() + sprite.getHeight() / 2);
+        float dist = tempPos.dst(targetX, targetY);
 
         if (dist <= stopDistance) {
             finished = true;
             return;
         }
 
-        tempDir.set(targetX, targetY).sub(currentPos).nor();
+        tempDir.set(targetX, targetY).sub(tempPos).nor();
         float step = speed * delta;
         if (step > dist) step = dist;
         sprite.translate(tempDir.x * step, tempDir.y * step);

@@ -1,5 +1,6 @@
 package whitelabeltest.gamemanagers;
 
+import com.badlogic.gdx.Gdx;
 import com.badlogic.gdx.graphics.GL20;
 import com.badlogic.gdx.graphics.g2d.Animation;
 import com.badlogic.gdx.graphics.g2d.SpriteBatch;
@@ -9,6 +10,7 @@ import whitelabeltest.enemy.Enemy;
 import whitelabeltest.enemy.bullets.EnemyBullet;
 import whitelabeltest.player.Player;
 import whitelabeltest.player.powerups.Powerup;
+import whitelabeltest.player.weapons.ThunderboltWeapon;
 import whitelabeltest.player.weapons.Weapon;
 
 public class EntityManager {
@@ -175,7 +177,10 @@ public class EntityManager {
     public void draw(SpriteBatch batch) {
         for (Powerup p : powerups) p.draw(batch);
         for (PlayerTrailEffect t : trails) t.draw(batch);
-        for (Weapon b : bullets) b.draw(batch);
+        for (Weapon b : bullets) {
+            if (!(b instanceof ThunderboltWeapon)) b.draw(batch);
+        }
+        drawThunderboltBolts(batch);
 
         for (Enemy e : enemies) e.drawShadow(batch);
         for (Enemy e : enemies) if (e.isGround()) e.draw(batch);
@@ -195,6 +200,35 @@ public class EntityManager {
         }
 
         player.draw(batch);
+    }
+
+    /** Draws every active Thunderbolt strike's bolt sprites inside one shared GL_MAX blend
+     *  section, instead of each strike's own draw() flushing the batch and toggling
+     *  glBlendEquation independently (see ThunderboltWeapon.draw()/drawBolts()). A level-4 fire
+     *  spawns up to 6 concurrent strikes, so batching this here turns what would be up to a dozen
+     *  forced flushes (each a GPU sync point) per frame into just two. */
+    private void drawThunderboltBolts(SpriteBatch batch) {
+        boolean blendSectionOpen = false;
+        int srcFunc = 0, dstFunc = 0;
+
+        for (Weapon b : bullets) {
+            if (!(b instanceof ThunderboltWeapon)) continue;
+            if (!blendSectionOpen) {
+                srcFunc = batch.getBlendSrcFunc();
+                dstFunc = batch.getBlendDstFunc();
+                batch.flush();
+                Gdx.gl.glBlendEquation(ThunderboltWeapon.GL_MAX);
+                batch.setBlendFunction(GL20.GL_SRC_ALPHA, GL20.GL_ONE);
+                blendSectionOpen = true;
+            }
+            ((ThunderboltWeapon) b).drawBolts(batch);
+        }
+
+        if (blendSectionOpen) {
+            batch.flush();
+            Gdx.gl.glBlendEquation(GL20.GL_FUNC_ADD);
+            batch.setBlendFunction(srcFunc, dstFunc);
+        }
     }
 
     public void reset() {

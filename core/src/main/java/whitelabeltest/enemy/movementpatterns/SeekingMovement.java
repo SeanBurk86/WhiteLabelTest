@@ -13,6 +13,7 @@ public class SeekingMovement implements MovementPattern {
     private final float angleOffsetDeg;
     private boolean finished = false;
     private final Vector2 tempDir = new Vector2();
+    private final Vector2 tempPos = new Vector2();
 
     public SeekingMovement(float speed, float stopDistance) {
         this(speed, stopDistance, DEFAULT_ANGLE_DEG);
@@ -25,15 +26,14 @@ public class SeekingMovement implements MovementPattern {
 
     @Override
     public void update(float delta, Sprite sprite, Rectangle rectangle, float worldWidth, float worldHeight, Circle playerHitbox, boolean inverseMovement) {
-        Vector2 targetPos = new Vector2(playerHitbox.x, playerHitbox.y);
-        Vector2 currentPos = new Vector2(sprite.getX() + sprite.getWidth() / 2, sprite.getY() + sprite.getHeight() / 2);
+        tempPos.set(sprite.getX() + sprite.getWidth() / 2, sprite.getY() + sprite.getHeight() / 2);
 
-        float dist = currentPos.dst(targetPos);
+        float dist = tempPos.dst(playerHitbox.x, playerHitbox.y);
 
         if (dist <= stopDistance) {
             finished = true;
         } else {
-            tempDir.set(targetPos).sub(currentPos).nor();
+            tempDir.set(playerHitbox.x, playerHitbox.y).sub(tempPos).nor();
             tempDir.rotateDeg(angleOffsetDeg);
             if (inverseMovement) {
                 tempDir.scl(-1); // Move away from player
