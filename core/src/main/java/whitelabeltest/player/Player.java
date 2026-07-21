@@ -391,14 +391,12 @@ public class Player {
 
     public int getMaxWeaponLevel() { return MAX_WEAPON_LEVEL; }
 
-    /** Debug-only: directly assigns which weapon occupies a slot (null clears it). Refuses to
-     *  leave both slots empty, and bumps the same weapon out of the other slot if it's there -
-     *  same "never in both slots at once" invariant levelUpWeapon keeps. */
     public void setSlotWeapon(int slot, String weaponId) {
         Weapon target = weaponById(weaponId);
         int other = 1 - slot;
         if (target == null && weaponSlots[other] == null) return;
         if (target != null && weaponSlots[other] == target) weaponSlots[other] = null;
+        if (target != null && target.getLevel() < 1) target.setLevel(1);
         weaponSlots[slot] = target;
         if (weaponSlots[activeSlot] == null) activeSlot = other;
     }
