@@ -121,7 +121,10 @@ public class CollisionManager {
     public void checkPlayerPowerupCollisions(Player player, Array<Powerup> powerups, AudioManager audio) {
         for (int i = powerups.size - 1; i >= 0; i--) {
             Powerup p = powerups.get(i);
-            if (Intersector.overlaps(player.getHitbox(), p.getRectangle())) {
+            // Weapon powerups are collectible from the wider graze halo, not just the ship's tight
+            // hitbox, so drifting through the halo picks them up without needing to touch them directly.
+            Circle pickupHitbox = p instanceof WeaponPowerup ? player.getGrazeHitbox() : player.getHitbox();
+            if (Intersector.overlaps(pickupHitbox, p.getRectangle())) {
                 p.apply(player);
                 audio.playPowerup();
                 powerups.removeIndex(i);
