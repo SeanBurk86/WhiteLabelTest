@@ -138,7 +138,8 @@ public class UIManager implements Disposable {
     private static final int DEBUG_ROW_LEVELS_START = 3;
     private static final String[] DEBUG_WEAPON_LEVEL_IDS = {"BasicWeapon", "WaveBlastWeapon", "Thunderbolt", "OrbitWeapon"};
     private static final String[] DEBUG_WEAPON_LEVEL_LABELS = {"Basic Lvl", "Fast Lvl", "Bolt Lvl", "Orbit Lvl"};
-    private static final int DEBUG_ROW_PATTERN_PREVIEW = DEBUG_ROW_LEVELS_START + DEBUG_WEAPON_LEVEL_IDS.length;
+    private static final int DEBUG_ROW_LIVES = DEBUG_ROW_LEVELS_START + DEBUG_WEAPON_LEVEL_IDS.length;
+    private static final int DEBUG_ROW_PATTERN_PREVIEW = DEBUG_ROW_LIVES + 1;
     private static final int DEBUG_ROW_BOOKMARKS_START = DEBUG_ROW_PATTERN_PREVIEW + 1;
 
     // Debug-only: shows a "MUTED" badge in the left panel when audio is silenced.
@@ -197,6 +198,14 @@ public class UIManager implements Disposable {
         }
         font.setColor(Color.GRAY);
         font.draw(batch, "  </> adjust level", x, y);
+        y -= lineHeight * 1.5f;
+
+        boolean livesSelected = selectedIndex == DEBUG_ROW_LIVES;
+        font.setColor(livesSelected ? Color.YELLOW : Color.WHITE);
+        font.draw(batch, (livesSelected ? "> " : "  ") + "Lives: " + player.getNumLives(), x, y);
+        y -= lineHeight;
+        font.setColor(Color.GRAY);
+        font.draw(batch, "  </> adjust lives", x, y);
         y -= lineHeight * 1.5f;
 
         boolean previewSelected = selectedIndex == DEBUG_ROW_PATTERN_PREVIEW;

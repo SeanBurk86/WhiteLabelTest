@@ -37,15 +37,18 @@ public class GameController implements Disposable {
     private static final float DEBUG_MENU_SCRUB_SPEED = 5f;
 
     // Debug menu row layout: 0 = seek-time editor, 1-2 = weapon slot pickers, 3-6 = weapon
-    // levels, 7 = enemy/pattern editor, 8+ = saved bookmarks. Kept in sync with UIManager.drawDebugMenu's own row constants.
+    // levels, 7 = lives editor, 8 = enemy/pattern editor, 9+ = saved bookmarks. Kept in sync with
+    // UIManager.drawDebugMenu's own row constants.
     private static final int ROW_SEEK = 0;
     private static final int ROW_SLOT1 = 1;
     private static final int ROW_SLOT2 = 2;
     private static final int ROW_LEVELS_START = 3;
     private static final String[] WEAPON_LEVEL_IDS = {"BasicWeapon", "WaveBlastWeapon", "Thunderbolt", "OrbitWeapon"};
-    private static final int ROW_PATTERN_PREVIEW = ROW_LEVELS_START + WEAPON_LEVEL_IDS.length;
+    private static final int ROW_LIVES = ROW_LEVELS_START + WEAPON_LEVEL_IDS.length;
+    private static final int ROW_PATTERN_PREVIEW = ROW_LIVES + 1;
     private static final int ROW_BOOKMARKS_START = ROW_PATTERN_PREVIEW + 1;
     private static final String[] SLOT_WEAPON_OPTIONS = {null, "BasicWeapon", "WaveBlastWeapon", "OrbitWeapon", "Thunderbolt"};
+    private static final int MAX_DEBUG_LIVES = 9;
 
     private static final float BOMB_COOLDOWN = 15f;
 
@@ -195,6 +198,14 @@ public class GameController implements Disposable {
             int slot = debugMenuSelectedIndex - ROW_SLOT1;
             if (input.isDebugMenuLeftJustPressed()) cycleSlotWeapon(slot, -1);
             if (input.isDebugMenuRightJustPressed()) cycleSlotWeapon(slot, 1);
+        } else if (debugMenuSelectedIndex == ROW_LIVES) {
+            Player player = entities.getPlayer();
+            if (input.isDebugMenuLeftJustPressed()) {
+                player.setNumLives(Math.max(0, player.getNumLives() - 1));
+            }
+            if (input.isDebugMenuRightJustPressed()) {
+                player.setNumLives(Math.min(MAX_DEBUG_LIVES, player.getNumLives() + 1));
+            }
         } else if (debugMenuSelectedIndex == ROW_PATTERN_PREVIEW) {
             if (input.isDebugMenuConfirmJustPressed()) {
                 patternPreviewer.open(entities, assets, worldWidth, worldHeight);
