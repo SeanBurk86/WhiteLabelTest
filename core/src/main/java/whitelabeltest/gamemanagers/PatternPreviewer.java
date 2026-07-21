@@ -482,15 +482,26 @@ public class PatternPreviewer {
         }
         if (Float.isNaN(d.targetX)) d.targetX = spawnX;
         if (Float.isNaN(d.targetY)) d.targetY = 0f;
-        if ("Sequence".equals(d.type) && (d.patterns == null || d.patterns.size == 0)) {
-            d.patterns = new Array<>();
-            MovementPatternDef first = new MovementPatternDef();
-            first.type = "Straight";
-            d.patterns.add(first);
+        if ("Sequence".equals(d.type)) {
+            if (d.patterns == null || d.patterns.size == 0) {
+                d.patterns = new Array<>();
+                MovementPatternDef first = new MovementPatternDef();
+                first.type = "Straight";
+                d.patterns.add(first);
+            }
+        } else {
+            // Clears sub-patterns left over from switching away from Sequence/Squadron - otherwise
+            // a cloned/leftover patterns or pattern array dangles on the def and gets serialized
+            // into a leaf node that never reads it (see saveAll).
+            d.patterns = null;
         }
-        if ("Squadron".equals(d.type) && d.pattern == null) {
-            d.pattern = new MovementPatternDef();
-            d.pattern.type = "Straight";
+        if ("Squadron".equals(d.type)) {
+            if (d.pattern == null) {
+                d.pattern = new MovementPatternDef();
+                d.pattern.type = "Straight";
+            }
+        } else {
+            d.pattern = null;
         }
     }
 
@@ -511,11 +522,17 @@ public class PatternPreviewer {
             Array<String> bulletIds = PatternRegistry.getBulletIds();
             if (bulletIds.size > 0) d.bulletId = bulletIds.first();
         }
-        if (("Sequence".equals(d.type) || "Combined".equals(d.type)) && (d.patterns == null || d.patterns.size == 0)) {
-            d.patterns = new Array<>();
-            FiringPatternDef first = new FiringPatternDef();
-            first.type = "None";
-            d.patterns.add(first);
+        if ("Sequence".equals(d.type) || "Combined".equals(d.type)) {
+            if (d.patterns == null || d.patterns.size == 0) {
+                d.patterns = new Array<>();
+                FiringPatternDef first = new FiringPatternDef();
+                first.type = "None";
+                d.patterns.add(first);
+            }
+        } else {
+            // Clears sub-patterns left over from switching away from Sequence/Combined - see the
+            // matching comment in resolveMovementSentinels.
+            d.patterns = null;
         }
     }
 
