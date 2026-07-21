@@ -2,6 +2,8 @@ package whitelabeltest.gamemanagers;
 
 import com.badlogic.gdx.Gdx;
 import com.badlogic.gdx.graphics.Texture;
+import com.badlogic.gdx.graphics.g2d.Animation;
+import com.badlogic.gdx.graphics.g2d.TextureRegion;
 import com.badlogic.gdx.utils.Array;
 import com.badlogic.gdx.utils.Disposable;
 import whitelabeltest.enemy.Enemy;
@@ -170,6 +172,7 @@ public class GameController implements Disposable {
 
         collisionManager.checkPlayerPowerupCollisions(entities.getPlayer(), entities.getPowerups(), audio);
         collisionManager.checkBulletPowerupCollisions(entities.getBullets(), entities.getPowerups(), assets);
+        collisionManager.checkPlayerGemCollisions(entities.getPlayer(), entities.getPointGems(), scoreManager, audio);
 
         collisionManager.checkBulletEnemyCollisions(entities.getBullets(), entities.getEnemies(), audio, entities, assets, worldWidth, worldHeight, scoreManager);
     }
@@ -323,6 +326,17 @@ public class GameController implements Disposable {
         String guaranteed = enemy.getGuaranteedPowerup();
         if (guaranteed != null) {
             spawnPowerup(entityManager.getPowerups(), assets, enemy.getRectangle().x, enemy.getRectangle().y, worldWidth, worldHeight, guaranteed);
+        }
+
+        int gemCount = enemy.getMaxHealth() / 10;
+        if (gemCount > 0) {
+            Animation<TextureRegion> gemAnimation =
+                AnimationCache.get(assets.pointGemTexture, 6, 4, 24, 0.05f, Animation.PlayMode.LOOP);
+            for (int i = 0; i < gemCount; i++) {
+                PointGem gem = ObjectPools.pointGemPool.obtain();
+                gem.init(gemAnimation, centerX, centerY, worldWidth, worldHeight);
+                entityManager.getPointGems().add(gem);
+            }
         }
 
         audio.playExplosion();

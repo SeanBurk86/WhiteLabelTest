@@ -15,6 +15,7 @@ public class AudioManager implements Disposable {
     private final Sound bombSound;
     private final Sound gameOverSound;
     private final Sound powerupSound;
+    private final Sound gemPickupSound;
     private final Music victoryFanfare;
     private final Music victoryLoop;
     private final ObjectMap<Integer, Array<Sound>> explosionSounds;
@@ -28,6 +29,7 @@ public class AudioManager implements Disposable {
         bombSound = Gdx.audio.newSound(Gdx.files.internal("bombsound.mp3"));
         gameOverSound = Gdx.audio.newSound(Gdx.files.internal("gameover.mp3"));
         powerupSound = Gdx.audio.newSound(Gdx.files.internal("powerup.mp3"));
+        gemPickupSound = Gdx.audio.newSound(Gdx.files.internal("pointgem.mp3"));
         victoryFanfare = Gdx.audio.newMusic(Gdx.files.internal("victoryfanfare.mp3"));
         victoryLoop = Gdx.audio.newMusic(Gdx.files.internal("victory.mp3"));
         victoryLoop.setLooping(true);
@@ -87,6 +89,10 @@ public class AudioManager implements Disposable {
         if (!muted) powerupSound.play();
     }
 
+    public void playGemPickup() {
+        if (!muted) gemPickupSound.play();
+    }
+
     public void playVictory() {
         if (!muted) victoryFanfare.play();
     }
@@ -122,6 +128,7 @@ public class AudioManager implements Disposable {
         bombSound.dispose();
         gameOverSound.dispose();
         powerupSound.dispose();
+        gemPickupSound.dispose();
         victoryFanfare.dispose();
         victoryLoop.dispose();
         disposeSoundsMap(explosionSounds);

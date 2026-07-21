@@ -32,6 +32,7 @@ public class AssetManager implements Disposable {
     public final Texture pixelTexture;
     public final Texture circleTexture;
     public final Texture powerup1, powerup2, powerup3, powerup4;
+    public final Texture pointGemTexture;
 
     public AssetManager() {
         Json json = new Json();
@@ -82,6 +83,7 @@ public class AssetManager implements Disposable {
         powerup2 = new Texture("ForcePowerUp.png");
         powerup3 = new Texture("LightningPowerUp.png");
         powerup4 = new Texture("MoonPowerUp.png");
+        pointGemTexture = new Texture("PointGem.png");
 
         Pixmap pixmap = new Pixmap(1, 1, Pixmap.Format.RGBA8888);
         pixmap.setColor(Color.YELLOW);
@@ -183,6 +185,7 @@ public class AssetManager implements Disposable {
         playerHaloTexture.dispose();
         playerReflectShieldTexture.dispose();
         bombSpriteTexture.dispose();
+        pointGemTexture.dispose();
         bulletTexture.dispose();
         pixelTexture.dispose();
         circleTexture.dispose();

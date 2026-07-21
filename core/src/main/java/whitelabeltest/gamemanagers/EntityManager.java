@@ -22,6 +22,7 @@ public class EntityManager {
     private final Array<ExplosionEffect> explosions;
     private final Array<PlayerTrailEffect> trails;
     private final Array<HitEffect> hitEffects;
+    private final Array<PointGem> pointGems;
 
     private final float worldWidth;
     private final float worldHeight;
@@ -65,6 +66,7 @@ public class EntityManager {
         this.explosions = new Array<>();
         this.trails = new Array<>();
         this.hitEffects = new Array<>();
+        this.pointGems = new Array<>();
 
         EnemySpawnRegistry.init(assets, enemies, worldWidth, worldHeight);
     }
@@ -82,7 +84,7 @@ public class EntityManager {
         player.update(delta, input, assets, audio, bullets, enemies);
         updateTrail(delta, input);
 
-        updateCollections(delta, assets);
+        updateCollections(delta, assets, input);
     }
 
     private void updateTrail(float delta, InputManager input) {
@@ -104,7 +106,7 @@ public class EntityManager {
         }
     }
 
-    private void updateCollections(float delta, AssetManager assets) {
+    private void updateCollections(float delta, AssetManager assets, InputManager input) {
         for (int i = bullets.size - 1; i >= 0; i--) {
             Weapon b = bullets.get(i);
             b.updateWithEnemies(delta, enemies);
@@ -172,10 +174,21 @@ public class EntityManager {
                 ObjectPools.freeHitEffect(h);
             }
         }
+
+        boolean playerFiring = input.isShooting();
+        for (int i = pointGems.size - 1; i >= 0; i--) {
+            PointGem gem = pointGems.get(i);
+            gem.update(delta, playerFiring, player.getGrazeHitbox());
+            if (gem.isOffScreen()) {
+                pointGems.removeIndex(i);
+                ObjectPools.freePointGem(gem);
+            }
+        }
     }
 
     public void draw(SpriteBatch batch) {
         for (Powerup p : powerups) p.draw(batch);
+        for (PointGem g : pointGems) g.draw(batch);
         for (PlayerTrailEffect t : trails) t.draw(batch);
         for (Weapon b : bullets) {
             if (!(b instanceof ThunderboltWeapon)) b.draw(batch);
@@ -246,6 +259,8 @@ public class EntityManager {
         trails.clear();
         for (HitEffect h : hitEffects) ObjectPools.freeHitEffect(h);
         hitEffects.clear();
+        for (PointGem g : pointGems) ObjectPools.freePointGem(g);
+        pointGems.clear();
         trailSpawnTimer = 0f;
         player.reset();
     }
@@ -265,6 +280,8 @@ public class EntityManager {
         explosions.clear();
         for (HitEffect h : hitEffects) ObjectPools.freeHitEffect(h);
         hitEffects.clear();
+        for (PointGem g : pointGems) ObjectPools.freePointGem(g);
+        pointGems.clear();
     }
 
     public void destroyAllPlayerBullets() {
@@ -292,4 +309,5 @@ public class EntityManager {
     public Array<Powerup> getPowerups() { return powerups; }
     public Array<ExplosionEffect> getExplosions() { return explosions; }
     public Array<HitEffect> getHitEffects() { return hitEffects; }
+    public Array<PointGem> getPointGems() { return pointGems; }
 }

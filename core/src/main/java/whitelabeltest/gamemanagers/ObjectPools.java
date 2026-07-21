@@ -67,6 +67,9 @@ public class ObjectPools {
     public static final Pool<HitEffect> hitEffectPool = new Pool<HitEffect>() {
         @Override protected HitEffect newObject() { return new HitEffect(); }
     };
+    public static final Pool<PointGem> pointGemPool = new Pool<PointGem>() {
+        @Override protected PointGem newObject() { return new PointGem(); }
+    };
 
     public static void freeWeapon(Weapon w) {
         if (w instanceof BasicWeapon) weaponPool.free((BasicWeapon)w);
@@ -104,5 +107,9 @@ public class ObjectPools {
 
     public static void freeHitEffect(HitEffect e) {
         hitEffectPool.free(e);
+    }
+
+    public static void freePointGem(PointGem g) {
+        pointGemPool.free(g);
     }
 }
