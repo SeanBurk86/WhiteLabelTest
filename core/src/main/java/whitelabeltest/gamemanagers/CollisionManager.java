@@ -142,7 +142,7 @@ public class CollisionManager {
             PointGem gem = gems.get(i);
             if (Intersector.overlaps(player.getGrazeHitbox(), gem.getRectangle())) {
                 scoreManager.addBonus(GEM_POINTS);
-                audio.playGemPickup();
+                audio.playPointGem();
                 gems.removeIndex(i);
                 ObjectPools.freePointGem(gem);
             }

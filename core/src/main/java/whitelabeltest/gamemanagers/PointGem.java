@@ -22,6 +22,7 @@ public class PointGem implements Pool.Poolable {
     private Animation<TextureRegion> animation;
     private float stateTime;
     private float vx, vy;
+    private float rotation;
     private float worldWidth, worldHeight;
 
     public void init(Animation<TextureRegion> animation, float x, float y, float worldWidth, float worldHeight) {
@@ -30,6 +31,7 @@ public class PointGem implements Pool.Poolable {
         this.worldWidth = worldWidth;
         this.worldHeight = worldHeight;
         rectangle.set(x - SIZE / 2f, y - SIZE / 2f, SIZE, SIZE);
+        rotation = MathUtils.random(0f, 360f);
 
         // Mostly-upward pop with some horizontal spread, rather than a perfectly random direction.
         float angle = MathUtils.random(20f, 160f);
@@ -66,7 +68,8 @@ public class PointGem implements Pool.Poolable {
 
     public void draw(SpriteBatch batch) {
         TextureRegion frame = animation.getKeyFrame(stateTime);
-        batch.draw(frame, rectangle.x, rectangle.y, rectangle.width, rectangle.height);
+        batch.draw(frame, rectangle.x, rectangle.y, rectangle.width / 2f, rectangle.height / 2f,
+            rectangle.width, rectangle.height, 1f, 1f, rotation);
     }
 
     public boolean isOffScreen() {
@@ -82,6 +85,7 @@ public class PointGem implements Pool.Poolable {
     public void reset() {
         vx = 0f;
         vy = 0f;
+        rotation = 0f;
         stateTime = 0f;
     }
 }

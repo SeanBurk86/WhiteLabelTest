@@ -18,6 +18,7 @@ public class AudioManager implements Disposable {
     private final Sound gemPickupSound;
     private final Music victoryFanfare;
     private final Music victoryLoop;
+    private final ObjectMap<Integer, Array<Sound>> pointGemSounds;
     private final ObjectMap<Integer, Array<Sound>> explosionSounds;
     private final ObjectMap<Integer, Array<Sound>> basicWeaponSounds;
     private final ObjectMap<Integer, Array<Sound>> waveBlastWeaponSounds;
@@ -40,6 +41,7 @@ public class AudioManager implements Disposable {
         orbitWeaponSounds = new ObjectMap<>();
         thunderboltWeaponSounds = new ObjectMap<>();
         explosionSounds = new ObjectMap<>();
+        pointGemSounds = new ObjectMap<>();
         @SuppressWarnings("unchecked")
         Array<SoundBank> soundBanks = json.fromJson(Array.class, SoundBank.class, Gdx.files.internal("sounds.json"));
         for(SoundBank sBank : soundBanks) {
@@ -57,6 +59,9 @@ public class AudioManager implements Disposable {
             }
             if(sBank.type == SoundType.Explosion) {
                 populateSounds(sBank, explosionSounds);
+            }
+            if(sBank.type == SoundType.PointGem) {
+                populateSounds(sBank, pointGemSounds);
             }
 
         }
@@ -89,10 +94,6 @@ public class AudioManager implements Disposable {
         if (!muted) powerupSound.play();
     }
 
-    public void playGemPickup() {
-        if (!muted) gemPickupSound.play();
-    }
-
     public void playVictory() {
         if (!muted) victoryFanfare.play();
     }
@@ -100,6 +101,10 @@ public class AudioManager implements Disposable {
     public void stopVictory() {
         victoryFanfare.stop();
         victoryLoop.stop();
+    }
+
+    public void playPointGem() {
+        if (!muted && pointGemSounds != null) pointGemSounds.get(1).random().play();
     }
 
     public void playExplosion() {
@@ -131,6 +136,7 @@ public class AudioManager implements Disposable {
         gemPickupSound.dispose();
         victoryFanfare.dispose();
         victoryLoop.dispose();
+        disposeSoundsMap(pointGemSounds);
         disposeSoundsMap(explosionSounds);
         disposeSoundsMap(basicWeaponSounds);
         disposeSoundsMap(waveBlastWeaponSounds);
