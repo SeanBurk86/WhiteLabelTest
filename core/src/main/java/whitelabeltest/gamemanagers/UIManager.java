@@ -17,6 +17,8 @@ import whitelabeltest.enemy.Enemy;
 import whitelabeltest.player.Player;
 
 public class UIManager implements Disposable {
+    private static final Color GRAZE_METER_BG = new Color(0.25f, 0.25f, 0.25f, 1f);
+
     private final BitmapFont font;
     private final GlyphLayout gameOverLayout;
     private final GlyphLayout levelCompleteLayout;
@@ -25,10 +27,12 @@ public class UIManager implements Disposable {
     private final Texture whitePixel;
     private final InputType inputType;
     private final ChainFireEffect chainFireEffect;
+    private final CircleMeterEffect circleMeterEffect;
 
     public UIManager(InputType inputType) {
         this.inputType = inputType;
         this.chainFireEffect = new ChainFireEffect();
+        this.circleMeterEffect = new CircleMeterEffect();
 
         FreeTypeFontGenerator generator = new FreeTypeFontGenerator(Gdx.files.internal("VT323-Regular.ttf"));
         FreeTypeFontParameter fontParams = new FreeTypeFontParameter();
@@ -115,7 +119,11 @@ public class UIManager implements Disposable {
         font.setColor(Color.CYAN);
         font.draw(batch, "Graze:", textX, worldHeight - 2.85f - lowerSectionShift);
         font.setColor(Color.WHITE);
-        drawGrazeMeter(batch, Math.min(player.getGrazePoints() / 100f, 1f), textX, worldHeight - 2.98f - lowerSectionShift, barWidth);
+
+        float grazeFraction = Math.min(player.getGrazePoints() / 100f, 1f);
+        Color grazeFillColor = grazeFraction > 0.8f ? Color.WHITE : Color.CYAN;
+        circleMeterEffect.render(batch, whitePixel, grazeFraction, GRAZE_METER_BG, grazeFillColor,
+            0.28f, 0.5f, textX + 1.1f, worldHeight - 3.1f - lowerSectionShift, 0.4f);
 
         font.draw(batch, "# of Lives: " + player.getNumLives(), textX, worldHeight - 3.25f - lowerSectionShift);
 
@@ -413,18 +421,6 @@ public class UIManager implements Disposable {
         batch.setColor(Color.WHITE);
     }
 
-    private void drawGrazeMeter(SpriteBatch batch, float fraction, float x, float y, float totalWidth) {
-        float height = 0.08f;
-
-        batch.setColor(0.25f, 0.25f, 0.25f, 1f);
-        batch.draw(whitePixel, x, y, totalWidth, height);
-
-        batch.setColor(fraction > 0.8f ? Color.WHITE : Color.CYAN);
-        batch.draw(whitePixel, x, y, totalWidth * fraction, height);
-
-        batch.setColor(Color.WHITE);
-    }
-
     public void drawGameOver(SpriteBatch batch, float worldWidth, float worldHeight) {
         font.setColor(Color.RED);
         if (inputType == InputType.KEYBOARD) {gameOverLayout.setText(font, "GAME OVER\nPress R to Restart\nPress Q to Quit");}
@@ -506,5 +502,6 @@ public class UIManager implements Disposable {
         font.dispose();
         whitePixel.dispose();
         chainFireEffect.dispose();
+        circleMeterEffect.dispose();
     }
 }
