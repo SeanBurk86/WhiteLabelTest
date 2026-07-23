@@ -32,6 +32,7 @@ public class KeyBindings {
         SHOOT("Shoot", Input.Keys.SPACE, GamepadButton.A),
         BOMB("Bomb", Input.Keys.SHIFT_LEFT, GamepadButton.B),
         WEAPON_SWITCH("Switch Weapon", Input.Keys.X, GamepadButton.X),
+        HYPER_ATTACK("Hyper Attack", Input.Keys.C, GamepadButton.Y),
         RESTART("Restart", Input.Keys.R, GamepadButton.START),
         QUIT("Quit", Input.Keys.Q, GamepadButton.BACK);
 

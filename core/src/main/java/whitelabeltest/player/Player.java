@@ -160,21 +160,32 @@ public class Player {
 
         handleMovement(delta, input.getMoveDirection(), input.isShooting());
         handleShooting(delta, input.isShooting(), assets, audio, bullets, enemies);
-        maintainOrbitRing(bullets, assets);
+        maintainOrbitRing(bullets, assets, input.isShooting());
+        handleHyperAttack(input.isHyperAttackJustPressed(), audio);
         updateHitbox();
         updateGrazeHitbox();
         resolveGrazePoints();
         resolveInvincibility(delta);
     }
 
-    // The orbit ring is kept in sync every frame, independent of firing, but only while
-    // OrbitWeapon is the actively selected slot - see OrbitWeapon's class comment for why the
-    // prototype/ring-member split is safe despite sharing a class.
-    private void maintainOrbitRing(Array<Weapon> bullets, AssetManager assets) {
-        if (getCurrentWeapon() == orbitWeapon) {
+    // The orbit ring is up only while OrbitWeapon is both the actively selected slot and the fire
+    // button is held - see OrbitWeapon's class comment for why the prototype/ring-member split is
+    // safe despite sharing a class.
+    private void maintainOrbitRing(Array<Weapon> bullets, AssetManager assets, boolean isShooting) {
+        if (getCurrentWeapon() == orbitWeapon && isShooting) {
             orbitWeapon.maintainRing(bullets, assets.getTexture(orbitWeaponDef.texture), this);
         } else {
             orbitWeapon.clearRing(bullets);
+        }
+    }
+
+    // Hyper Attack raises OrbitWeapon's reflect shield, independent of the fire button and of
+    // which slot is active for firing - but only while OrbitWeapon is actually equipped as the
+    // current weapon, matching the ring's own gating.
+    private void handleHyperAttack(boolean hyperAttackJustPressed, AudioManager audio) {
+        if (!hyperAttackJustPressed || getCurrentWeapon() != orbitWeapon) return;
+        if (orbitWeapon.tryActivateShield()) {
+            audio.playOrbitWeaponSound(orbitWeapon.getLevel());
         }
     }
 

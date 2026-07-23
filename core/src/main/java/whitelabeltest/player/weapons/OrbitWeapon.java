@@ -18,9 +18,11 @@ import whitelabeltest.player.Player;
  *    the ring of orbiting bullets in sync with the weapon's level; and
  *  - the ring member instances (pooled, added to the shared bullets array) that actually orbit
  *    and damage enemies on contact, one per maintainRing() call per level.
- *  Ring members never touch the shield fields (only the prototype's spawn() does, since that's
- *  the instance Player.getCurrentWeapon() returns), so the split is safe despite being the same
- *  class. */
+ *  Ring members never touch the shield fields (only the prototype's tryActivateShield() does,
+ *  since that's the instance Player.getCurrentWeapon() returns), so the split is safe despite
+ *  being the same class. The fire button just controls whether the ring exists (see
+ *  Player.maintainOrbitRing) - the reflect shield is a separate ability, raised by the Hyper
+ *  Attack input via tryActivateShield(). */
 public class OrbitWeapon extends BaseWeapon {
     public static final float SHIELD_DURATION = 2f;
     private static final float SHIELD_COOLDOWN = 4f;
@@ -33,7 +35,6 @@ public class OrbitWeapon extends BaseWeapon {
     private boolean shieldActive;
     private float shieldTimer;
     private float shieldCooldownTimer;
-    private boolean justActivatedShield;
 
     public void init(WeaponDefinition def, Texture texture, Player player, float initialAngle) {
         this.def = def;
@@ -117,15 +118,10 @@ public class OrbitWeapon extends BaseWeapon {
         }
     }
 
-    /** The fire button no longer spawns bullets (the ring is always up per maintainRing()) - it
-     *  instead tries to raise the reflect shield, subject to its own active/cooldown timers. */
+    /** The fire button only controls the ring's presence (see Player.maintainOrbitRing) - firing
+     *  itself spawns nothing. */
     @Override
     public void spawn(Array<Weapon> activeWeapons, Texture texture, float x, float y, Player player, Array<Enemy> enemies, AssetManager assets) {
-        justActivatedShield = false;
-        if (shieldActive || shieldCooldownTimer > 0f) return;
-        shieldActive = true;
-        shieldTimer = 0f;
-        justActivatedShield = true;
     }
 
     @Override
@@ -133,7 +129,16 @@ public class OrbitWeapon extends BaseWeapon {
 
     @Override
     public void playFireSound(AudioManager audio, int level) {
-        if (justActivatedShield) audio.playOrbitWeaponSound(level);
+    }
+
+    /** Raises the reflect shield if the Hyper Attack input triggers it - subject to its own
+     *  active/cooldown timers, independent of the normal fire-rate cooldown. Returns whether it
+     *  actually activated, so the caller knows whether to play the activation sound. */
+    public boolean tryActivateShield() {
+        if (shieldActive || shieldCooldownTimer > 0f) return false;
+        shieldActive = true;
+        shieldTimer = 0f;
+        return true;
     }
 
     @Override
@@ -170,7 +175,6 @@ public class OrbitWeapon extends BaseWeapon {
         shieldActive = false;
         shieldTimer = 0f;
         shieldCooldownTimer = 0f;
-        justActivatedShield = false;
     }
 
     @Override

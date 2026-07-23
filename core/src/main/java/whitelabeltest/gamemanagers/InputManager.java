@@ -13,6 +13,7 @@ public class InputManager {
     private boolean isShooting;
     private boolean bombJustPressed;
     private boolean weaponSwitchJustPressed;
+    private boolean hyperAttackJustPressed;
     private boolean restartJustPressed;
     private boolean quitJustPressed;
     private boolean debugToggleJustPressed;
@@ -32,6 +33,7 @@ public class InputManager {
     private InputType activeInput = InputType.KEYBOARD;
     private boolean prevBombButton;
     private boolean prevWeaponSwitchButton;
+    private boolean prevHyperAttackButton;
 
     public InputManager(KeyBindings keyBindings) {
         this.keyBindings = keyBindings;
@@ -46,6 +48,7 @@ public class InputManager {
         isShooting = false;
         bombJustPressed = false;
         weaponSwitchJustPressed = false;
+        hyperAttackJustPressed = false;
         restartJustPressed = false;
         quitJustPressed = false;
         debugToggleJustPressed = false;
@@ -71,6 +74,7 @@ public class InputManager {
             isShooting = Gdx.input.isKeyPressed(keyBindings.getKey(Action.SHOOT));
             bombJustPressed = Gdx.input.isKeyJustPressed(keyBindings.getKey(Action.BOMB));
             weaponSwitchJustPressed = Gdx.input.isKeyJustPressed(keyBindings.getKey(Action.WEAPON_SWITCH));
+            hyperAttackJustPressed = Gdx.input.isKeyJustPressed(keyBindings.getKey(Action.HYPER_ATTACK));
             restartJustPressed = Gdx.input.isKeyJustPressed(keyBindings.getKey(Action.RESTART));
             quitJustPressed = Gdx.input.isKeyJustPressed(keyBindings.getKey(Action.QUIT));
         }
@@ -98,6 +102,10 @@ public class InputManager {
                 boolean weaponSwitchButton = controller.getButton(KeyBindings.rawCode(controller, keyBindings.getGamepadButton(Action.WEAPON_SWITCH)));
                 if (weaponSwitchButton && !prevWeaponSwitchButton) weaponSwitchJustPressed = true;
                 prevWeaponSwitchButton = weaponSwitchButton;
+
+                boolean hyperAttackButton = controller.getButton(KeyBindings.rawCode(controller, keyBindings.getGamepadButton(Action.HYPER_ATTACK)));
+                if (hyperAttackButton && !prevHyperAttackButton) hyperAttackJustPressed = true;
+                prevHyperAttackButton = hyperAttackButton;
 
                 if (controller.getButton(KeyBindings.rawCode(controller, keyBindings.getGamepadButton(Action.RESTART)))) restartJustPressed = true;
                 if (controller.getButton(KeyBindings.rawCode(controller, keyBindings.getGamepadButton(Action.QUIT)))) quitJustPressed = true;
@@ -128,6 +136,7 @@ public class InputManager {
     public boolean isShooting() { return isShooting; }
     public boolean isBombJustPressed() { return bombJustPressed; }
     public boolean isWeaponSwitchJustPressed() { return weaponSwitchJustPressed; }
+    public boolean isHyperAttackJustPressed() { return hyperAttackJustPressed; }
     public boolean isRestartJustPressed() { return restartJustPressed; }
     public boolean isQuitJustPressed() { return quitJustPressed; }
     public boolean isDebugToggleJustPressed() { return debugToggleJustPressed; }
