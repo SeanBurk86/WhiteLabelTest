@@ -5,8 +5,10 @@ import com.badlogic.gdx.Input;
 import com.badlogic.gdx.controllers.Controller;
 import com.badlogic.gdx.controllers.Controllers;
 import com.badlogic.gdx.math.Vector2;
+import whitelabeltest.gamemanagers.KeyBindings.Action;
 
 public class InputManager {
+    private final KeyBindings keyBindings;
     private final Vector2 moveDirection = new Vector2();
     private boolean isShooting;
     private boolean bombJustPressed;
@@ -30,6 +32,10 @@ public class InputManager {
     private InputType activeInput = InputType.KEYBOARD;
     private boolean prevBombButton;
     private boolean prevWeaponSwitchButton;
+
+    public InputManager(KeyBindings keyBindings) {
+        this.keyBindings = keyBindings;
+    }
 
     public void setActiveInput(InputType type) {
         this.activeInput = type;
@@ -57,16 +63,16 @@ public class InputManager {
         debugMuteJustPressed = false;
 
         if (activeInput == InputType.KEYBOARD) {
-            if (Gdx.input.isKeyPressed(Input.Keys.LEFT)) moveDirection.x -= 1;
-            if (Gdx.input.isKeyPressed(Input.Keys.RIGHT)) moveDirection.x += 1;
-            if (Gdx.input.isKeyPressed(Input.Keys.UP)) moveDirection.y += 1;
-            if (Gdx.input.isKeyPressed(Input.Keys.DOWN)) moveDirection.y -= 1;
+            if (Gdx.input.isKeyPressed(keyBindings.getKey(Action.MOVE_LEFT))) moveDirection.x -= 1;
+            if (Gdx.input.isKeyPressed(keyBindings.getKey(Action.MOVE_RIGHT))) moveDirection.x += 1;
+            if (Gdx.input.isKeyPressed(keyBindings.getKey(Action.MOVE_UP))) moveDirection.y += 1;
+            if (Gdx.input.isKeyPressed(keyBindings.getKey(Action.MOVE_DOWN))) moveDirection.y -= 1;
 
-            isShooting = Gdx.input.isKeyPressed(Input.Keys.SPACE);
-            bombJustPressed = Gdx.input.isKeyJustPressed(Input.Keys.SHIFT_LEFT);
-            weaponSwitchJustPressed = Gdx.input.isKeyJustPressed(Input.Keys.X);
-            restartJustPressed = Gdx.input.isKeyJustPressed(Input.Keys.R);
-            quitJustPressed = Gdx.input.isKeyJustPressed(Input.Keys.Q);
+            isShooting = Gdx.input.isKeyPressed(keyBindings.getKey(Action.SHOOT));
+            bombJustPressed = Gdx.input.isKeyJustPressed(keyBindings.getKey(Action.BOMB));
+            weaponSwitchJustPressed = Gdx.input.isKeyJustPressed(keyBindings.getKey(Action.WEAPON_SWITCH));
+            restartJustPressed = Gdx.input.isKeyJustPressed(keyBindings.getKey(Action.RESTART));
+            quitJustPressed = Gdx.input.isKeyJustPressed(keyBindings.getKey(Action.QUIT));
         }
 
         if (activeInput == InputType.GAMEPAD) {
@@ -83,18 +89,18 @@ public class InputManager {
                 if (controller.getButton(controller.getMapping().buttonDpadUp)) moveDirection.y += 1;
                 if (controller.getButton(controller.getMapping().buttonDpadDown)) moveDirection.y -= 1;
 
-                isShooting |= controller.getButton(controller.getMapping().buttonA);
+                isShooting |= controller.getButton(KeyBindings.rawCode(controller, keyBindings.getGamepadButton(Action.SHOOT)));
 
-                boolean bombButton = controller.getButton(controller.getMapping().buttonB);
+                boolean bombButton = controller.getButton(KeyBindings.rawCode(controller, keyBindings.getGamepadButton(Action.BOMB)));
                 if (bombButton && !prevBombButton) bombJustPressed = true;
                 prevBombButton = bombButton;
 
-                boolean weaponSwitchButton = controller.getButton(controller.getMapping().buttonX);
+                boolean weaponSwitchButton = controller.getButton(KeyBindings.rawCode(controller, keyBindings.getGamepadButton(Action.WEAPON_SWITCH)));
                 if (weaponSwitchButton && !prevWeaponSwitchButton) weaponSwitchJustPressed = true;
                 prevWeaponSwitchButton = weaponSwitchButton;
 
-                if (controller.getButton(controller.getMapping().buttonStart)) restartJustPressed = true;
-                if (controller.getButton(controller.getMapping().buttonBack)) quitJustPressed = true;
+                if (controller.getButton(KeyBindings.rawCode(controller, keyBindings.getGamepadButton(Action.RESTART)))) restartJustPressed = true;
+                if (controller.getButton(KeyBindings.rawCode(controller, keyBindings.getGamepadButton(Action.QUIT)))) quitJustPressed = true;
             }
         }
 

@@ -2,7 +2,10 @@ package whitelabeltest;
 
 import com.badlogic.gdx.ApplicationAdapter;
 import com.badlogic.gdx.Gdx;
+import com.badlogic.gdx.Input;
 import com.badlogic.gdx.audio.Sound;
+import com.badlogic.gdx.controllers.Controller;
+import com.badlogic.gdx.controllers.Controllers;
 import com.badlogic.gdx.graphics.Color;
 import com.badlogic.gdx.graphics.GL20;
 import com.badlogic.gdx.graphics.g2d.SpriteBatch;
@@ -16,16 +19,19 @@ import whitelabeltest.enemy.bullets.EnemyBullet;
 import whitelabeltest.gamemanagers.EntityManager;
 import whitelabeltest.gamemanagers.GameController;
 import whitelabeltest.gamemanagers.InputType;
+import whitelabeltest.gamemanagers.KeyBindings;
 import whitelabeltest.gamemanagers.UIManager;
 import whitelabeltest.player.powerups.Powerup;
 import whitelabeltest.player.weapons.ThunderboltWeapon;
 import whitelabeltest.player.weapons.Weapon;
 
 public class Main extends ApplicationAdapter {
-    private enum AppState { START, PLAYING }
+    private enum AppState { START, OPTIONS, PLAYING }
 
     private AppState state = AppState.START;
     private StartScreen startScreen;
+    private OptionsScreen optionsScreen;
+    private KeyBindings keyBindings;
     private UIManager ui;
     private GameController game;
     private Sound startScreenConfirmSound;
@@ -40,11 +46,14 @@ public class Main extends ApplicationAdapter {
     private final Vector3 scissorBL = new Vector3();
     private final Vector3 scissorTR = new Vector3();
 
+    private boolean prevControllerBackDown;
+
     @Override
     public void create() {
         spriteBatch = new SpriteBatch();
         shapeRenderer = new ShapeRenderer();
         viewport = new ExtendViewport(PLAY_AREA_WIDTH, PLAY_AREA_HEIGHT);
+        keyBindings = new KeyBindings();
         startScreen = new StartScreen(PLAY_AREA_WIDTH, PLAY_AREA_HEIGHT);
     }
 
@@ -54,7 +63,19 @@ public class Main extends ApplicationAdapter {
         if (state == AppState.START) {
             InputType detected = startScreen.update(delta);
             drawStartScreen();
-            if (detected != null) transitionToGame(detected);
+            if (detected != null) {
+                transitionToGame(detected);
+            } else if (Gdx.input.isKeyJustPressed(Input.Keys.ESCAPE) || isControllerBackJustPressed()) {
+                transitionToOptions();
+            }
+        } else if (state == AppState.OPTIONS) {
+            optionsScreen.render(delta);
+            if (isControllerBackJustPressed()) {
+                optionsScreen.handleControllerBackPressed();
+            }
+            if (optionsScreen.isBackRequested()) {
+                transitionToStartFromOptions();
+            }
         } else {
             game.update(delta);
             drawGame();
@@ -65,10 +86,34 @@ public class Main extends ApplicationAdapter {
         startScreenConfirmSound = startScreen.getConfirmSound();
         startScreen.dispose();
         startScreen = null;
-        game = new GameController(PLAY_AREA_WIDTH, PLAY_AREA_HEIGHT);
+        game = new GameController(PLAY_AREA_WIDTH, PLAY_AREA_HEIGHT, keyBindings);
         game.setActiveInput(inputType);
         ui = new UIManager(inputType);
         state = AppState.PLAYING;
+    }
+
+    /** Edge-detects the gamepad Back/Select button so it opens/closes Options the same way
+     * Escape does on keyboard, without a controller-mode InputManager already tracking it. */
+    private boolean isControllerBackJustPressed() {
+        Controller controller = Controllers.getCurrent();
+        boolean down = controller != null && controller.getButton(controller.getMapping().buttonBack);
+        boolean justPressed = down && !prevControllerBackDown;
+        prevControllerBackDown = down;
+        return justPressed;
+    }
+
+    private void transitionToOptions() {
+        if (optionsScreen == null) {
+            optionsScreen = new OptionsScreen(keyBindings, PLAY_AREA_WIDTH, PLAY_AREA_HEIGHT);
+        }
+        Gdx.input.setInputProcessor(optionsScreen.getStage());
+        state = AppState.OPTIONS;
+    }
+
+    private void transitionToStartFromOptions() {
+        optionsScreen.clearBackRequested();
+        Gdx.input.setInputProcessor(null);
+        state = AppState.START;
     }
 
     private void drawStartScreen() {
@@ -211,11 +256,13 @@ public class Main extends ApplicationAdapter {
         viewport.update(width, height, false);
         viewport.getCamera().position.set(PLAY_AREA_WIDTH / 2f, PLAY_AREA_HEIGHT / 2f, 0);
         viewport.getCamera().update();
+        if (optionsScreen != null) optionsScreen.resize(width, height);
     }
 
     @Override
     public void dispose() {
         if (startScreen != null) startScreen.dispose();
+        if (optionsScreen != null) optionsScreen.dispose();
         if (startScreenConfirmSound != null) startScreenConfirmSound.dispose();
         if (game != null) game.dispose();
         if (ui != null) ui.dispose();

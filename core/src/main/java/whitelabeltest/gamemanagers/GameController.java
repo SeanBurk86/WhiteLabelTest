@@ -60,7 +60,7 @@ public class GameController implements Disposable {
     private static final float BOMB_SAVE_WINDOW = 0.125f;
     private float hitGraceTimer = -1f;
 
-    public GameController(float worldWidth, float worldHeight) {
+    public GameController(float worldWidth, float worldHeight, KeyBindings keyBindings) {
         this.worldWidth = worldWidth;
         this.worldHeight = worldHeight;
         this.assets = new AssetManager();
@@ -68,7 +68,7 @@ public class GameController implements Disposable {
         this.entities = new EntityManager(assets, worldWidth, worldHeight);
         this.collisionManager = new CollisionManager();
         this.background = new ScrollingBackground(worldWidth, worldHeight);
-        this.input = new InputManager();
+        this.input = new InputManager(keyBindings);
 
         this.scoreManager = new ScoreManager();
         this.spawnScheduler = new SpawnScheduler(worldWidth, worldHeight, assets);
