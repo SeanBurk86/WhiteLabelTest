@@ -60,6 +60,13 @@ public class GameController implements Disposable {
     private static final float BOMB_SAVE_WINDOW = 0.065f;
     private float hitGraceTimer = -1f;
 
+    // Debug-only FPS monitor (see UIManager.drawDebugFpsMonitor) - lowest/highest track the
+    // extremes seen since the last reset() instead of just the instantaneous reading, so a brief
+    // stutter or a load-triggered spike stays visible instead of scrolling by unnoticed.
+    private int currentFps;
+    private int lowestFps = Integer.MAX_VALUE;
+    private int highestFps;
+
     public GameController(float worldWidth, float worldHeight, KeyBindings keyBindings) {
         this.worldWidth = worldWidth;
         this.worldHeight = worldHeight;
@@ -89,6 +96,7 @@ public class GameController implements Disposable {
             bombCooldownTimer -= delta;
         }
         input.update();
+        updateFpsMonitor();
 
         if (input.isDebugToggleJustPressed()) {
             debugMode = !debugMode;
@@ -176,6 +184,15 @@ public class GameController implements Disposable {
 
         collisionManager.checkBulletEnemyCollisions(entities.getBullets(), entities.getEnemies(), audio, entities, assets, worldWidth, worldHeight, scoreManager);
         collisionManager.checkHaloDashCollisions(entities.getPlayer(), entities.getEnemies(), audio, entities, assets, worldWidth, worldHeight, scoreManager);
+    }
+
+    // libGDX only refreshes getFramesPerSecond() once per second and reports 0 before that first
+    // sample, so 0 is ignored rather than collapsing lowestFps immediately on startup.
+    private void updateFpsMonitor() {
+        currentFps = Gdx.graphics.getFramesPerSecond();
+        if (currentFps <= 0) return;
+        if (currentFps < lowestFps) lowestFps = currentFps;
+        if (currentFps > highestFps) highestFps = currentFps;
     }
 
     private void handleDebugMenuInput(float delta) {
@@ -395,6 +412,8 @@ public class GameController implements Disposable {
         collisionManager.reset();
         background.reset();
         spawnScheduler.reset();
+        lowestFps = Integer.MAX_VALUE;
+        highestFps = 0;
     }
 
     @Override
@@ -425,6 +444,9 @@ public class GameController implements Disposable {
     public Array<TextCue> getTextCues() { return spawnScheduler.getTextCues(); }
     public float getBombCooldownTimer() { return Math.max(bombCooldownTimer, 0f); }
     public float getBombCooldownFraction() { return Math.max(bombCooldownTimer, 0f) / BOMB_COOLDOWN; }
+    public int getCurrentFps() { return currentFps; }
+    public int getLowestFps() { return lowestFps == Integer.MAX_VALUE ? currentFps : lowestFps; }
+    public int getHighestFps() { return highestFps; }
     public EntityManager getEntities() { return entities; }
     public boolean isPatternPreviewActive() { return patternPreviewer.isActive(); }
     public PatternPreviewer getPatternPreviewer() { return patternPreviewer; }

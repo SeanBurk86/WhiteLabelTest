@@ -177,6 +177,22 @@ public class UIManager implements Disposable {
         font.setColor(Color.WHITE);
     }
 
+    // Debug-only: current FPS in the right panel, with the lowest/highest seen since the last
+    // reset listed below it - drawn whether or not the F1 debug menu is open, since that menu's
+    // own dim overlay only spans the play area, not the side panels.
+    public void drawDebugFpsMonitor(SpriteBatch batch, float rightPanelX, float worldHeight, int currentFps, int lowestFps, int highestFps) {
+        float x = rightPanelX + 0.2f;
+        float y = worldHeight - 0.2f;
+        float lineHeight = 0.4f;
+
+        font.setColor(Color.WHITE);
+        font.draw(batch, "FPS: " + currentFps, x, y);
+        font.setColor(Color.GRAY);
+        font.draw(batch, "Low: " + lowestFps, x, y - lineHeight);
+        font.draw(batch, "High: " + highestFps, x, y - lineHeight * 2f);
+        font.setColor(Color.WHITE);
+    }
+
     // Debug-only: F1 menu for jumping the spawn schedule clock to a chosen time or a saved
     // bookmark, and for setting equipped weapons/slots and their levels.
     public void drawDebugMenu(SpriteBatch batch, float worldWidth, float worldHeight, float scheduleTime,
