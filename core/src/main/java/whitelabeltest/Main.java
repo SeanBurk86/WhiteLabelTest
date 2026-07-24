@@ -181,6 +181,7 @@ public class Main extends ApplicationAdapter {
 
         if (game.isDebugMode()) {
             ui.drawDebugFpsMonitor(spriteBatch, PLAY_AREA_WIDTH, PLAY_AREA_HEIGHT, game.getCurrentFps(), game.getLowestFps(), game.getHighestFps());
+            ui.drawDebugFpsHistogram(spriteBatch, PLAY_AREA_WIDTH, PLAY_AREA_HEIGHT, game.getFpsHistory(), game.getHighestFps());
         }
 
         if (game.isDebugMode() && game.isDebugMenuOpen()) {
