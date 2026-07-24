@@ -179,6 +179,10 @@ public class Main extends ApplicationAdapter {
             ui.drawDebugMuteIndicator(spriteBatch, leftX, PLAY_AREA_HEIGHT);
         }
 
+        if (game.isDebugMode()) {
+            ui.drawDebugFpsMonitor(spriteBatch, PLAY_AREA_WIDTH, PLAY_AREA_HEIGHT, game.getCurrentFps(), game.getLowestFps(), game.getHighestFps());
+        }
+
         if (game.isDebugMode() && game.isDebugMenuOpen()) {
             if (game.isPatternPreviewActive()) {
                 ui.drawPatternPreview(spriteBatch, PLAY_AREA_WIDTH, PLAY_AREA_HEIGHT, game.getPatternPreviewer());
