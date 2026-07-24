@@ -193,6 +193,49 @@ public class UIManager implements Disposable {
         font.setColor(Color.WHITE);
     }
 
+    private static final float FPS_HISTOGRAM_BAR_WIDTH = 0.32f;
+    private static final float FPS_HISTOGRAM_BAR_GAP = 0.08f;
+    private static final float FPS_HISTOGRAM_HEIGHT = 1.6f;
+    private static final Color FPS_HISTOGRAM_TRACK = new Color(0.2f, 0.2f, 0.2f, 1f);
+
+    /** Debug-only: below drawDebugFpsMonitor - one bar per second of fpsHistory (oldest on the
+     *  left, this second on the right; see GameController.updateFpsMonitor), bar height scaled
+     *  against the highest FPS seen so far so the chart doesn't need a fixed axis. Colored red/
+     *  orange/green by how choppy that second was, so a dip reads at a glance without needing to
+     *  read the bar height precisely. */
+    public void drawDebugFpsHistogram(SpriteBatch batch, float rightPanelX, float worldHeight, int[] fpsHistory, int highestFps) {
+        float x = rightPanelX + 0.2f;
+        float labelY = worldHeight - 1.7f;
+        float baseline = labelY - 0.35f - FPS_HISTOGRAM_HEIGHT;
+        float trackWidth = fpsHistory.length * (FPS_HISTOGRAM_BAR_WIDTH + FPS_HISTOGRAM_BAR_GAP) - FPS_HISTOGRAM_BAR_GAP;
+        int scaleFps = Math.max(highestFps, 1);
+
+        font.setColor(Color.WHITE);
+        font.draw(batch, "FPS (last 12s)", x, labelY);
+
+        batch.setColor(FPS_HISTOGRAM_TRACK);
+        batch.draw(whitePixel, x, baseline, trackWidth, FPS_HISTOGRAM_HEIGHT);
+
+        for (int i = 0; i < fpsHistory.length; i++) {
+            int fps = fpsHistory[i];
+            if (fps <= 0) continue; // not sampled yet (early in the run)
+
+            float fraction = MathUtils.clamp(fps / (float) scaleFps, 0f, 1f);
+            float barHeight = FPS_HISTOGRAM_HEIGHT * fraction;
+            float barX = x + i * (FPS_HISTOGRAM_BAR_WIDTH + FPS_HISTOGRAM_BAR_GAP);
+
+            batch.setColor(fpsBarColor(fps));
+            batch.draw(whitePixel, barX, baseline, FPS_HISTOGRAM_BAR_WIDTH, barHeight);
+        }
+        batch.setColor(Color.WHITE);
+    }
+
+    private static Color fpsBarColor(int fps) {
+        if (fps < 30) return Color.RED;
+        if (fps < 50) return Color.ORANGE;
+        return Color.GREEN;
+    }
+
     // Debug-only: F1 menu for jumping the spawn schedule clock to a chosen time or a saved
     // bookmark, and for setting equipped weapons/slots and their levels.
     public void drawDebugMenu(SpriteBatch batch, float worldWidth, float worldHeight, float scheduleTime,

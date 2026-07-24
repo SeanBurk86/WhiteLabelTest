@@ -67,6 +67,14 @@ public class GameController implements Disposable {
     private int lowestFps = Integer.MAX_VALUE;
     private int highestFps;
 
+    // Debug-only FPS histogram (see UIManager.drawDebugFpsHistogram): one bucket per second over
+    // the last FPS_HISTORY_SECONDS, oldest at index 0. Sampled at 1s intervals rather than every
+    // frame since Gdx.graphics.getFramesPerSecond() itself only refreshes once a second - sampling
+    // faster would just repeat the same reading.
+    private static final int FPS_HISTORY_SECONDS = 12;
+    private final int[] fpsHistory = new int[FPS_HISTORY_SECONDS];
+    private float fpsHistoryTimer = 0f;
+
     public GameController(float worldWidth, float worldHeight, KeyBindings keyBindings) {
         this.worldWidth = worldWidth;
         this.worldHeight = worldHeight;
@@ -96,7 +104,7 @@ public class GameController implements Disposable {
             bombCooldownTimer -= delta;
         }
         input.update();
-        updateFpsMonitor();
+        updateFpsMonitor(delta);
 
         if (input.isDebugToggleJustPressed()) {
             debugMode = !debugMode;
@@ -188,11 +196,20 @@ public class GameController implements Disposable {
 
     // libGDX only refreshes getFramesPerSecond() once per second and reports 0 before that first
     // sample, so 0 is ignored rather than collapsing lowestFps immediately on startup.
-    private void updateFpsMonitor() {
+    private void updateFpsMonitor(float delta) {
         currentFps = Gdx.graphics.getFramesPerSecond();
         if (currentFps <= 0) return;
         if (currentFps < lowestFps) lowestFps = currentFps;
         if (currentFps > highestFps) highestFps = currentFps;
+
+        // A while loop (not if) so a long stall that eats several seconds in one delta still
+        // advances the history by that many buckets instead of freezing it mid-stall.
+        fpsHistoryTimer += delta;
+        while (fpsHistoryTimer >= 1f) {
+            fpsHistoryTimer -= 1f;
+            System.arraycopy(fpsHistory, 1, fpsHistory, 0, fpsHistory.length - 1);
+            fpsHistory[fpsHistory.length - 1] = currentFps;
+        }
     }
 
     private void handleDebugMenuInput(float delta) {
@@ -414,6 +431,8 @@ public class GameController implements Disposable {
         spawnScheduler.reset();
         lowestFps = Integer.MAX_VALUE;
         highestFps = 0;
+        java.util.Arrays.fill(fpsHistory, 0);
+        fpsHistoryTimer = 0f;
     }
 
     @Override
@@ -447,6 +466,7 @@ public class GameController implements Disposable {
     public int getCurrentFps() { return currentFps; }
     public int getLowestFps() { return lowestFps == Integer.MAX_VALUE ? currentFps : lowestFps; }
     public int getHighestFps() { return highestFps; }
+    public int[] getFpsHistory() { return fpsHistory; }
     public EntityManager getEntities() { return entities; }
     public boolean isPatternPreviewActive() { return patternPreviewer.isActive(); }
     public PatternPreviewer getPatternPreviewer() { return patternPreviewer; }
