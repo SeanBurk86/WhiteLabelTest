@@ -58,8 +58,18 @@ final class LightningBolt {
     // of producing one long straight segment where a stray point gets yanked back to the boundary.
     static Array<Segment> generate(float startX, float startY, float endX, float endY, long seed, float thickness,
                                     float minAlong, float maxAlong, float minPerp, float maxPerp) {
+        return generate(startX, startY, endX, endY, seed, thickness, minAlong, maxAlong, minPerp, maxPerp, SUBDIVISIONS, FORK_PROBABILITY);
+    }
+
+    // Lets a caller trade visual detail for a cheaper bolt (e.g. Thunderbolt's Hyper Attack chain
+    // arcs - see ThunderboltWeapon.addChainArc) by lowering subdivisions (leaf segment count is
+    // 2^subdivisions) and/or forkProbability instead of always paying for the full SUBDIVISIONS/
+    // FORK_PROBABILITY detail level every generated bolt uses.
+    static Array<Segment> generate(float startX, float startY, float endX, float endY, long seed, float thickness,
+                                    float minAlong, float maxAlong, float minPerp, float maxPerp,
+                                    int subdivisions, float forkProbability) {
         Array<Working> current = new Array<>(true, 32);
-        current.add(new Working(startX, startY, endX, endY, 0, false, SUBDIVISIONS));
+        current.add(new Working(startX, startY, endX, endY, 0, false, subdivisions));
 
         Array<Segment> finished = new Array<>(true, 64);
 
@@ -92,7 +102,7 @@ final class LightningBolt {
                 next.add(new Working(seg.x1, seg.y1, midX, midY, seg.level + 1, seg.isFork, childRemaining));
                 next.add(new Working(midX, midY, seg.x2, seg.y2, seg.level + 1, seg.isFork, childRemaining));
 
-                if (!seg.isFork && rand(hash(segSeed, 1, 0)) < FORK_PROBABILITY) {
+                if (!seg.isFork && rand(hash(segSeed, 1, 0)) < forkProbability) {
                     float forkAngle = (rand(hash(segSeed, 2, 0)) * 2f - 1f) * FORK_MAX_ANGLE_DEG;
                     Vector2 forkDir = new Vector2(dx, dy).nor().rotateDeg(forkAngle).scl(length * FORK_LENGTH_SCALE);
                     float forkEndX = MathUtils.clamp(midX + forkDir.x, minAlong, maxAlong);

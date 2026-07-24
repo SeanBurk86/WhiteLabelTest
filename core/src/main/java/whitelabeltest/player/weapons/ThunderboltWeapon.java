@@ -49,10 +49,22 @@ public class ThunderboltWeapon extends BaseWeapon {
     private static final float CORE_WIDTH_SCALE = 0.5f;
 
     // Hyper Attack: fires a full strike volley (same level-scaled shape as a normal spawn()) on
-    // its own cooldown; any enemy it hits also has every bullet it has currently fired arced to
-    // and destroyed (see markDamaged()).
+    // its own cooldown; any enemy it hits also has its nearest bullets arced to and destroyed
+    // (see markDamaged()/chainDestroyBullets()).
     private static final float HYPER_ATTACK_COOLDOWN = 6f;
     private static final float CHAIN_BOLT_THICKNESS = 0.2f;
+
+    // Bounded to the nearest MAX_CHAIN_TARGETS bullets, each drawn with a much cheaper bolt
+    // (fewer subdivisions, no forking) than the main strike - an enemy with a dense spread
+    // pattern could otherwise dump dozens of full-detail lightning arcs (~15 sprites each,
+    // repositioned every frame for the whole fade) onto this strike in a single hit, which is
+    // what was tanking the frame rate.
+    private static final int MAX_CHAIN_TARGETS = 96;
+    private static final int CHAIN_SUBDIVISIONS = 3;
+    private static final float CHAIN_FORK_PROBABILITY = 0f;
+    private final EnemyBullet[] chainTargetScratch = new EnemyBullet[MAX_CHAIN_TARGETS];
+    private final float[] chainDistScratch = new float[MAX_CHAIN_TARGETS];
+
     private float hyperAttackCooldownTimer;
 
     private static final float FADE_BLUR_GROWTH = 2.0f;
@@ -394,22 +406,56 @@ public class ThunderboltWeapon extends BaseWeapon {
         if (isHyper) chainDestroyBullets(enemy, px, py, entityManager);
     }
 
-    /** Hyper Attack only: arcs from the struck enemy to every bullet it has currently fired
+    /** Hyper Attack only: arcs from the struck enemy to its nearest MAX_CHAIN_TARGETS bullets
      *  (matched via EnemyBullet.getSourceEnemy(), the same link the reflect shield uses - see
-     *  CollisionManager.checkShieldReflections) and destroys each one. */
+     *  CollisionManager.checkShieldReflections) and destroys just those - a single pass, bounded
+     *  top-K-nearest scan rather than collecting/sorting every matching bullet, since
+     *  enemyBullets can be large in a bullet-hell wave. */
     private void chainDestroyBullets(Enemy enemy, float fromX, float fromY, EntityManager entityManager) {
         Array<EnemyBullet> enemyBullets = entityManager.getEnemyBullets();
-        for (int i = enemyBullets.size - 1; i >= 0; i--) {
+        EnemyBullet[] nearest = chainTargetScratch;
+        float[] nearestDistSq = chainDistScratch;
+        int count = 0;
+
+        for (int i = 0; i < enemyBullets.size; i++) {
             EnemyBullet bullet = enemyBullets.get(i);
             if (bullet.getSourceEnemy() != enemy) continue;
 
+            Rectangle rect = bullet.getRectangle();
+            float dx = rect.x + rect.width / 2f - fromX;
+            float dy = rect.y + rect.height / 2f - fromY;
+            float distSq = dx * dx + dy * dy;
+
+            if (count < MAX_CHAIN_TARGETS) {
+                int insertAt = count++;
+                while (insertAt > 0 && nearestDistSq[insertAt - 1] > distSq) {
+                    nearest[insertAt] = nearest[insertAt - 1];
+                    nearestDistSq[insertAt] = nearestDistSq[insertAt - 1];
+                    insertAt--;
+                }
+                nearest[insertAt] = bullet;
+                nearestDistSq[insertAt] = distSq;
+            } else if (distSq < nearestDistSq[count - 1]) {
+                int insertAt = count - 1;
+                while (insertAt > 0 && nearestDistSq[insertAt - 1] > distSq) {
+                    nearest[insertAt] = nearest[insertAt - 1];
+                    nearestDistSq[insertAt] = nearestDistSq[insertAt - 1];
+                    insertAt--;
+                }
+                nearest[insertAt] = bullet;
+                nearestDistSq[insertAt] = distSq;
+            }
+        }
+
+        for (int i = 0; i < count; i++) {
+            EnemyBullet bullet = nearest[i];
             Rectangle rect = bullet.getRectangle();
             float bx = rect.x + rect.width / 2f;
             float by = rect.y + rect.height / 2f;
             long seed = System.nanoTime() ^ ((long) System.identityHashCode(bullet) << 32);
             addChainArc(fromX, fromY, bx, by, seed);
 
-            enemyBullets.removeIndex(i);
+            enemyBullets.removeValue(bullet, true);
             ObjectPools.freeEnemyBullet(bullet);
         }
     }
@@ -417,7 +463,9 @@ public class ThunderboltWeapon extends BaseWeapon {
     /** Draws a lightning arc directly between two arbitrary world points - unlike addArc(), which
      *  is anchored to this strike's own origin/direction/reach, this builds its own local
      *  along/perp frame from fromX/fromY toward toX/toY so it can connect an enemy to each of its
-     *  bullets regardless of where this strike's hitbox actually is. */
+     *  bullets regardless of where this strike's hitbox actually is. Uses CHAIN_SUBDIVISIONS/
+     *  CHAIN_FORK_PROBABILITY instead of LightningBolt's normal full-detail defaults - these are
+     *  secondary effects that can be cheap without anyone noticing, unlike the main bolt. */
     private void addChainArc(float fromX, float fromY, float toX, float toY, long seed) {
         float dx = toX - fromX, dy = toY - fromY;
         float dist = Math.max((float) Math.sqrt(dx * dx + dy * dy), 0.01f);
@@ -426,7 +474,7 @@ public class ThunderboltWeapon extends BaseWeapon {
         float perpBound = MathUtils.clamp(dist * 0.2f, 0.15f, 0.6f);
 
         Array<LightningBolt.Segment> segments = LightningBolt.generate(0f, 0f, dist, 0f, seed, CHAIN_BOLT_THICKNESS,
-            0f, dist, -perpBound, perpBound);
+            0f, dist, -perpBound, perpBound, CHAIN_SUBDIVISIONS, CHAIN_FORK_PROBABILITY);
         for (LightningBolt.Segment seg : segments) {
             float x1 = fromX + dirX * seg.x1 + perpX * seg.y1;
             float y1 = fromY + dirY * seg.x1 + perpY * seg.y1;
