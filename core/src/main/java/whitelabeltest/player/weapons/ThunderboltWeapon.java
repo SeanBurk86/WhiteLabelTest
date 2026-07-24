@@ -6,12 +6,15 @@ import com.badlogic.gdx.graphics.Texture;
 import com.badlogic.gdx.graphics.g2d.Sprite;
 import com.badlogic.gdx.graphics.g2d.SpriteBatch;
 import com.badlogic.gdx.math.MathUtils;
+import com.badlogic.gdx.math.Rectangle;
 import com.badlogic.gdx.math.Vector2;
 import com.badlogic.gdx.utils.Array;
 import com.badlogic.gdx.utils.FloatArray;
 import whitelabeltest.enemy.Enemy;
+import whitelabeltest.enemy.bullets.EnemyBullet;
 import whitelabeltest.gamemanagers.AssetManager;
 import whitelabeltest.gamemanagers.AudioManager;
+import whitelabeltest.gamemanagers.EntityManager;
 import whitelabeltest.gamemanagers.ObjectPools;
 import whitelabeltest.player.Player;
 
@@ -35,8 +38,22 @@ public class ThunderboltWeapon extends BaseWeapon {
     private static final float OUTER_TINT_G = 0.15f, OUTER_TINT_B = 0.15f;
     private static final float INNER_TINT_G = 0.2f, INNER_TINT_B = 0.2f;
 
+    // Hyper Attack strikes tint the same white-hot core toward the project's established
+    // "mystic" purple (see ChainFireEffect's MYSTIC_* ramp) instead of the normal bolt's
+    // red/orange glow - unlike the normal tints, R is also pulled down so the glow reads as
+    // violet rather than white.
+    private static final float HYPER_OUTER_TINT_R = 0.55f, HYPER_OUTER_TINT_G = 0.12f, HYPER_OUTER_TINT_B = 0.95f;
+    private static final float HYPER_INNER_TINT_R = 0.65f, HYPER_INNER_TINT_G = 0.22f, HYPER_INNER_TINT_B = 1.0f;
+
     private static final float CORE_ALPHA_SCALE = 1.0f;
     private static final float CORE_WIDTH_SCALE = 0.5f;
+
+    // Hyper Attack: fires a full strike volley (same level-scaled shape as a normal spawn()) on
+    // its own cooldown; any enemy it hits also has every bullet it has currently fired arced to
+    // and destroyed (see markDamaged()).
+    private static final float HYPER_ATTACK_COOLDOWN = 6f;
+    private static final float CHAIN_BOLT_THICKNESS = 0.2f;
+    private float hyperAttackCooldownTimer;
 
     private static final float FADE_BLUR_GROWTH = 2.0f;
 
@@ -68,6 +85,7 @@ public class ThunderboltWeapon extends BaseWeapon {
     private final FloatArray segPhase = new FloatArray(16);
     private int segCount = 0;
     private boolean hasRealHit = false;
+    private boolean isHyper = false;
     private float lifeTime = 0f;
     private float rotationDeg = 0f;
 
@@ -76,6 +94,10 @@ public class ThunderboltWeapon extends BaseWeapon {
     private float endReach;
 
     public void init(WeaponDefinition def, Texture texture, Texture circleTexture, Vector2 origin, Vector2 dir, float width, float worldHeight) {
+        init(def, texture, circleTexture, origin, dir, width, worldHeight, false);
+    }
+
+    public void init(WeaponDefinition def, Texture texture, Texture circleTexture, Vector2 origin, Vector2 dir, float width, float worldHeight, boolean isHyper) {
         this.def = def;
         this.texture = texture;
         this.circleTexture = circleTexture;
@@ -84,6 +106,7 @@ public class ThunderboltWeapon extends BaseWeapon {
         this.hitEnemies.clear();
         this.segCount = 0;
         this.hasRealHit = false;
+        this.isHyper = isHyper;
 
         float startReach = def.radius;
         float endReach = Math.max(edgeDistance(origin, dir, worldHeight), startReach + 0.1f);
@@ -238,11 +261,18 @@ public class ThunderboltWeapon extends BaseWeapon {
         float blurScale = 1f + FADE_BLUR_GROWTH * t;
         float coreBrightness = baseAlpha * CORE_ALPHA_SCALE;
 
+        float outerTintR = isHyper ? HYPER_OUTER_TINT_R : 1f;
+        float outerTintG = isHyper ? HYPER_OUTER_TINT_G : OUTER_TINT_G;
+        float outerTintB = isHyper ? HYPER_OUTER_TINT_B : OUTER_TINT_B;
+        float innerTintR = isHyper ? HYPER_INNER_TINT_R : 1f;
+        float innerTintG = isHyper ? HYPER_INNER_TINT_G : INNER_TINT_G;
+        float innerTintB = isHyper ? HYPER_INNER_TINT_B : INNER_TINT_B;
+
         int base = i * SPRITES_PER_SEGMENT;
         positionLayer(base, x1, y1, midX, midY, x2, y2, width * GLOW_OUTER_WIDTH_SCALE * blurScale,
-            baseAlpha, OUTER_TINT_G * baseAlpha, OUTER_TINT_B * baseAlpha);
+            outerTintR * baseAlpha, outerTintG * baseAlpha, outerTintB * baseAlpha);
         positionLayer(base + SPRITES_PER_LAYER, x1, y1, midX, midY, x2, y2, width * GLOW_INNER_WIDTH_SCALE * blurScale,
-            baseAlpha, INNER_TINT_G * baseAlpha, INNER_TINT_B * baseAlpha);
+            innerTintR * baseAlpha, innerTintG * baseAlpha, innerTintB * baseAlpha);
         positionLayer(base + SPRITES_PER_LAYER * 2, x1, y1, midX, midY, x2, y2, width * CORE_WIDTH_SCALE,
             coreBrightness, coreBrightness, coreBrightness);
     }
@@ -348,7 +378,7 @@ public class ThunderboltWeapon extends BaseWeapon {
     }
 
     @Override
-    public void markDamaged(Enemy enemy) {
+    public void markDamaged(Enemy enemy, EntityManager entityManager) {
         hitEnemies.add(enemy);
         if (!hasRealHit) {
             hasRealHit = true;
@@ -360,35 +390,87 @@ public class ThunderboltWeapon extends BaseWeapon {
 
         long seed = System.nanoTime() ^ ((long) System.identityHashCode(enemy) << 32);
         addArc(px, py, seed);
+
+        if (isHyper) chainDestroyBullets(enemy, px, py, entityManager);
+    }
+
+    /** Hyper Attack only: arcs from the struck enemy to every bullet it has currently fired
+     *  (matched via EnemyBullet.getSourceEnemy(), the same link the reflect shield uses - see
+     *  CollisionManager.checkShieldReflections) and destroys each one. */
+    private void chainDestroyBullets(Enemy enemy, float fromX, float fromY, EntityManager entityManager) {
+        Array<EnemyBullet> enemyBullets = entityManager.getEnemyBullets();
+        for (int i = enemyBullets.size - 1; i >= 0; i--) {
+            EnemyBullet bullet = enemyBullets.get(i);
+            if (bullet.getSourceEnemy() != enemy) continue;
+
+            Rectangle rect = bullet.getRectangle();
+            float bx = rect.x + rect.width / 2f;
+            float by = rect.y + rect.height / 2f;
+            long seed = System.nanoTime() ^ ((long) System.identityHashCode(bullet) << 32);
+            addChainArc(fromX, fromY, bx, by, seed);
+
+            enemyBullets.removeIndex(i);
+            ObjectPools.freeEnemyBullet(bullet);
+        }
+    }
+
+    /** Draws a lightning arc directly between two arbitrary world points - unlike addArc(), which
+     *  is anchored to this strike's own origin/direction/reach, this builds its own local
+     *  along/perp frame from fromX/fromY toward toX/toY so it can connect an enemy to each of its
+     *  bullets regardless of where this strike's hitbox actually is. */
+    private void addChainArc(float fromX, float fromY, float toX, float toY, long seed) {
+        float dx = toX - fromX, dy = toY - fromY;
+        float dist = Math.max((float) Math.sqrt(dx * dx + dy * dy), 0.01f);
+        float dirX = dx / dist, dirY = dy / dist;
+        float perpX = -dirY, perpY = dirX;
+        float perpBound = MathUtils.clamp(dist * 0.2f, 0.15f, 0.6f);
+
+        Array<LightningBolt.Segment> segments = LightningBolt.generate(0f, 0f, dist, 0f, seed, CHAIN_BOLT_THICKNESS,
+            0f, dist, -perpBound, perpBound);
+        for (LightningBolt.Segment seg : segments) {
+            float x1 = fromX + dirX * seg.x1 + perpX * seg.y1;
+            float y1 = fromY + dirY * seg.x1 + perpY * seg.y1;
+            float x2 = fromX + dirX * seg.x2 + perpX * seg.y2;
+            float y2 = fromY + dirY * seg.x2 + perpY * seg.y2;
+            addBoltSegment(x1, y1, x2, y2, seg.width, seg.isFork ? FORK_ALPHA_SCALE : 1.0f);
+        }
     }
 
     @Override
     public void spawn(Array<Weapon> activeWeapons, Texture texture, float x, float y, Player player, Array<Enemy> enemies, AssetManager assets) {
         Vector2 origin = new Vector2(player.getCenterX(), player.getCenterY());
-        // Grows a little with every level (not just a single jump at level 2) so an enemy caught
-        // where multiple strikes overlap is more likely to sit in several hitboxes at once.
-        float width = def.size * (1f + (level - 1) * HITBOX_GROWTH_PER_LEVEL);
+        float width = strikeWidth();
         float worldHeight = player.getWorldHeight();
-        Texture pixel = assets.pixelTexture;
-        Texture circle = assets.circleTexture;
+        spawnLevelStrikes(activeWeapons, assets.pixelTexture, assets.circleTexture, origin, width, worldHeight, false);
+    }
 
-        strike(activeWeapons, pixel, circle, origin, new Vector2(0, 1), width, worldHeight);
+    // Grows a little with every level (not just a single jump at level 2) so an enemy caught
+    // where multiple strikes overlap is more likely to sit in several hitboxes at once.
+    private float strikeWidth() {
+        return def.size * (1f + (level - 1) * HITBOX_GROWTH_PER_LEVEL);
+    }
+
+    /** Shared by both the normal attack and the Hyper Attack so the Hyper Attack always fires the
+     *  same level-scaled volley (1 strike at level 1-2, 3 at level 3, 6 at level 4) the weapon's
+     *  normal attack would - just tinted purple and, on hit, chaining into the target's bullets. */
+    private void spawnLevelStrikes(Array<Weapon> activeWeapons, Texture pixel, Texture circle, Vector2 origin, float width, float worldHeight, boolean isHyper) {
+        strike(activeWeapons, pixel, circle, origin, new Vector2(0, 1), width, worldHeight, isHyper);
 
         if (level >= 3) {
-            strike(activeWeapons, pixel, circle, origin, new Vector2(0, 1).rotateDeg(45), width, worldHeight);
-            strike(activeWeapons, pixel, circle, origin, new Vector2(0, 1).rotateDeg(-45), width, worldHeight);
+            strike(activeWeapons, pixel, circle, origin, new Vector2(0, 1).rotateDeg(45), width, worldHeight, isHyper);
+            strike(activeWeapons, pixel, circle, origin, new Vector2(0, 1).rotateDeg(-45), width, worldHeight, isHyper);
         }
         if (level >= 4) {
-            strike(activeWeapons, pixel, circle, origin, new Vector2(0, -1), width, worldHeight);
-            strike(activeWeapons, pixel, circle, origin, new Vector2(0, -1).rotateDeg(45), width, worldHeight);
-            strike(activeWeapons, pixel, circle, origin, new Vector2(0, -1).rotateDeg(-45), width, worldHeight);
+            strike(activeWeapons, pixel, circle, origin, new Vector2(0, -1), width, worldHeight, isHyper);
+            strike(activeWeapons, pixel, circle, origin, new Vector2(0, -1).rotateDeg(45), width, worldHeight, isHyper);
+            strike(activeWeapons, pixel, circle, origin, new Vector2(0, -1).rotateDeg(-45), width, worldHeight, isHyper);
         }
     }
 
-    private void strike(Array<Weapon> activeWeapons, Texture texture, Texture circleTexture, Vector2 origin, Vector2 dir, float width, float worldHeight) {
+    private void strike(Array<Weapon> activeWeapons, Texture texture, Texture circleTexture, Vector2 origin, Vector2 dir, float width, float worldHeight, boolean isHyper) {
         ThunderboltWeapon w = ObjectPools.thunderboltWeaponPool.obtain();
         w.setLevel(this.level);
-        w.init(def, texture, circleTexture, origin, dir.nor(), width, worldHeight);
+        w.init(def, texture, circleTexture, origin, dir.nor(), width, worldHeight, isHyper);
         activeWeapons.add(w);
     }
 
@@ -400,6 +482,35 @@ public class ThunderboltWeapon extends BaseWeapon {
         audio.playThunderboltWeaponSound(level);
     }
 
+    /** Thunderbolt's Hyper Attack: fires the same level-scaled strike volley as a normal attack,
+     *  tinted purple, on its own cooldown (independent of the normal fire-rate cooldown). Any
+     *  enemy one of these strikes hits also has every bullet it has currently fired arced to and
+     *  destroyed (see markDamaged()/chainDestroyBullets()). */
+    @Override
+    public void hyperAttack(Player player, Array<Weapon> activeWeapons, Array<Enemy> enemies, AssetManager assets, AudioManager audio) {
+        if (hyperAttackCooldownTimer > 0f) return;
+        hyperAttackCooldownTimer = HYPER_ATTACK_COOLDOWN;
+
+        Vector2 origin = new Vector2(player.getCenterX(), player.getCenterY());
+        spawnLevelStrikes(activeWeapons, assets.pixelTexture, assets.circleTexture, origin, strikeWidth(), player.getWorldHeight(), true);
+
+        playFireSound(audio, level);
+    }
+
+    // Ticks down regardless of which slot is active, matching every other weapon's own cooldown
+    // convention (see Player.advanceWeaponTimers).
+    @Override
+    public void addShootTimer(float delta) {
+        super.addShootTimer(delta);
+        if (hyperAttackCooldownTimer > 0f) hyperAttackCooldownTimer -= delta;
+    }
+
+    /** Called on a full game reset, not on pool reuse (see reset()) - the prototype instance is
+     *  never pooled, so this cooldown would otherwise survive a restart. */
+    public void resetHyperAttackCooldown() {
+        hyperAttackCooldownTimer = 0f;
+    }
+
     @Override
     public void reset() {
         super.reset();
@@ -407,5 +518,6 @@ public class ThunderboltWeapon extends BaseWeapon {
         hitEnemies.clear();
         segCount = 0;
         hasRealHit = false;
+        isHyper = false;
     }
 }

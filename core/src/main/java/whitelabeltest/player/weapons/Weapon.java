@@ -11,6 +11,7 @@ import com.badlogic.gdx.utils.Array;
 import com.badlogic.gdx.utils.Pool;
 import whitelabeltest.gamemanagers.AssetManager;
 import whitelabeltest.gamemanagers.AudioManager;
+import whitelabeltest.gamemanagers.EntityManager;
 import whitelabeltest.enemy.Enemy;
 import whitelabeltest.player.Player;
 
@@ -59,8 +60,11 @@ public interface Weapon extends Pool.Poolable {
 
     // Lets a persistent, non-destroying weapon (e.g. a lingering hitbox) damage each enemy only
     // once instead of every frame it overlaps. Bullets that destroy themselves on hit never need this.
+    // entityManager is handed in (rather than just the enemy) so an override can reach into the
+    // live enemy/enemyBullet lists - e.g. Thunderbolt's Hyper Attack chaining into and destroying
+    // every bullet the struck enemy has fired.
     default boolean hasDamaged(Enemy enemy) { return false; }
-    default void markDamaged(Enemy enemy) {}
+    default void markDamaged(Enemy enemy, EntityManager entityManager) {}
 
     // Called once, right when a bullet registers a new hit, before it's (possibly) destroyed and
     // freed back to its pool - lets a weapon spawn follow-up projectiles (e.g. shrapnel) at the

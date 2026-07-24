@@ -450,6 +450,7 @@ public class Player {
         orbitWeapon.resetShootTimer();
         orbitWeapon.resetShield();
         thunderboltWeapon.resetShootTimer();
+        thunderboltWeapon.resetHyperAttackCooldown();
         animationTime = 0;
         numBombs = 1;
         numLives = 6;
