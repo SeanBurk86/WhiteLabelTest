@@ -30,6 +30,9 @@ public class ObjectPools {
     public static final Pool<ReflectedBolt> reflectedBoltPool = new Pool<ReflectedBolt>() {
         @Override protected ReflectedBolt newObject() { return new ReflectedBolt(); }
     };
+    public static final Pool<HomingBolt> homingBoltPool = new Pool<HomingBolt>() {
+        @Override protected HomingBolt newObject() { return new HomingBolt(); }
+    };
 
     public static final Pool<BasicEnemyBullet> basicEnemyBulletPool = new Pool<BasicEnemyBullet>() {
         @Override protected BasicEnemyBullet newObject() { return new BasicEnemyBullet(); }
@@ -77,6 +80,7 @@ public class ObjectPools {
         else if (w instanceof OrbitWeapon) orbitWeaponPool.free((OrbitWeapon)w);
         else if (w instanceof ThunderboltWeapon) thunderboltWeaponPool.free((ThunderboltWeapon)w);
         else if (w instanceof ReflectedBolt) reflectedBoltPool.free((ReflectedBolt)w);
+        else if (w instanceof HomingBolt) homingBoltPool.free((HomingBolt)w);
     }
 
     public static void freeEnemyBullet(EnemyBullet b) {

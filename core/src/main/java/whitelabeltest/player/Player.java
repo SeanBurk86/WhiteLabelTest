@@ -446,6 +446,7 @@ public class Player {
         activeSlot = 0;
         basicWeapon.resetShootTimer();
         waveBlastWeapon.resetShootTimer();
+        waveBlastWeapon.resetHyperAttackCooldown();
         orbitWeapon.resetShootTimer();
         orbitWeapon.resetShield();
         thunderboltWeapon.resetShootTimer();

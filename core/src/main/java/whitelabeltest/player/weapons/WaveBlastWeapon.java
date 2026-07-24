@@ -4,6 +4,7 @@ import com.badlogic.gdx.graphics.Texture;
 import com.badlogic.gdx.graphics.g2d.Animation;
 import com.badlogic.gdx.graphics.g2d.Sprite;
 import com.badlogic.gdx.graphics.g2d.TextureRegion;
+import com.badlogic.gdx.math.MathUtils;
 import com.badlogic.gdx.math.Vector2;
 import com.badlogic.gdx.utils.Array;
 import whitelabeltest.gamemanagers.AnimationCache;
@@ -17,6 +18,17 @@ public class WaveBlastWeapon extends BaseWeapon {
     private static final float SPLINTER_SIZE_SCALE = 0.5f;
     private static final float SPLINTER_DAMAGE_SCALE = 0.5f;
     private static final float SPLINTER_ANGLE = 45f;
+
+    // WaveBlastWeapon's Hyper Attack: three homing bolts fired out the back (down-left,
+    // straight down, down-right - standard math angles, not the up-is-zero convention the spread
+    // patterns above use), each carrying the weapon's current level damage. Gated by its own
+    // cooldown, independent of the normal fire-rate cooldown. Launched well below the weapon's
+    // own bullet speed - at full speed they'd cover most of the play field before HomingBolt's
+    // turn rate could pull them back around toward anything.
+    private static final float[] HYPER_ATTACK_ANGLES_DEG = {225f, 270f, 315f};
+    private static final float HYPER_ATTACK_SPEED = 5f;
+    private static final float HYPER_ATTACK_COOLDOWN = 4f;
+    private float hyperAttackCooldownTimer;
 
     private WeaponDefinition def;
     private Texture texture;
@@ -122,5 +134,41 @@ public class WaveBlastWeapon extends BaseWeapon {
     @Override
     public void playFireSound(AudioManager audio, int level) {
         audio.playWaveBlastWeaponSound(level);
+    }
+
+    /** WaveBlastWeapon's Hyper Attack: launches three homing bolts out the back at fixed angles,
+     *  each dealing this weapon's current-level damage - silently does nothing while on its own
+     *  4-second cooldown (see addShootTimer()). */
+    @Override
+    public void hyperAttack(Player player, Array<Weapon> activeWeapons, Array<Enemy> enemies, AssetManager assets, AudioManager audio) {
+        if (hyperAttackCooldownTimer > 0f) return;
+        hyperAttackCooldownTimer = HYPER_ATTACK_COOLDOWN;
+
+        int levelDamage = def.getDamage(level);
+        Vector2 origin = player.getBulletSpawnPoint();
+
+        for (float angleDeg : HYPER_ATTACK_ANGLES_DEG) {
+            Vector2 dir = new Vector2(MathUtils.cosDeg(angleDeg), MathUtils.sinDeg(angleDeg));
+            HomingBolt bolt = ObjectPools.homingBoltPool.obtain();
+            bolt.init(animation, size, origin.x, origin.y, dir, HYPER_ATTACK_SPEED, levelDamage);
+            activeWeapons.add(bolt);
+        }
+
+        playFireSound(audio, level);
+    }
+
+    // Ticks down regardless of which slot is active, matching every other weapon's own cooldown
+    // convention (see Player.advanceWeaponTimers) - not reset or fast-forwarded by switching away
+    // from WaveBlastWeapon and back.
+    @Override
+    public void addShootTimer(float delta) {
+        super.addShootTimer(delta);
+        if (hyperAttackCooldownTimer > 0f) hyperAttackCooldownTimer -= delta;
+    }
+
+    /** Called on a full game reset, not on pool reuse (see reset()) - the prototype instance is
+     *  never pooled, so this cooldown would otherwise survive a restart. */
+    public void resetHyperAttackCooldown() {
+        hyperAttackCooldownTimer = 0f;
     }
 }
