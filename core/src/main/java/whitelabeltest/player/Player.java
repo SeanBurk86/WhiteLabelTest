@@ -53,6 +53,26 @@ public class Player {
     private final float haloDrawWidth, haloDrawHeight;
     private float haloAnimationTime = 0;
 
+    // BasicWeapon's Hyper Attack (see BasicWeapon.hyperAttack/triggerBasicHyperAttack): the halo
+    // launches forward a short distance, dealing damage to anything it clips along the way, then
+    // rests there - detached from the player, firing BasicWeapon's own stream on its own cadence
+    // for as long as it's detached - until Hyper Attack is pressed again, at which point it glides
+    // back to wherever the player currently is instead of snapping there.
+    private static final float HALO_DASH_DISTANCE = 4.2f;
+    private static final float HALO_DASH_SPEED = 9f;
+    private static final float HALO_RETURN_SPEED = 6f;
+    private static final float HALO_ARRIVE_EPSILON = 0.05f;
+    private static final int HALO_DASH_DAMAGE = 30;
+
+    private boolean haloDetached;
+    private boolean haloDashing;
+    private boolean haloReturning;
+    private float haloDetachedX, haloDetachedY;
+    private float haloDashTargetY;
+    private float haloFireTimer;
+    private final Circle haloHitbox = new Circle();
+    private final Array<Enemy> haloDashHitEnemies = new Array<>(false, 8);
+
     private float invincibleFrameTime = 2f;
     private float invincibilityTimer = 0f;
     private boolean isInvincible;
@@ -156,12 +176,15 @@ public class Player {
 
         if (input.isWeaponSwitchJustPressed()) {
             switchActiveSlot();
+            recallHaloOnWeaponSwitch();
         }
 
         handleMovement(delta, input.getMoveDirection(), input.isShooting());
         handleShooting(delta, input.isShooting(), assets, audio, bullets, enemies);
         maintainOrbitRing(bullets, assets, input.isShooting());
-        handleHyperAttack(input.isHyperAttackJustPressed(), audio);
+        handleHyperAttack(input.isHyperAttackJustPressed(), bullets, enemies, assets, audio);
+        updateHaloMovement(delta);
+        updateHaloFiring(delta, input.isShooting(), bullets, assets, audio);
         updateHitbox();
         updateGrazeHitbox();
         resolveGrazePoints();
@@ -179,13 +202,91 @@ public class Player {
         }
     }
 
-    // Hyper Attack raises OrbitWeapon's reflect shield, independent of the fire button and of
-    // which slot is active for firing - but only while OrbitWeapon is actually equipped as the
-    // current weapon, matching the ring's own gating.
-    private void handleHyperAttack(boolean hyperAttackJustPressed, AudioManager audio) {
-        if (!hyperAttackJustPressed || getCurrentWeapon() != orbitWeapon) return;
-        if (orbitWeapon.tryActivateShield()) {
-            audio.playOrbitWeaponSound(orbitWeapon.getLevel());
+    // Hyper Attack triggers whichever weapon is currently active's own ability (a no-op for
+    // weapons that don't define one yet - see Weapon.hyperAttack), independent of the fire button.
+    // Blocked for every weapon but Basic while the halo hasn't reattached, so a different
+    // weapon's Hyper Attack can't start while Basic's is still out - Basic's own re-press still
+    // goes through, since that's what reattaches it (see triggerBasicHyperAttack()).
+    private void handleHyperAttack(boolean hyperAttackJustPressed, Array<Weapon> bullets, Array<Enemy> enemies, AssetManager assets, AudioManager audio) {
+        if (!hyperAttackJustPressed) return;
+        if (haloDetached && getCurrentWeapon() != basicWeapon) return;
+        getCurrentWeapon().hyperAttack(this, bullets, enemies, assets, audio);
+    }
+
+    /** Switching weapons recalls a still-detached halo immediately, interrupting an in-progress
+     *  dash if needed, instead of leaving it stranded away from the player while a different
+     *  weapon is equipped. No-op once it's already heading back. */
+    private void recallHaloOnWeaponSwitch() {
+        if (!haloDetached || haloReturning) return;
+        haloDashing = false;
+        haloReturning = true;
+    }
+
+    /** BasicWeapon's Hyper Attack (see BasicWeapon.hyperAttack), toggled by each press: while
+     *  attached, launches the halo forward a short distance - see updateHaloMovement() for the
+     *  damage dealt along the way - where it then rests, detached, until this is called again,
+     *  which starts it gliding back to the player instead of snapping there. Ignored mid-launch
+     *  or mid-return so a rapid second press can't restart either motion. */
+    public void triggerBasicHyperAttack() {
+        if (!haloDetached) {
+            haloDetached = true;
+            haloDashing = true;
+            haloReturning = false;
+            haloDashHitEnemies.clear();
+            haloFireTimer = 0f;
+            haloDetachedX = attachedHaloX();
+            haloDetachedY = attachedHaloY();
+            haloDashTargetY = haloDetachedY + HALO_DASH_DISTANCE;
+        } else if (!haloDashing && !haloReturning) {
+            haloReturning = true;
+        }
+    }
+
+    /** Fires BasicWeapon's pattern - split with whatever the player's own gun is firing (see
+     *  handleShooting()) so the two firing points don't double the total bullet count - from
+     *  wherever the halo currently is: dashing out, resting, or gliding back, on the weapon's own
+     *  fire-rate cadence, for as long as it's detached, but only while the player is actually
+     *  holding Shoot (mirrors handleShooting's own gating). The cooldown still accumulates in the
+     *  background while not shooting, same as a normal weapon's, so it's ready to fire the instant
+     *  Shoot is pressed again. */
+    private void updateHaloFiring(float delta, boolean isShooting, Array<Weapon> bullets, AssetManager assets, AudioManager audio) {
+        if (!haloDetached) return;
+
+        haloFireTimer += delta;
+        if (isShooting && haloFireTimer > basicWeapon.getFireRate()) {
+            haloFireTimer = 0f;
+            basicWeapon.spawnHaloPortion(bullets, resolveTextureFor("BasicWeapon", assets), haloCenterX(), haloCenterY());
+            basicWeapon.playFireSound(audio, basicWeapon.getLevel());
+        }
+    }
+
+    private void updateHaloMovement(float delta) {
+        if (!haloDetached) return;
+
+        if (haloDashing) {
+            float remaining = haloDashTargetY - haloDetachedY;
+            float step = HALO_DASH_SPEED * delta;
+            if (Math.abs(remaining) <= step) {
+                haloDetachedY = haloDashTargetY;
+                haloDashing = false;
+            } else {
+                haloDetachedY += step;
+            }
+            haloHitbox.set(haloCenterX(), haloCenterY(), Math.min(haloDrawWidth, haloDrawHeight) / 2f);
+        } else if (haloReturning) {
+            float targetX = attachedHaloX();
+            float targetY = attachedHaloY();
+            float dx = targetX - haloDetachedX;
+            float dy = targetY - haloDetachedY;
+            float dist = (float) Math.sqrt(dx * dx + dy * dy);
+            float step = HALO_RETURN_SPEED * delta;
+            if (dist <= Math.max(step, HALO_ARRIVE_EPSILON)) {
+                haloDetached = false;
+                haloReturning = false;
+            } else {
+                haloDetachedX += dx / dist * step;
+                haloDetachedY += dy / dist * step;
+            }
         }
     }
 
@@ -208,7 +309,12 @@ public class Player {
 
             Texture bulletTex = resolveActiveTexture(assets);
             Vector2 spawnPoint = getBulletSpawnPoint();
-            currentWeapon.spawn(bullets, bulletTex, spawnPoint.x, spawnPoint.y, this, enemies, assets);
+            if (currentWeapon == basicWeapon && haloDetached) {
+                // Split the pattern with the halo (see updateHaloFiring()) instead of doubling it.
+                basicWeapon.spawnPlayerPortion(bullets, bulletTex, spawnPoint.x, spawnPoint.y);
+            } else {
+                currentWeapon.spawn(bullets, bulletTex, spawnPoint.x, spawnPoint.y, this, enemies, assets);
+            }
             currentWeapon.playFireSound(audio, currentWeapon.getLevel());
         }
     }
@@ -222,7 +328,11 @@ public class Player {
     }
 
     private Texture resolveActiveTexture(AssetManager assets) {
-        WeaponDefinition def = assets.getWeaponDefinition(weaponId(getCurrentWeapon()));
+        return resolveTextureFor(weaponId(getCurrentWeapon()), assets);
+    }
+
+    private Texture resolveTextureFor(String weaponId, AssetManager assets) {
+        WeaponDefinition def = assets.getWeaponDefinition(weaponId);
         return (def != null && def.texture != null) ? assets.getTexture(def.texture) : assets.bulletTexture;
     }
 
@@ -250,8 +360,17 @@ public class Player {
         shieldHitbox.set(getCenterX(), getCenterY(), orbitWeapon.getShieldRadius());
     }
 
+    // The graze halo's hitbox - grazing enemy bullets, picking up weapon powerups, and collecting
+    // point gems (see CollisionManager's checkGrazeCollisions/checkPlayerPowerupCollisions/
+    // checkPlayerGemCollisions, all keyed on getGrazeHitbox()) - follows the halo itself, not the
+    // player, whenever BasicWeapon's Hyper Attack has it detached.
     private void updateGrazeHitbox() {
-        grazeHitbox.set(getCenterX(), getCenterY(), Math.min(sprite.getWidth(), sprite.getHeight()) * playerDef.haloHitboxSize);
+        float radius = Math.min(sprite.getWidth(), sprite.getHeight()) * playerDef.haloHitboxSize;
+        if (haloDetached) {
+            grazeHitbox.set(haloCenterX(), haloCenterY(), radius);
+        } else {
+            grazeHitbox.set(getCenterX(), getCenterY(), radius);
+        }
     }
 
     private void resolveGrazePoints() {
@@ -280,24 +399,26 @@ public class Player {
             return;
         }
 
-        // Halo drawn under the player sprite, centered on the player
+        // Halo drawn under the player sprite, centered on the player - unless BasicWeapon's Hyper
+        // Attack has detached it, in which case it's wherever the dash/return motion currently
+        // has it instead (see triggerBasicHyperAttack()/updateHaloMovement()).
         TextureRegion haloFrame = haloAnimation.getKeyFrame(haloAnimationTime);
-        float haloX = sprite.getX() + sprite.getWidth() / 2f - haloDrawWidth / 2f;
-        float haloY = sprite.getY() + sprite.getHeight() / 2f - haloDrawHeight / 2f;
+        float drawHaloX = getHaloX();
+        float drawHaloY = getHaloY();
         boolean grazeFlashing = grazeFlashTimer > 0;
 
         if (isInvincible) {
             boolean visible = ((int) (invincibilityTimer / BLINK_INTERVAL) % 2) == 0;
             float alpha = visible ? 1f : 0f;
             batch.setColor(grazeFlashing ? 0.3f : 1f, grazeFlashing ? 0.6f : 1f, 1f, alpha);
-            batch.draw(haloFrame, haloX, haloY, haloDrawWidth, haloDrawHeight);
+            batch.draw(haloFrame, drawHaloX, drawHaloY, haloDrawWidth, haloDrawHeight);
             batch.setColor(1f, 1f, 1f, 1f);
             sprite.setAlpha(visible ? 1f : 0f);
             sprite.draw(batch);
             sprite.setAlpha(1f);
         } else {
             batch.setColor(grazeFlashing ? 0.3f : 1f, grazeFlashing ? 0.6f : 1f, 1f, 1f);
-            batch.draw(haloFrame, haloX, haloY, haloDrawWidth, haloDrawHeight);
+            batch.draw(haloFrame, drawHaloX, drawHaloY, haloDrawWidth, haloDrawHeight);
             batch.setColor(1f, 1f, 1f, 1f);
             sprite.draw(batch);
         }
@@ -335,11 +456,21 @@ public class Player {
         isDead = false;
         deathTimer = 0f;
         grazePoints = 0f;
+        haloDetached = false;
+        haloDashing = false;
+        haloReturning = false;
+        haloFireTimer = 0f;
+        haloDashHitEnemies.clear();
     }
 
     public Circle getHitbox() { return hitbox; }
     public Circle getGrazeHitbox() { return grazeHitbox; }
     public Circle getShieldHitbox() { return shieldHitbox; }
+    public boolean isHaloDashing() { return haloDashing; }
+    public Circle getHaloHitbox() { return haloHitbox; }
+    public boolean hasHaloDamaged(Enemy enemy) { return haloDashHitEnemies.contains(enemy, true); }
+    public void markHaloDamaged(Enemy enemy) { haloDashHitEnemies.add(enemy); }
+    public int getHaloDashDamage() { return HALO_DASH_DAMAGE; }
     public boolean isShieldActive() { return orbitWeapon.isShieldActive(); }
     public float getShieldCooldownFraction() { return orbitWeapon.getShieldCooldownFraction(); }
     public float getShieldCooldownTimer() { return orbitWeapon.getShieldCooldownTimer(); }
@@ -355,8 +486,12 @@ public class Player {
     public float getHeight() { return sprite.getHeight(); }
     public TextureRegion getCurrentFrame() { return sprite; }
     public TextureRegion getHaloFrame() { return haloAnimation.getKeyFrame(haloAnimationTime); }
-    public float getHaloX() { return sprite.getX() + sprite.getWidth() / 2f - haloDrawWidth / 2f; }
-    public float getHaloY() { return sprite.getY() + sprite.getHeight() / 2f - haloDrawHeight / 2f; }
+    public float getHaloX() { return haloDetached ? haloDetachedX : attachedHaloX(); }
+    public float getHaloY() { return haloDetached ? haloDetachedY : attachedHaloY(); }
+    private float attachedHaloX() { return sprite.getX() + sprite.getWidth() / 2f - haloDrawWidth / 2f; }
+    private float attachedHaloY() { return sprite.getY() + sprite.getHeight() / 2f - haloDrawHeight / 2f; }
+    private float haloCenterX() { return haloDetachedX + haloDrawWidth / 2f; }
+    private float haloCenterY() { return haloDetachedY + haloDrawHeight / 2f; }
     public float getHaloWidth() { return haloDrawWidth; }
     public float getHaloHeight() { return haloDrawHeight; }
     public Vector2 getBulletSpawnPoint() { return new Vector2(getCenterX(), sprite.getY() + bulletSpawnOffsetY); }

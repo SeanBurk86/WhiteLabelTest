@@ -198,6 +198,29 @@ public class CollisionManager {
         }
     }
 
+    /** BasicWeapon's Hyper Attack dash (see Player.triggerBasicHyperAttack): while the halo is
+     *  actively launching forward, it deals a flat, weapon-level-independent hit to anything it
+     *  clips - once per enemy for the whole dash, tracked via Player.hasHaloDamaged/markHaloDamaged
+     *  the same way a lingering bullet tracks its own hits - with the same kill/score handling a
+     *  normal bullet hit gets. */
+    public void checkHaloDashCollisions(Player player, Array<Enemy> enemies, AudioManager audio, EntityManager entityManager, AssetManager assets, float worldWidth, float worldHeight, ScoreManager scoreManager) {
+        if (!player.isHaloDashing()) return;
+
+        Circle haloHitbox = player.getHaloHitbox();
+        for (int i = enemies.size - 1; i >= 0; i--) {
+            Enemy enemy = enemies.get(i);
+            if (!enemy.isActive()) continue;
+            if (player.hasHaloDamaged(enemy)) continue;
+            if (!Intersector.overlaps(haloHitbox, enemy.getRectangle())) continue;
+
+            player.markHaloDamaged(enemy);
+            scoreManager.registerWeaponHit(0.1f, 2.0f);
+            if (enemy.takeDamage(player.getHaloDashDamage())) {
+                scoreManager.addScore(GameController.destroyEnemy(audio, entityManager, assets, worldWidth, worldHeight, enemy), 2.0f);
+            }
+        }
+    }
+
     /** Spawns this bullet's impact animation (see WeaponDefinition.hitTexture) at the bullet's
      *  own position - literally where it hit - if its weapon definition set one. */
     private void spawnHitEffect(Weapon bullet, EntityManager entityManager) {

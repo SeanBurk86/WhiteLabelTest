@@ -131,10 +131,16 @@ public class OrbitWeapon extends BaseWeapon {
     public void playFireSound(AudioManager audio, int level) {
     }
 
-    /** Raises the reflect shield if the Hyper Attack input triggers it - subject to its own
-     *  active/cooldown timers, independent of the normal fire-rate cooldown. Returns whether it
-     *  actually activated, so the caller knows whether to play the activation sound. */
-    public boolean tryActivateShield() {
+    /** OrbitWeapon's Hyper Attack: raises the reflect shield, subject to its own active/cooldown
+     *  timers (independent of the normal fire-rate cooldown). */
+    @Override
+    public void hyperAttack(Player player, Array<Weapon> activeWeapons, Array<Enemy> enemies, AssetManager assets, AudioManager audio) {
+        if (tryActivateShield()) {
+            audio.playOrbitWeaponSound(level);
+        }
+    }
+
+    private boolean tryActivateShield() {
         if (shieldActive || shieldCooldownTimer > 0f) return false;
         shieldActive = true;
         shieldTimer = 0f;

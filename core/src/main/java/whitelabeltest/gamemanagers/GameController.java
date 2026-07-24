@@ -57,7 +57,7 @@ public class GameController implements Disposable {
     private int levelCompleteBombBonus;
     private int levelCompleteLivesMultiplier;
 
-    private static final float BOMB_SAVE_WINDOW = 0.125f;
+    private static final float BOMB_SAVE_WINDOW = 0.065f;
     private float hitGraceTimer = -1f;
 
     public GameController(float worldWidth, float worldHeight, KeyBindings keyBindings) {
@@ -175,6 +175,7 @@ public class GameController implements Disposable {
         collisionManager.checkPlayerGemCollisions(entities.getPlayer(), entities.getPointGems(), scoreManager, audio);
 
         collisionManager.checkBulletEnemyCollisions(entities.getBullets(), entities.getEnemies(), audio, entities, assets, worldWidth, worldHeight, scoreManager);
+        collisionManager.checkHaloDashCollisions(entities.getPlayer(), entities.getEnemies(), audio, entities, assets, worldWidth, worldHeight, scoreManager);
     }
 
     private void handleDebugMenuInput(float delta) {

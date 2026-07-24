@@ -29,6 +29,14 @@ public interface Weapon extends Pool.Poolable {
     float getFireRate();
     void playFireSound(AudioManager audio, int level);
 
+    // Each weapon can define its own Hyper Attack - triggered once (see
+    // Player.handleHyperAttack) whenever the Hyper Attack input is pressed while this weapon is
+    // the active one. No-op by default; only weapons with a defined ability need to override it.
+    // Effects that need to persist over time (timers, position, repeated firing) belong on the
+    // weapon itself or, for effects tied to the player (like Basic's detachable halo), behind a
+    // dedicated Player method this can call into.
+    default void hyperAttack(Player player, Array<Weapon> activeWeapons, Array<Enemy> enemies, AssetManager assets, AudioManager audio) {}
+
     // Each weapon tracks its own cooldown, advanced every frame regardless of which slot is
     // active (see Player.advanceWeaponTimers). That way switching slots never resets or
     // fast-forwards a cooldown - a weapon is only ready to fire once real time, not switch
