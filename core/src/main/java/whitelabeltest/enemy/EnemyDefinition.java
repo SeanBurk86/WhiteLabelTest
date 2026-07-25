@@ -15,6 +15,8 @@ public class EnemyDefinition {
     public boolean rotateWithMovement = true;
     public boolean isBoss = false;
     public boolean isGround = false;
+    public boolean sealable = false;
+    public boolean defiant = false;
     public int score = 10;
     public String firingPattern;
     public String explosionPattern;

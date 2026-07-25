@@ -184,7 +184,7 @@ public class PatternPreviewer {
 
         if (previewEnemy == null) return;
 
-        previewEnemy.update(delta, entities.getEnemyBullets(), entities.getPlayer().getHitbox(), false);
+        previewEnemy.update(delta, entities.getEnemyBullets(), entities.getPlayer().getHitbox(), entities.getPlayer().getGrazeHitbox(), false);
 
         Array<EnemyBullet> enemyBullets = entities.getEnemyBullets();
         for (int i = enemyBullets.size - 1; i >= 0; i--) {
@@ -379,6 +379,8 @@ public class PatternPreviewer {
             d.rotateWithMovement = src.rotateWithMovement;
             d.isBoss = src.isBoss;
             d.isGround = src.isGround;
+            d.sealable = src.sealable;
+            d.defiant = src.defiant;
             d.score = src.score;
             d.firingPattern = src.firingPattern;
             d.explosionPattern = src.explosionPattern;
@@ -593,6 +595,8 @@ public class PatternPreviewer {
         rows.add(toggleRow(1, "Rotate With Movement", () -> d.rotateWithMovement, v -> d.rotateWithMovement = v));
         rows.add(toggleRow(1, "Is Boss", () -> d.isBoss, v -> d.isBoss = v));
         rows.add(toggleRow(1, "Is Ground", () -> d.isGround, v -> d.isGround = v));
+        rows.add(toggleRow(1, "Sealable", () -> d.sealable, v -> d.sealable = v));
+        rows.add(toggleRow(1, "Defiant", () -> d.defiant, v -> d.defiant = v));
         rows.add(idPickRow(1, "Explosion Pattern", () -> d.explosionPattern, PatternRegistry.getExplosionIds(), v -> { d.explosionPattern = v; applyChange(); }));
 
         rows.add(headerRow(1, "Spawn animation:"));

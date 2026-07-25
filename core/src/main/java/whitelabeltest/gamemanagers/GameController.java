@@ -326,6 +326,7 @@ public class GameController implements Disposable {
      *  immediately on detection (no bomb available to save it) or after the panic-bomb grace
      *  window (see hitGraceTimer) expires unused. */
     private void applyPlayerHit() {
+        scoreManager.breakChain();
         if (entities.getPlayer().getNumLives() <= 0) {
             gameOver = true;
             background.stop();

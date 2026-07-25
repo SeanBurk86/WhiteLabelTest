@@ -7,6 +7,7 @@ import com.badlogic.gdx.graphics.g2d.Sprite;
 import com.badlogic.gdx.graphics.g2d.SpriteBatch;
 import com.badlogic.gdx.graphics.g2d.TextureRegion;
 import com.badlogic.gdx.math.Circle;
+import com.badlogic.gdx.math.Intersector;
 import com.badlogic.gdx.math.Rectangle;
 import com.badlogic.gdx.utils.Array;
 import whitelabeltest.enemy.bullets.EnemyBullet;
@@ -35,6 +36,18 @@ public abstract class BaseEnemy implements Enemy {
 
     protected MovementPattern movement;
     protected FiringPattern firing;
+
+    // World Y=0 is the bottom edge of the play area and X spans [0, worldWidth] - any enemy whose
+    // hitbox has reached the bottom, left, or right edge (a little inside the literal edge, so
+    // each zone has some breathing room instead of only covering the exact boundary pixel) holds
+    // its fire instead of shooting into or past the play area's boundary.
+    private static final float CEASEFIRE_ZONE_Y = 1.5f;
+    private static final float CEASEFIRE_ZONE_X = 0.5f;
+
+    // Tracks whether a Defiant enemy (see Enemy.isDefiant()) has actually spawned a bullet yet -
+    // detected generically (any firing pattern growing enemyBullets) rather than each
+    // FiringPattern reporting it, so this works unmodified for every existing/future pattern.
+    private boolean hasFiredOnce = false;
 
     protected Animation<TextureRegion> spawnAnimation;
     protected float spawnDuration = 0.4f;
@@ -79,7 +92,7 @@ public abstract class BaseEnemy implements Enemy {
     public boolean isDying() { return lifecycleState == LifecycleState.DYING; }
 
     @Override
-    public void update(float delta, Array<EnemyBullet> enemyBullets, Circle playerHitbox, boolean firingPaused) {
+    public void update(float delta, Array<EnemyBullet> enemyBullets, Circle playerHitbox, Circle grazeHitbox, boolean firingPaused) {
         if (sprite == null) return;
 
         lifecycleTime += delta;
@@ -120,11 +133,16 @@ public abstract class BaseEnemy implements Enemy {
             if (!rotateWithMovement) sprite.setRotation(0);
         }
 
-        // Skipped (not just no-op fired) while paused, so a firing pattern's internal cooldown
-        // timer stays frozen at its pre-pause value instead of overshooting and unloading the
-        // instant firing resumes - see EntityManager's firingPaused computation.
-        if (firing != null && !firingPaused) {
+        // Skipped (not just no-op fired) while paused, in the ceasefire zone, or "sealed" by the
+        // graze halo overlapping this enemy's hitbox (see Enemy.isSealable()/EnemyDefinition.
+        // sealable) - in every case so a firing pattern's internal cooldown timer stays frozen at
+        // its pre-gate value instead of overshooting and unloading the instant firing resumes -
+        // see EntityManager's firingPaused computation.
+        boolean sealed = isSealable() && grazeHitbox.radius > 0f && Intersector.overlaps(grazeHitbox, rectangle);
+        if (firing != null && !firingPaused && !isInCeasefireZone() && !sealed) {
+            int bulletsBefore = enemyBullets.size;
             firing.update(delta, this, sprite, rectangle, enemyBullets, bulletAnimation, playerHitbox);
+            if (!hasFiredOnce && enemyBullets.size > bulletsBefore) hasFiredOnce = true;
         }
     }
 
@@ -208,6 +226,22 @@ public abstract class BaseEnemy implements Enemy {
         return rectangle;
     }
 
+    // True once the enemy's whole hitbox - not just some overlap with it - sits within the play
+    // area, so an enemy sliding/dropping in from off-screen can't be shot before it's fully in
+    // view (see takeDamage()).
+    private boolean isFullyOnScreen() {
+        return rectangle.x >= 0f && rectangle.x + rectangle.width <= worldWidth
+            && rectangle.y >= 0f && rectangle.y + rectangle.height <= worldHeight;
+    }
+
+    // True while the enemy's hitbox has reached the bottom, left, or right edge of the play area
+    // (see CEASEFIRE_ZONE_Y/CEASEFIRE_ZONE_X's firing gate in update()).
+    private boolean isInCeasefireZone() {
+        return rectangle.y <= CEASEFIRE_ZONE_Y
+            || rectangle.x <= CEASEFIRE_ZONE_X
+            || rectangle.x + rectangle.width >= worldWidth - CEASEFIRE_ZONE_X;
+    }
+
     @Override
     public int getHealth() {
         return health;
@@ -221,6 +255,8 @@ public abstract class BaseEnemy implements Enemy {
     @Override
     public boolean takeDamage(int amount) {
         if (lifecycleState != LifecycleState.ACTIVE) return false; // invulnerable while entering/already dying
+        if (!isFullyOnScreen()) return false; // invulnerable until its whole sprite has entered the play area
+        if (isDefiant() && !hasFiredOnce) return false; // defiant: invulnerable until it's fired at least once
         health -= amount;
         damageFlashTimer = flashDuration;
         if (health <= 0) {
@@ -252,6 +288,7 @@ public abstract class BaseEnemy implements Enemy {
         guaranteedPowerup = null;
         invertMovement = false; // Reset on pool
         rotateWithMovement = true;
+        hasFiredOnce = false;
         lifecycleState = LifecycleState.ACTIVE;
         lifecycleTime = 0f;
         if (sprite != null) {

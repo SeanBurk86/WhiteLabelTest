@@ -15,8 +15,8 @@ import com.badlogic.gdx.utils.Pool;
 public class PointGem implements Pool.Poolable {
     private static final float SIZE = 0.3f;
     private static final float GRAVITY = -9f;
-    private static final float HOMING_ACCEL = 14f;
-    private static final float HOMING_MAX_SPEED = 9f;
+    private static final float HOMING_ACCEL = 26f;
+    private static final float HOMING_MAX_SPEED = 15f;
 
     private final Rectangle rectangle = new Rectangle();
     private Animation<TextureRegion> animation;

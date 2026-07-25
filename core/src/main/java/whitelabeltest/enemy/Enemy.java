@@ -10,7 +10,7 @@ import whitelabeltest.enemy.bullets.EnemyBullet;
 
 public interface Enemy extends Pool.Poolable {
     void init(Texture texture, float worldWidth, float worldHeight, float startX, float startY);
-    void update(float delta, Array<EnemyBullet> enemyBullets, Circle playerHitbox, boolean firingPaused);
+    void update(float delta, Array<EnemyBullet> enemyBullets, Circle playerHitbox, Circle grazeHitbox, boolean firingPaused);
     void draw(SpriteBatch batch);
     default void drawShadow(SpriteBatch batch) {}
     boolean isOffScreen();
@@ -18,6 +18,12 @@ public interface Enemy extends Pool.Poolable {
     boolean takeDamage(int amount);
     default boolean isBoss() { return false; }
     default boolean isGround() { return false; }
+    // Sealable enemies hold their fire while the player's graze halo overlaps their hitbox - see
+    // BaseEnemy.update's firing gate.
+    default boolean isSealable() { return false; }
+    // Defiant enemies take no damage until they've fired at least once - see
+    // BaseEnemy.takeDamage()/hasFiredOnce.
+    default boolean isDefiant() { return false; }
     default int getScore() { return 10; }
     default String getExplosionPattern() { return null; }
 

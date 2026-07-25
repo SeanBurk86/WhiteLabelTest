@@ -38,6 +38,14 @@ public class ScoreManager {
         chainTimer = Math.min(chainTimer + chainTimerBonus, currentChainWindow);
     }
 
+    /** Dying always ends the current chain (score already banked stays, unlike reset()) - called
+     *  from GameController.applyPlayerHit() on every life lost, not just a full game reset. */
+    public void breakChain() {
+        chainCount = 0;
+        chainValueSum = 0;
+        chainTimer = 0;
+    }
+
     public void addBonus(int points) {
         score += points;
         if (score > highScore) highScore = score;

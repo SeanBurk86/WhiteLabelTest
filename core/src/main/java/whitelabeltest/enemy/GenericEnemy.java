@@ -133,6 +133,12 @@ public class GenericEnemy extends BaseEnemy {
     public boolean isGround() { return def != null && def.isGround; }
 
     @Override
+    public boolean isSealable() { return def != null && def.sealable; }
+
+    @Override
+    public boolean isDefiant() { return def != null && def.defiant; }
+
+    @Override
     public int getScore() { return def != null ? def.score : 10; }
 
     @Override

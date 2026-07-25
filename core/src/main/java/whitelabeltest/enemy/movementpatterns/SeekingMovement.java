@@ -30,7 +30,10 @@ public class SeekingMovement implements MovementPattern {
 
         float dist = tempPos.dst(playerHitbox.x, playerHitbox.y);
 
-        if (dist <= stopDistance) {
+        // Even once within stopDistance, keep advancing until the whole sprite has entered the
+        // play area - otherwise an enemy that spawns off-screen close to the player (or with a
+        // generous stopDistance) could stop while still partially off-screen.
+        if (dist <= stopDistance && isFullyOnScreen(rectangle, worldWidth, worldHeight)) {
             finished = true;
         } else {
             tempDir.set(playerHitbox.x, playerHitbox.y).sub(tempPos).nor();
@@ -42,6 +45,11 @@ public class SeekingMovement implements MovementPattern {
             sprite.setRotation(tempDir.angleDeg() + 90f);
             rectangle.setPosition(sprite.getX(), sprite.getY());
         }
+    }
+
+    private static boolean isFullyOnScreen(Rectangle rectangle, float worldWidth, float worldHeight) {
+        return rectangle.x >= 0f && rectangle.x + rectangle.width <= worldWidth
+            && rectangle.y >= 0f && rectangle.y + rectangle.height <= worldHeight;
     }
 
     @Override

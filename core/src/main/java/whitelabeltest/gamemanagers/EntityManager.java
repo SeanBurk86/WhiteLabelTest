@@ -130,7 +130,7 @@ public class EntityManager {
         boolean firingPaused = player.isDead() || player.isInvincible();
         for (int i = enemies.size - 1; i >= 0; i--) {
             Enemy e = enemies.get(i);
-            e.update(delta, enemyBullets, player.getHitbox(), firingPaused);
+            e.update(delta, enemyBullets, player.getHitbox(), player.getGrazeHitbox(), firingPaused);
 
             if (e.isOffScreen()) {
                 if (e.isBoss() && e.isDying()) notifyBossKilled();
@@ -200,7 +200,6 @@ public class EntityManager {
         for (ExplosionEffect e : explosions) e.draw(batch);
         for (Enemy e : enemies) if (!e.isGround()) e.draw(batch);
         for (HitEffect h : hitEffects) h.draw(batch);
-        for (EnemyBullet eb : enemyBullets) eb.draw(batch);
         if (bombActive) {
             TextureRegion frame = bombAnimation.getKeyFrame(bombAnimationTime);
             float bx = worldWidth / 2f - bombDrawWidth / 2f;
@@ -213,6 +212,7 @@ public class EntityManager {
         }
 
         player.draw(batch);
+        for (EnemyBullet eb : enemyBullets) eb.draw(batch);
     }
 
     /** Draws every active Thunderbolt strike's bolt sprites inside one shared GL_MAX blend
