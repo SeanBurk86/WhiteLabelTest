@@ -7,6 +7,8 @@ import com.badlogic.gdx.math.Circle;
 import com.badlogic.gdx.math.Rectangle;
 import com.badlogic.gdx.utils.Array;
 import whitelabeltest.enemy.Enemy;
+import whitelabeltest.enemy.HitboxSpec;
+import whitelabeltest.enemy.SpeedProfile;
 import whitelabeltest.enemy.bullets.AimedEnemyBullet;
 import whitelabeltest.enemy.bullets.EnemyBullet;
 import whitelabeltest.gamemanagers.ObjectPools;
@@ -23,6 +25,8 @@ public class PointAimedFiring implements FiringPattern {
     private final float offsetX;
     private final float offsetY;
     private final int bulletDamage;
+    private final SpeedProfile speedProfile;
+    private final HitboxSpec hitboxSpec;
     private float shootTimer;
 
     public PointAimedFiring(float fireRate, float bulletSize, float bulletSpeed, Animation<TextureRegion> spriteOverride, float targetX, float targetY, float offsetX, float offsetY) {
@@ -30,6 +34,13 @@ public class PointAimedFiring implements FiringPattern {
     }
 
     public PointAimedFiring(float fireRate, float bulletSize, float bulletSpeed, Animation<TextureRegion> spriteOverride, float targetX, float targetY, float offsetX, float offsetY, int bulletDamage) {
+        this(fireRate, bulletSize, bulletSpeed, spriteOverride, targetX, targetY, offsetX, offsetY, bulletDamage, SpeedProfile.CONSTANT_SPEED, HitboxSpec.DEFAULT);
+    }
+
+    /** @param speedProfile how bulletSpeed changes over each bullet's flight - see SpeedProfile
+     *  @param hitboxSpec each bullet's collision hitbox, independent of its visual size - see
+     *  HitboxSpec */
+    public PointAimedFiring(float fireRate, float bulletSize, float bulletSpeed, Animation<TextureRegion> spriteOverride, float targetX, float targetY, float offsetX, float offsetY, int bulletDamage, SpeedProfile speedProfile, HitboxSpec hitboxSpec) {
         this.fireRate = fireRate;
         this.bulletSize = bulletSize;
         this.bulletSpeed = bulletSpeed;
@@ -39,6 +50,8 @@ public class PointAimedFiring implements FiringPattern {
         this.offsetX = offsetX;
         this.offsetY = offsetY;
         this.bulletDamage = bulletDamage;
+        this.speedProfile = speedProfile;
+        this.hitboxSpec = hitboxSpec;
         this.shootTimer = 0;
     }
 
@@ -50,7 +63,7 @@ public class PointAimedFiring implements FiringPattern {
             Animation<TextureRegion> animation = spriteOverride != null ? spriteOverride : bulletAnimation;
 
             AimedEnemyBullet b = ObjectPools.aimedBulletPool.obtain();
-            b.init(animation, sprite.getX() + sprite.getWidth()/2 + offsetX, sprite.getY() + sprite.getHeight()/2 + offsetY, targetX, targetY, bulletSize, bulletSpeed, bulletDamage, self);
+            b.init(animation, sprite.getX() + sprite.getWidth()/2 + offsetX, sprite.getY() + sprite.getHeight()/2 + offsetY, targetX, targetY, bulletSize, bulletSpeed, bulletDamage, self, speedProfile, hitboxSpec);
             enemyBullets.add(b);
         }
     }

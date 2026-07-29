@@ -10,6 +10,7 @@ import com.badlogic.gdx.graphics.Color;
 import com.badlogic.gdx.graphics.GL20;
 import com.badlogic.gdx.graphics.g2d.SpriteBatch;
 import com.badlogic.gdx.graphics.glutils.ShapeRenderer;
+import com.badlogic.gdx.math.MathUtils;
 import com.badlogic.gdx.math.Rectangle;
 import com.badlogic.gdx.math.Vector3;
 import com.badlogic.gdx.utils.ScreenUtils;
@@ -225,15 +226,41 @@ public class Main extends ApplicationAdapter {
         shapeRenderer.setColor(Color.ORANGE);
         for (EnemyBullet bullet : em.getEnemyBullets()) {
             Rectangle r = bullet.getRectangle();
+            float rotation = bullet.getRotation();
+
+            // getHitboxOffsetX/Y() is defined in the bullet's own unrotated frame - rotate it into
+            // world space the same way CollisionManager.overlaps(Circle, EnemyBullet) does, so a
+            // rotating bullet's hitbox offset stays attached to (and turns with) its sprite here too.
+            float offsetX = bullet.getHitboxOffsetX();
+            float offsetY = bullet.getHitboxOffsetY();
+            float cosR = MathUtils.cosDeg(rotation);
+            float sinR = MathUtils.sinDeg(rotation);
+            float worldOffsetX = offsetX * cosR - offsetY * sinR;
+            float worldOffsetY = offsetX * sinR + offsetY * cosR;
+
+            // The actual hit-tested box - r scaled around its own center by getHitboxScale() and
+            // then shifted by the (now world-space) offset. Reduces to r itself for
+            // scale=1/offset=(0,0).
+            float scale = bullet.getHitboxScale();
+            float effWidth = r.width * scale;
+            float effHeight = r.height * scale;
+            float effX = r.x + (r.width - effWidth) / 2f + worldOffsetX;
+            float effY = r.y + (r.height - effHeight) / 2f + worldOffsetY;
+
             float hitRadius = bullet.getHitRadius();
             if (hitRadius >= 0f) {
-                shapeRenderer.circle(r.x + r.width / 2f, r.y + r.height / 2f, hitRadius, 16);
+                shapeRenderer.circle(effX + effWidth / 2f, effY + effHeight / 2f, hitRadius * scale, 16);
                 continue;
             }
-            // getRotation() is 0 for ordinary bullets (a no-op rotation below); bullets like
-            // LaserBullet whose hitbox rotates without resizing report their real sweep angle,
-            // rotated around the box's bottom-center per EnemyBullet.getRotation()'s contract.
-            shapeRenderer.rect(r.x, r.y, r.width / 2f, 0f, r.width, r.height, 1f, 1f, bullet.getRotation());
+            // getRotation() is 0 for most ordinary bullets (a no-op rotation below); bullets that
+            // visually turn to face their travel direction (see AimedEnemyBullet and friends) or a
+            // beam like LaserBullet report their real angle, rotated around
+            // getRotationPivotX()/Y() per EnemyBullet.getRotation()'s contract - which may or may
+            // not be effWidth/2, 0 (that pair only happens to be right for a bottom-center pivot
+            // like LaserBullet's, not a center pivot like AimedEnemyBullet's).
+            float originX = bullet.getRotationPivotX() + worldOffsetX - effX;
+            float originY = bullet.getRotationPivotY() + worldOffsetY - effY;
+            shapeRenderer.rect(effX, effY, originX, originY, effWidth, effHeight, 1f, 1f, rotation);
         }
 
         shapeRenderer.setColor(Color.GREEN);

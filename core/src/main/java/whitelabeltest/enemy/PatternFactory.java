@@ -81,15 +81,18 @@ public class PatternFactory {
         return value > 0 ? value : defaultValue;
     }
 
-    private static FiringPattern createFiring(String type, float fireRate, float bulletSize, float bulletSpeed, int bulletDamage, Animation<TextureRegion> spriteOverride, float spreadDegrees, int numBullets, float offsetX, float offsetY) {
+    private static FiringPattern createFiring(String type, float fireRate, float bulletSize, float bulletSpeed, int bulletDamage, Animation<TextureRegion> spriteOverride, float spreadDegrees, int numBullets, float offsetX, float offsetY, SpeedProfile speedProfile, HitboxSpec hitboxSpec) {
         if (type == null) return new NoFiring();
 
         switch (type) {
-            case "SelfDestruct": return new SelfDestructFiring(3.0f, resolve(bulletSize, 0.25f), resolve(bulletSpeed, 4f), spriteOverride, offsetX, offsetY, bulletDamage);
-            case "ExplodingAimed": return new ExplodingAimedFiring(fireRate, resolve(bulletSize, 0.25f), resolve(bulletSpeed, 6f), spriteOverride, offsetX, offsetY, bulletDamage);
-            case "BurstAimed": return new BurstAimedFiring(fireRate, resolve(bulletSize, 0.25f), resolve(bulletSpeed, 5f), spriteOverride, offsetX, offsetY, bulletDamage);
-            case "Sweep": return new SweepFiring(fireRate, resolve(bulletSize, 0.25f), resolve(bulletSpeed, 5f), spriteOverride, offsetX, offsetY, bulletDamage);
-            case "SineWave": return new SineWaveFiring(fireRate, resolve(bulletSize, 0.2f), resolve(bulletSpeed, 5f), spriteOverride, offsetX, offsetY, bulletDamage);
+            case "SelfDestruct": return new SelfDestructFiring(3.0f, resolve(bulletSize, 0.25f), resolve(bulletSpeed, 4f), spriteOverride, offsetX, offsetY, bulletDamage, speedProfile, hitboxSpec);
+            case "ExplodingAimed": return new ExplodingAimedFiring(fireRate, resolve(bulletSize, 0.25f), resolve(bulletSpeed, 6f), spriteOverride, offsetX, offsetY, bulletDamage, speedProfile, hitboxSpec);
+            case "BurstAimed": return new BurstAimedFiring(fireRate, resolve(bulletSize, 0.25f), resolve(bulletSpeed, 5f), spriteOverride, offsetX, offsetY, bulletDamage, speedProfile, hitboxSpec);
+            case "Sweep": return new SweepFiring(fireRate, resolve(bulletSize, 0.25f), resolve(bulletSpeed, 5f), spriteOverride, offsetX, offsetY, bulletDamage, speedProfile, hitboxSpec);
+            case "SineWave": return new SineWaveFiring(fireRate, resolve(bulletSize, 0.2f), resolve(bulletSpeed, 5f), spriteOverride, offsetX, offsetY, bulletDamage, speedProfile, hitboxSpec);
+            // Orbiting's "speed" bootstraps a constant center-drift vector, not a travel speed
+            // that ramps over time the way the other bullet types here do - acceleration doesn't
+            // apply to it.
             case "Orbiting": return new OrbitingFiring(fireRate, resolve(bulletSize, 0.5f), resolve(bulletSpeed, 4f), spriteOverride, offsetX, offsetY, bulletDamage);
             default: return new NoFiring();
         }
@@ -123,20 +126,23 @@ public class PatternFactory {
             case "Aimed": {
                 BulletDef bulletDef = PatternRegistry.getBullet(def.bulletId);
                 Animation<TextureRegion> spriteOverride = buildBulletAnimation(enemyDef, def, bulletDef);
-                return new AimedFiring(def.fireRate, resolve(bulletSize(def, bulletDef), 0.25f), resolve(bulletSpeed(def, bulletDef), 5f), spriteOverride, def.offsetX, def.offsetY, bulletDamage(def, bulletDef), def.targetOffsetX, def.targetOffsetY);
+                return new AimedFiring(def.fireRate, resolve(bulletSize(def, bulletDef), 0.25f), resolve(bulletSpeed(def, bulletDef), 5f), spriteOverride, def.offsetX, def.offsetY, bulletDamage(def, bulletDef), def.targetOffsetX, def.targetOffsetY,
+                    speedProfile(def, bulletDef), hitboxSpec(def, bulletDef));
             }
             case "QuarterCircle": {
                 BulletDef bulletDef = PatternRegistry.getBullet(def.bulletId);
                 Animation<TextureRegion> spriteOverride = buildBulletAnimation(enemyDef, def, bulletDef);
                 return new QuarterCircleFiring(def.fireRate, resolve(bulletSize(def, bulletDef), 0.25f), resolve(bulletSpeed(def, bulletDef), 5f), spriteOverride,
-                    resolve(def.spreadDegrees, 90f), resolve(def.numBullets, 9), def.offsetX, def.offsetY, bulletDamage(def, bulletDef), def.targetOffsetX, def.targetOffsetY);
+                    resolve(def.spreadDegrees, 90f), resolve(def.numBullets, 9), def.offsetX, def.offsetY, bulletDamage(def, bulletDef), def.targetOffsetX, def.targetOffsetY,
+                    speedProfile(def, bulletDef), hitboxSpec(def, bulletDef));
             }
             case "AimedAtPoint": {
                 BulletDef bulletDef = PatternRegistry.getBullet(def.bulletId);
                 Animation<TextureRegion> spriteOverride = buildBulletAnimation(enemyDef, def, bulletDef);
                 float targetX = !Float.isNaN(def.targetX) ? def.targetX : 0f;
                 float targetY = !Float.isNaN(def.targetY) ? def.targetY : 0f;
-                return new PointAimedFiring(def.fireRate, resolve(bulletSize(def, bulletDef), 0.25f), resolve(bulletSpeed(def, bulletDef), 5f), spriteOverride, targetX, targetY, def.offsetX, def.offsetY, bulletDamage(def, bulletDef));
+                return new PointAimedFiring(def.fireRate, resolve(bulletSize(def, bulletDef), 0.25f), resolve(bulletSpeed(def, bulletDef), 5f), spriteOverride, targetX, targetY, def.offsetX, def.offsetY, bulletDamage(def, bulletDef),
+                    speedProfile(def, bulletDef), hitboxSpec(def, bulletDef));
             }
             case "Laser": {
                 BulletDef bulletDef = PatternRegistry.getBullet(def.bulletId);
@@ -151,12 +157,14 @@ public class PatternFactory {
                 float sweepDuration = def.sweepDuration > 0 ? def.sweepDuration : SweepFiring.DEFAULT_SWEEP_DURATION;
                 float startAngle = !Float.isNaN(def.sweepStartAngle) ? def.sweepStartAngle : SweepFiring.DEFAULT_START_ANGLE;
                 float endAngle = !Float.isNaN(def.sweepEndAngle) ? def.sweepEndAngle : SweepFiring.DEFAULT_END_ANGLE;
-                return new SweepFiring(def.fireRate, resolve(bulletSize(def, bulletDef), 0.25f), resolve(bulletSpeed(def, bulletDef), 5f), spriteOverride, def.offsetX, def.offsetY, sweepDuration, startAngle, endAngle, bulletDamage(def, bulletDef));
+                return new SweepFiring(def.fireRate, resolve(bulletSize(def, bulletDef), 0.25f), resolve(bulletSpeed(def, bulletDef), 5f), spriteOverride, def.offsetX, def.offsetY, sweepDuration, startAngle, endAngle, bulletDamage(def, bulletDef),
+                    speedProfile(def, bulletDef), hitboxSpec(def, bulletDef));
             }
             default:
                 BulletDef bulletDef = PatternRegistry.getBullet(def.bulletId);
                 Animation<TextureRegion> spriteOverride = buildBulletAnimation(enemyDef, def, bulletDef);
-                return createFiring(def.type, def.fireRate, bulletSize(def, bulletDef), bulletSpeed(def, bulletDef), bulletDamage(def, bulletDef), spriteOverride, def.spreadDegrees, def.numBullets, def.offsetX, def.offsetY);
+                return createFiring(def.type, def.fireRate, bulletSize(def, bulletDef), bulletSpeed(def, bulletDef), bulletDamage(def, bulletDef), spriteOverride, def.spreadDegrees, def.numBullets, def.offsetX, def.offsetY,
+                    speedProfile(def, bulletDef), hitboxSpec(def, bulletDef));
         }
     }
 
@@ -168,6 +176,90 @@ public class PatternFactory {
 
     private static float bulletSpeed(FiringPatternDef def, BulletDef bulletDef) {
         return def.bulletSpeed > 0 ? def.bulletSpeed : (bulletDef != null ? bulletDef.bulletSpeed : -1f);
+    }
+
+    private static float bulletAcceleration(FiringPatternDef def, BulletDef bulletDef) {
+        return def.bulletAcceleration != 0f ? def.bulletAcceleration : (bulletDef != null ? bulletDef.bulletAcceleration : 0f);
+    }
+
+    /** Floor currentSpeed can't ramp below - 0 (the default, whether unset here or on the
+     *  referenced BulletDef) means "can decelerate to a stop but not reverse past 0". */
+    private static float bulletMinSpeed(FiringPatternDef def, BulletDef bulletDef) {
+        if (def.bulletMinSpeed > 0) return def.bulletMinSpeed;
+        if (bulletDef != null && bulletDef.bulletMinSpeed > 0) return bulletDef.bulletMinSpeed;
+        return 0f;
+    }
+
+    /** Ceiling currentSpeed can't ramp above - unbounded (the default) unless explicitly set. */
+    private static float bulletMaxSpeed(FiringPatternDef def, BulletDef bulletDef) {
+        if (def.bulletMaxSpeed > 0) return def.bulletMaxSpeed;
+        if (bulletDef != null && bulletDef.bulletMaxSpeed > 0) return bulletDef.bulletMaxSpeed;
+        return Float.MAX_VALUE;
+    }
+
+    /** Builds the shared speed-ramp spec bullets from this pattern will ramp along. A pattern's
+     *  own bulletSpeedPhases list always wins wholesale over its referenced BulletDef's (the two
+     *  are never merged); when neither sets a phase list, falls back to the classic single
+     *  bulletAcceleration ramp (see bulletAcceleration/bulletMinSpeed/bulletMaxSpeed above). */
+    private static SpeedProfile speedProfile(FiringPatternDef def, BulletDef bulletDef) {
+        float minSpeed = bulletMinSpeed(def, bulletDef);
+        float maxSpeed = bulletMaxSpeed(def, bulletDef);
+
+        Array<BulletSpeedPhase> phases;
+        boolean loop;
+        if (def.bulletSpeedPhases != null && def.bulletSpeedPhases.size > 0) {
+            phases = def.bulletSpeedPhases;
+            loop = def.bulletSpeedPhasesLoop;
+        } else if (bulletDef != null && bulletDef.bulletSpeedPhases != null && bulletDef.bulletSpeedPhases.size > 0) {
+            phases = bulletDef.bulletSpeedPhases;
+            loop = bulletDef.bulletSpeedPhasesLoop;
+        } else {
+            return SpeedProfile.constant(bulletAcceleration(def, bulletDef), minSpeed, maxSpeed);
+        }
+
+        float[] accelerations = new float[phases.size];
+        float[] durations = new float[phases.size];
+        for (int i = 0; i < phases.size; i++) {
+            accelerations[i] = phases.get(i).acceleration;
+            durations[i] = phases.get(i).duration;
+        }
+        return new SpeedProfile(accelerations, durations, loop, minSpeed, maxSpeed);
+    }
+
+    /** A pattern's own hitboxShape always wins; otherwise fall back to the referenced bullet
+     *  definition's, if any. Null (neither sets one) lets each bullet type keep its own default
+     *  shape - see HitboxSpec.shape. */
+    private static HitboxSpec.Shape hitboxShape(FiringPatternDef def, BulletDef bulletDef) {
+        String shape = def.hitboxShape != null ? def.hitboxShape : (bulletDef != null ? bulletDef.hitboxShape : null);
+        if (shape == null) return null;
+        return "Rectangle".equals(shape) ? HitboxSpec.Shape.RECTANGLE : HitboxSpec.Shape.CIRCLE;
+    }
+
+    private static float hitboxScale(FiringPatternDef def, BulletDef bulletDef) {
+        if (def.hitboxScale > 0) return def.hitboxScale;
+        if (bulletDef != null && bulletDef.hitboxScale > 0) return bulletDef.hitboxScale;
+        return 1f;
+    }
+
+    private static float hitboxOffsetX(FiringPatternDef def, BulletDef bulletDef) {
+        return def.hitboxOffsetX != 0f ? def.hitboxOffsetX : (bulletDef != null ? bulletDef.hitboxOffsetX : 0f);
+    }
+
+    private static float hitboxOffsetY(FiringPatternDef def, BulletDef bulletDef) {
+        return def.hitboxOffsetY != 0f ? def.hitboxOffsetY : (bulletDef != null ? bulletDef.hitboxOffsetY : 0f);
+    }
+
+    /** Builds the shared hitbox spec bullets from this pattern will use for collision, resolving
+     *  shape/scale/offsetX/offsetY independently against the referenced BulletDef's (same
+     *  per-field fallback as bulletSize/bulletSpeed above, unlike bulletSpeedPhases' wholesale
+     *  override). */
+    private static HitboxSpec hitboxSpec(FiringPatternDef def, BulletDef bulletDef) {
+        HitboxSpec.Shape shape = hitboxShape(def, bulletDef);
+        float scale = hitboxScale(def, bulletDef);
+        float offsetX = hitboxOffsetX(def, bulletDef);
+        float offsetY = hitboxOffsetY(def, bulletDef);
+        if (shape == null && scale == 1f && offsetX == 0f && offsetY == 0f) return HitboxSpec.DEFAULT;
+        return new HitboxSpec(shape, scale, offsetX, offsetY);
     }
 
     /** A pattern's own bulletDamage always wins; otherwise fall back to the referenced bullet

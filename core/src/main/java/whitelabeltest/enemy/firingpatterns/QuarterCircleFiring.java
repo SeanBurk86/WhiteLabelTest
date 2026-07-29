@@ -8,6 +8,8 @@ import com.badlogic.gdx.math.Rectangle;
 import com.badlogic.gdx.math.Vector2;
 import com.badlogic.gdx.utils.Array;
 import whitelabeltest.enemy.Enemy;
+import whitelabeltest.enemy.HitboxSpec;
+import whitelabeltest.enemy.SpeedProfile;
 import whitelabeltest.enemy.bullets.AimedEnemyBullet;
 import whitelabeltest.enemy.bullets.EnemyBullet;
 import whitelabeltest.gamemanagers.ObjectPools;
@@ -28,6 +30,8 @@ public class QuarterCircleFiring implements FiringPattern {
     private final int bulletDamage;
     private final float targetOffsetX;
     private final float targetOffsetY;
+    private final SpeedProfile speedProfile;
+    private final HitboxSpec hitboxSpec;
 
     public QuarterCircleFiring(float fireRate) {
         this(fireRate, 0.25f, DEFAULT_SPEED, null);
@@ -66,6 +70,13 @@ public class QuarterCircleFiring implements FiringPattern {
      *  centered on, in world units - lets the spread lead/trail the player or center on a point
      *  near them instead of dead-on */
     public QuarterCircleFiring(float fireRate, float bulletSize, float bulletSpeed, Animation<TextureRegion> spriteOverride, float spreadDegrees, int numBullets, float offsetX, float offsetY, int bulletDamage, float targetOffsetX, float targetOffsetY) {
+        this(fireRate, bulletSize, bulletSpeed, spriteOverride, spreadDegrees, numBullets, offsetX, offsetY, bulletDamage, targetOffsetX, targetOffsetY, SpeedProfile.CONSTANT_SPEED, HitboxSpec.DEFAULT);
+    }
+
+    /** @param speedProfile how bulletSpeed changes over each bullet's flight - see SpeedProfile
+     *  @param hitboxSpec each bullet's collision hitbox, independent of its visual size - see
+     *  HitboxSpec */
+    public QuarterCircleFiring(float fireRate, float bulletSize, float bulletSpeed, Animation<TextureRegion> spriteOverride, float spreadDegrees, int numBullets, float offsetX, float offsetY, int bulletDamage, float targetOffsetX, float targetOffsetY, SpeedProfile speedProfile, HitboxSpec hitboxSpec) {
         this.fireRate = fireRate;
         this.bulletSize = bulletSize;
         this.bulletSpeed = bulletSpeed;
@@ -77,6 +88,8 @@ public class QuarterCircleFiring implements FiringPattern {
         this.bulletDamage = bulletDamage;
         this.targetOffsetX = targetOffsetX;
         this.targetOffsetY = targetOffsetY;
+        this.speedProfile = speedProfile;
+        this.hitboxSpec = hitboxSpec;
         this.shootTimer = 0;
     }
 
@@ -100,7 +113,7 @@ public class QuarterCircleFiring implements FiringPattern {
             float angle = startAngle + i * step;
             Vector2 dir = new Vector2(1, 0).setAngleDeg(angle);
             AimedEnemyBullet b = ObjectPools.aimedBulletPool.obtain();
-            b.init(animation, centerX, centerY, centerX + dir.x, centerY + dir.y, bulletSize, bulletSpeed, bulletDamage, self);
+            b.init(animation, centerX, centerY, centerX + dir.x, centerY + dir.y, bulletSize, bulletSpeed, bulletDamage, self, speedProfile, hitboxSpec);
             enemyBullets.add(b);
         }
     }

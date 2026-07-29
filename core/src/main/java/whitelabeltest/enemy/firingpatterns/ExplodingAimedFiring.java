@@ -7,6 +7,8 @@ import com.badlogic.gdx.math.Circle;
 import com.badlogic.gdx.math.Rectangle;
 import com.badlogic.gdx.utils.Array;
 import whitelabeltest.enemy.Enemy;
+import whitelabeltest.enemy.HitboxSpec;
+import whitelabeltest.enemy.SpeedProfile;
 import whitelabeltest.enemy.bullets.EnemyBullet;
 import whitelabeltest.gamemanagers.ObjectPools;
 
@@ -20,6 +22,8 @@ public class ExplodingAimedFiring implements FiringPattern {
     private final float offsetX;
     private final float offsetY;
     private final int bulletDamage;
+    private final SpeedProfile speedProfile;
+    private final HitboxSpec hitboxSpec;
     private static final float DEFAULT_SPEED = 6f;
 
     public ExplodingAimedFiring(float fireRate) {
@@ -45,6 +49,14 @@ public class ExplodingAimedFiring implements FiringPattern {
     }
 
     public ExplodingAimedFiring(float fireRate, float bulletSize, float bulletSpeed, Animation<TextureRegion> spriteOverride, float offsetX, float offsetY, int bulletDamage) {
+        this(fireRate, bulletSize, bulletSpeed, spriteOverride, offsetX, offsetY, bulletDamage, SpeedProfile.CONSTANT_SPEED, HitboxSpec.DEFAULT);
+    }
+
+    /** @param speedProfile how bulletSpeed changes over each bullet's flight - see SpeedProfile;
+     *  applies both before and after the bullet's re-aim (see ExplodingAimedBullet)
+     *  @param hitboxSpec each bullet's collision hitbox, independent of its visual size - see
+     *  HitboxSpec */
+    public ExplodingAimedFiring(float fireRate, float bulletSize, float bulletSpeed, Animation<TextureRegion> spriteOverride, float offsetX, float offsetY, int bulletDamage, SpeedProfile speedProfile, HitboxSpec hitboxSpec) {
         this.fireRate = fireRate;
         this.bulletSize = bulletSize;
         this.bulletSpeed = bulletSpeed;
@@ -52,6 +64,8 @@ public class ExplodingAimedFiring implements FiringPattern {
         this.offsetX = offsetX;
         this.offsetY = offsetY;
         this.bulletDamage = bulletDamage;
+        this.speedProfile = speedProfile;
+        this.hitboxSpec = hitboxSpec;
         this.shootTimer = 0;
     }
 
@@ -67,7 +81,7 @@ public class ExplodingAimedFiring implements FiringPattern {
             for (int i = 0; i < numRadialBullets; i++) {
                 float angle = i * (360f / numRadialBullets);
                 ExplodingAimedBullet b = ObjectPools.explodingAimedBulletPool.obtain();
-                b.init(animation, centerX, centerY, angle, playerHitbox, bulletSize, bulletSpeed, bulletDamage, self);
+                b.init(animation, centerX, centerY, angle, playerHitbox, bulletSize, bulletSpeed, bulletDamage, self, speedProfile, hitboxSpec);
                 enemyBullets.add(b);
             }
         }

@@ -7,6 +7,8 @@ import com.badlogic.gdx.math.Circle;
 import com.badlogic.gdx.math.Rectangle;
 import com.badlogic.gdx.utils.Array;
 import whitelabeltest.enemy.Enemy;
+import whitelabeltest.enemy.HitboxSpec;
+import whitelabeltest.enemy.SpeedProfile;
 import whitelabeltest.enemy.bullets.EnemyBullet;
 import whitelabeltest.enemy.bullets.SineBullet;
 import whitelabeltest.gamemanagers.ObjectPools;
@@ -25,6 +27,8 @@ public class SineWaveFiring implements FiringPattern {
     private final float offsetX;
     private final float offsetY;
     private final int bulletDamage;
+    private final SpeedProfile speedProfile;
+    private final HitboxSpec hitboxSpec;
 
     public SineWaveFiring(float fireRate) {
         this(fireRate, 0.2f, DEFAULT_SPEED, null);
@@ -49,6 +53,13 @@ public class SineWaveFiring implements FiringPattern {
     }
 
     public SineWaveFiring(float fireRate, float bulletSize, float bulletSpeed, Animation<TextureRegion> spriteOverride, float offsetX, float offsetY, int bulletDamage) {
+        this(fireRate, bulletSize, bulletSpeed, spriteOverride, offsetX, offsetY, bulletDamage, SpeedProfile.CONSTANT_SPEED, HitboxSpec.DEFAULT);
+    }
+
+    /** @param speedProfile how bulletSpeed changes over each bullet's flight - see SpeedProfile
+     *  @param hitboxSpec each bullet's collision hitbox, independent of its visual size - see
+     *  HitboxSpec */
+    public SineWaveFiring(float fireRate, float bulletSize, float bulletSpeed, Animation<TextureRegion> spriteOverride, float offsetX, float offsetY, int bulletDamage, SpeedProfile speedProfile, HitboxSpec hitboxSpec) {
         this.fireRate = fireRate;
         this.bulletSize = bulletSize;
         this.bulletSpeed = bulletSpeed;
@@ -56,6 +67,8 @@ public class SineWaveFiring implements FiringPattern {
         this.offsetX = offsetX;
         this.offsetY = offsetY;
         this.bulletDamage = bulletDamage;
+        this.speedProfile = speedProfile;
+        this.hitboxSpec = hitboxSpec;
         this.shootTimer = fireRate;
     }
 
@@ -70,7 +83,7 @@ public class SineWaveFiring implements FiringPattern {
         Animation<TextureRegion> animation = spriteOverride != null ? spriteOverride : bulletAnimation;
 
         SineBullet b1 = ObjectPools.sineBulletPool.obtain();
-        b1.init(animation, centerX, centerY, AMPLITUDE, FREQUENCY, 0, bulletSpeed, bulletSize, bulletDamage, self);
+        b1.init(animation, centerX, centerY, AMPLITUDE, FREQUENCY, 0, bulletSpeed, bulletSize, bulletDamage, self, speedProfile, hitboxSpec);
         enemyBullets.add(b1);
     }
 

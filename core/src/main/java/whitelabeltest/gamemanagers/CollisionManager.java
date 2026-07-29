@@ -20,6 +20,9 @@ import whitelabeltest.player.weapons.Weapon;
 
 public class CollisionManager {
     private final Rectangle collisionHighlight;
+    // Scratch buffer for the scaled/offset hitbox rect built in overlaps(Circle, EnemyBullet) -
+    // reused every call instead of allocating a Rectangle per bullet-vs-player check.
+    private final Rectangle scratchHitbox = new Rectangle();
 
     public CollisionManager() {
         this.collisionHighlight = new Rectangle();
@@ -89,20 +92,48 @@ public class CollisionManager {
 
     private boolean overlaps(Circle circle, EnemyBullet bullet) {
         Rectangle rect = bullet.getRectangle();
+        float rotation = bullet.getRotation();
+
+        // getHitboxOffsetX/Y() is defined in the bullet's own unrotated frame so it stays attached
+        // to (and turns with) the sprite - rotate it into world space before using it. A no-op for
+        // rotation=0 or an unset offset, i.e. every bullet type that predates this field.
+        float offsetX = bullet.getHitboxOffsetX();
+        float offsetY = bullet.getHitboxOffsetY();
+        float cosR = MathUtils.cosDeg(rotation);
+        float sinR = MathUtils.sinDeg(rotation);
+        float worldOffsetX = offsetX * cosR - offsetY * sinR;
+        float worldOffsetY = offsetX * sinR + offsetY * cosR;
+
+        // The hitbox rect, scaled around rect's own center and then shifted by the (now
+        // world-space) offset - reduces to rect itself when scale=1/offset=(0,0), the default for
+        // every bullet type that doesn't set BulletDef.hitboxScale/hitboxOffsetX/hitboxOffsetY.
+        float scale = bullet.getHitboxScale();
+        float effWidth = rect.width * scale;
+        float effHeight = rect.height * scale;
+        float effX = rect.x + (rect.width - effWidth) / 2f + worldOffsetX;
+        float effY = rect.y + (rect.height - effHeight) / 2f + worldOffsetY;
 
         float hitRadius = bullet.getHitRadius();
         if (hitRadius >= 0f) {
-            float dx = circle.x - (rect.x + rect.width / 2f);
-            float dy = circle.y - (rect.y + rect.height / 2f);
-            float radiusSum = circle.radius + hitRadius;
+            float dx = circle.x - (effX + effWidth / 2f);
+            float dy = circle.y - (effY + effHeight / 2f);
+            float radiusSum = circle.radius + hitRadius * scale;
             return dx * dx + dy * dy <= radiusSum * radiusSum;
         }
 
-        float rotation = bullet.getRotation();
-        if (rotation == 0f) return Intersector.overlaps(circle, rect);
+        if (rotation == 0f) {
+            scratchHitbox.set(effX, effY, effWidth, effHeight);
+            return Intersector.overlaps(circle, scratchHitbox);
+        }
 
-        float pivotX = rect.x + rect.width / 2f;
-        float pivotY = rect.y;
+        // The pivot moves by the same world-space offset the box itself moved by (it's defined
+        // relative to the unrotated rect, which the offset displaces before rotation is applied
+        // around it), then localMin/MaxX/Y express the box's extent relative to that pivot - e.g.
+        // symmetric [-halfWidth, halfWidth] for a bullet that pivots on its own center, or
+        // [0, height] for one like LaserBullet that pivots on the rect's bottom edge - instead of
+        // assuming either convention.
+        float pivotX = bullet.getRotationPivotX() + worldOffsetX;
+        float pivotY = bullet.getRotationPivotY() + worldOffsetY;
         float dx = circle.x - pivotX;
         float dy = circle.y - pivotY;
 
@@ -111,9 +142,12 @@ public class CollisionManager {
         float localX = dx * cos - dy * sin;
         float localY = dx * sin + dy * cos;
 
-        float halfWidth = rect.width / 2f;
-        float closestX = MathUtils.clamp(localX, -halfWidth, halfWidth);
-        float closestY = MathUtils.clamp(localY, 0f, rect.height);
+        // effX/effY and pivotX/pivotY both carry the same worldOffset shift, so it cancels here -
+        // the box's extent relative to the pivot doesn't depend on where the offset moved it to.
+        float minX = effX - pivotX;
+        float minY = effY - pivotY;
+        float closestX = MathUtils.clamp(localX, minX, minX + effWidth);
+        float closestY = MathUtils.clamp(localY, minY, minY + effHeight);
 
         float distX = localX - closestX;
         float distY = localY - closestY;

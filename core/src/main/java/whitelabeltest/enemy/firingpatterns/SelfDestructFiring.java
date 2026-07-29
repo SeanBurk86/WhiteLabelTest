@@ -8,6 +8,8 @@ import com.badlogic.gdx.math.Rectangle;
 import com.badlogic.gdx.math.Vector2;
 import com.badlogic.gdx.utils.Array;
 import whitelabeltest.enemy.Enemy;
+import whitelabeltest.enemy.HitboxSpec;
+import whitelabeltest.enemy.SpeedProfile;
 import whitelabeltest.enemy.bullets.DrifterBullet;
 import whitelabeltest.enemy.bullets.EnemyBullet;
 import whitelabeltest.gamemanagers.ObjectPools;
@@ -23,6 +25,8 @@ public class SelfDestructFiring implements FiringPattern {
     private final float offsetX;
     private final float offsetY;
     private final int bulletDamage;
+    private final SpeedProfile speedProfile;
+    private final HitboxSpec hitboxSpec;
 
     public SelfDestructFiring(float triggerDistance) {
         this(triggerDistance, 0.25f, DEFAULT_SPEED, null);
@@ -47,6 +51,13 @@ public class SelfDestructFiring implements FiringPattern {
     }
 
     public SelfDestructFiring(float triggerDistance, float bulletSize, float bulletSpeed, Animation<TextureRegion> spriteOverride, float offsetX, float offsetY, int bulletDamage) {
+        this(triggerDistance, bulletSize, bulletSpeed, spriteOverride, offsetX, offsetY, bulletDamage, SpeedProfile.CONSTANT_SPEED, HitboxSpec.DEFAULT);
+    }
+
+    /** @param speedProfile how bulletSpeed changes over each bullet's flight - see SpeedProfile
+     *  @param hitboxSpec each bullet's collision hitbox, independent of its visual size - see
+     *  HitboxSpec */
+    public SelfDestructFiring(float triggerDistance, float bulletSize, float bulletSpeed, Animation<TextureRegion> spriteOverride, float offsetX, float offsetY, int bulletDamage, SpeedProfile speedProfile, HitboxSpec hitboxSpec) {
         this.triggerDistance = triggerDistance;
         this.bulletSize = bulletSize;
         this.bulletSpeed = bulletSpeed;
@@ -54,6 +65,8 @@ public class SelfDestructFiring implements FiringPattern {
         this.offsetX = offsetX;
         this.offsetY = offsetY;
         this.bulletDamage = bulletDamage;
+        this.speedProfile = speedProfile;
+        this.hitboxSpec = hitboxSpec;
     }
 
     @Override
@@ -74,7 +87,7 @@ public class SelfDestructFiring implements FiringPattern {
                 float angle = i * 45f;
                 Vector2 dir = new Vector2(1, 0).setAngleDeg(angle);
                 DrifterBullet b = ObjectPools.drifterBulletPool.obtain();
-                b.init(animation, centerX, centerY, dir.x, dir.y, bulletSize, bulletSpeed, bulletDamage, self);
+                b.init(animation, centerX, centerY, dir.x, dir.y, bulletSize, bulletSpeed, bulletDamage, self, speedProfile, hitboxSpec);
                 enemyBullets.add(b);
             }
         }
