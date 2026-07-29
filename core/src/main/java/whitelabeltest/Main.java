@@ -69,6 +69,7 @@ public class Main extends ApplicationAdapter {
                 transitionToOptions();
             }
         } else if (state == AppState.OPTIONS) {
+            ScreenUtils.clear(Color.BLACK);
             optionsScreen.render(delta);
             if (isControllerBackJustPressed()) {
                 optionsScreen.handleControllerBackPressed();
@@ -210,6 +211,11 @@ public class Main extends ApplicationAdapter {
         shapeRenderer.circle(em.getPlayer().getGrazeHitbox().x, em.getPlayer().getGrazeHitbox().y, em.getPlayer().getGrazeHitbox().radius, 16);
         shapeRenderer.setColor(Color.BLUE);
         shapeRenderer.circle(em.getPlayer().getHitbox().x, em.getPlayer().getHitbox().y, em.getPlayer().getHitbox().radius, 16);
+
+        if (em.getPlayer().isThunderboltBombActive()) {
+            shapeRenderer.setColor(Color.VIOLET);
+            shapeRenderer.circle(em.getPlayer().getHaloCenterX(), em.getPlayer().getHaloCenterY(), em.getPlayer().getThunderboltBlastRadius(), 24);
+        }
 
         shapeRenderer.setColor(Color.RED);
         for (Enemy enemy : em.getEnemies()) {

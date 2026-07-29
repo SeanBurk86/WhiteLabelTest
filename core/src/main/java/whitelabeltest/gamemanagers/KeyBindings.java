@@ -6,13 +6,8 @@ import com.badlogic.gdx.Preferences;
 import com.badlogic.gdx.controllers.Controller;
 import com.badlogic.gdx.controllers.ControllerMapping;
 
-/** Rebindable keyboard and gamepad-button controls, persisted via libGDX Preferences. The
- * always-on debug/dev keys in InputManager are not covered here, and movement stays on the
- * analog stick/D-pad rather than a rebindable button. */
 public class KeyBindings {
-    /** Controller-agnostic button identity. {@link ControllerMapping}'s fields are already
-     * normalized per controller model by libGDX, so resolving one of these to a raw button code
-     * (see {@link #rawCode}) happens against whatever controller is currently connected. */
+
     public enum GamepadButton {
         A("A"), B("B"), X("X"), Y("Y"), L1("LB"), R1("RB"), START("Start"), BACK("Back"),
         DPAD_UP("D-Up"), DPAD_DOWN("D-Down"), DPAD_LEFT("D-Left"), DPAD_RIGHT("D-Right");
@@ -29,10 +24,10 @@ public class KeyBindings {
         MOVE_RIGHT("Move Right", Input.Keys.RIGHT, null),
         MOVE_UP("Move Up", Input.Keys.UP, null),
         MOVE_DOWN("Move Down", Input.Keys.DOWN, null),
-        SHOOT("Shoot", Input.Keys.SPACE, GamepadButton.A),
+        SHOOT("Shoot", Input.Keys.SPACE, GamepadButton.X),
         BOMB("Bomb", Input.Keys.SHIFT_LEFT, GamepadButton.B),
-        WEAPON_SWITCH("Switch Weapon", Input.Keys.X, GamepadButton.X),
-        HYPER_ATTACK("Hyper Attack", Input.Keys.C, GamepadButton.Y),
+        WEAPON_SWITCH("Switch Weapon", Input.Keys.X, GamepadButton.R1),
+        HYPER_ATTACK("Hyper Attack", Input.Keys.C, GamepadButton.A),
         RESTART("Restart", Input.Keys.R, GamepadButton.START),
         QUIT("Quit", Input.Keys.Q, GamepadButton.BACK);
 
@@ -46,8 +41,6 @@ public class KeyBindings {
             this.defaultGamepadButton = defaultGamepadButton;
         }
 
-        /** False for the movement actions, which read the stick/D-pad directly instead of a
-         * single rebindable button. */
         public boolean hasGamepadBinding() {
             return defaultGamepadButton != null;
         }

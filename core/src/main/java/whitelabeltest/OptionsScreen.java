@@ -16,6 +16,7 @@ import com.badlogic.gdx.scenes.scene2d.InputEvent;
 import com.badlogic.gdx.scenes.scene2d.InputListener;
 import com.badlogic.gdx.scenes.scene2d.Stage;
 import com.badlogic.gdx.scenes.scene2d.ui.Label;
+import com.badlogic.gdx.scenes.scene2d.ui.ScrollPane;
 import com.badlogic.gdx.scenes.scene2d.ui.Skin;
 import com.badlogic.gdx.scenes.scene2d.ui.Table;
 import com.badlogic.gdx.scenes.scene2d.ui.TextButton;
@@ -31,10 +32,19 @@ import whitelabeltest.gamemanagers.KeyBindings.GamepadButton;
 import java.util.EnumMap;
 import java.util.Map;
 
-/** Scene2D key/gamepad-rebinding menu, reached from StartScreen via Escape or the gamepad Back
- * button. Built with a small procedurally-generated Skin since the project has no bundled
- * Scene2D skin assets. Fully operable by mouse, keyboard, or gamepad D-pad/A/Back. */
 public class OptionsScreen implements Disposable {
+    // ScrollPane.updateActorPosition() (private, can't be overridden) truncates the scrolled
+    // widget's position to the nearest *whole stage unit* - a pixel-snapping optimization that's
+    // invisible when 1 stage unit is roughly 1 screen pixel, but this screen's stage otherwise
+    // used the game's own 9x12 world-unit space, where a whole unit is nearly two entire row
+    // heights. That truncation - not any bug in the Table layout itself - was the real source of
+    // the "phantom blank row"/misaligned-focus symptoms: depending on the exact fractional part
+    // of wherever a row's scroll target landed, up to a full unit of vertical position (~2 rows)
+    // could vanish. Every dimension below is scaled up by this factor from its originally-designed
+    // 9x12-space value so that truncating to a whole stage unit becomes sub-pixel and negligible,
+    // exactly like ScrollPane assumes - the on-screen appearance is unchanged.
+    private static final float UI_SCALE = 100f;
+
     private final Stage stage;
     private final KeyBindings keyBindings;
     private final BitmapFont font;
@@ -42,11 +52,8 @@ public class OptionsScreen implements Disposable {
     private final Skin skin;
     private final Map<Action, TextButton> keyButtons = new EnumMap<>(Action.class);
     private final Map<Action, TextButton> gamepadBindingButtons = new EnumMap<>(Action.class);
+    private ScrollPane bindingsScroll;
 
-    // Gamepad-navigable grid, in visual row order: each row is [keyButton, gamepadButton-or-null],
-    // with a final one-column row for the reset button (null action). D-pad up/down moves between
-    // rows, left/right moves between the Keyboard/Gamepad columns (matching the visual layout),
-    // and A activates whichever cell is focused.
     private final Array<TextButton[]> rows = new Array<>();
     private final Array<Action> rowAction = new Array<>();
     private int focusedRow = -1;
@@ -61,7 +68,7 @@ public class OptionsScreen implements Disposable {
 
     public OptionsScreen(KeyBindings keyBindings, float worldWidth, float worldHeight) {
         this.keyBindings = keyBindings;
-        this.stage = new Stage(new ExtendViewport(worldWidth, worldHeight));
+        this.stage = new Stage(new ExtendViewport(worldWidth * UI_SCALE, worldHeight * UI_SCALE));
 
         FreeTypeFontGenerator generator = new FreeTypeFontGenerator(Gdx.files.internal("VT323-Regular.ttf"));
         FreeTypeFontParameter fontParams = new FreeTypeFontParameter();
@@ -69,7 +76,7 @@ public class OptionsScreen implements Disposable {
         font = generator.generateFont(fontParams);
         generator.dispose();
         font.setUseIntegerPositions(false);
-        font.getData().setScale(0.01171875f);
+        font.getData().setScale(0.01171875f * UI_SCALE);
 
         Pixmap pm = new Pixmap(4, 4, Pixmap.Format.RGBA8888);
         pm.setColor(Color.WHITE);
@@ -110,8 +117,6 @@ public class OptionsScreen implements Disposable {
         listeningStyle.fontColor = Color.YELLOW;
         skin.add("listening", listeningStyle);
 
-        // Gamepad D-pad selection highlight, distinct from the mouse-hover ("over") and
-        // key-capture ("listening") tints so a gamepad user can always see where they are.
         TextButton.TextButtonStyle focusedStyle = new TextButton.TextButtonStyle(buttonStyle);
         focusedStyle.up = base.tint(new Color(0.2f, 0.32f, 0.5f, 1f));
         focusedStyle.fontColor = Color.CYAN;
@@ -123,17 +128,19 @@ public class OptionsScreen implements Disposable {
     private Table buildLayout() {
         Table root = new Table();
         root.setFillParent(true);
-        root.top().padTop(0.6f);
+        root.top().padTop(0.6f * UI_SCALE);
 
         Label title = new Label("OPTIONS", skin, "header");
-        root.add(title).colspan(3).padBottom(0.5f).row();
+        root.add(title).colspan(3).padBottom(0.5f * UI_SCALE).row();
 
         Label subtitle = new Label("KEY BINDINGS", skin);
-        root.add(subtitle).colspan(3).padBottom(0.2f).row();
+        root.add(subtitle).colspan(3).padBottom(0.2f * UI_SCALE).row();
 
-        root.add();
-        root.add(new Label("Keyboard", skin)).width(1.9f);
-        root.add(new Label("Gamepad", skin)).width(1.9f).row();
+        Table bindingsTable = new Table();
+
+        bindingsTable.add();
+        bindingsTable.add(new Label("Keyboard", skin)).width(1.9f * UI_SCALE);
+        bindingsTable.add(new Label("Gamepad", skin)).width(1.9f * UI_SCALE).row();
 
         for (Action action : Action.values()) {
             Label nameLabel = new Label(action.label, skin);
@@ -145,8 +152,8 @@ public class OptionsScreen implements Disposable {
                 }
             });
 
-            root.add(nameLabel).left().width(2.6f).pad(0.06f);
-            root.add(keyButton).width(1.9f).height(0.4f).pad(0.06f);
+            bindingsTable.add(nameLabel).left().width(2.6f * UI_SCALE).height(0.4f * UI_SCALE).pad(0.06f * UI_SCALE);
+            bindingsTable.add(keyButton).width(1.9f * UI_SCALE).height(0.4f * UI_SCALE).pad(0.06f * UI_SCALE);
             keyButtons.put(action, keyButton);
 
             TextButton gamepadButton = null;
@@ -159,10 +166,10 @@ public class OptionsScreen implements Disposable {
                         startGamepadListening(action, finalGamepadButton);
                     }
                 });
-                root.add(gamepadButton).width(1.9f).height(0.4f).pad(0.06f).row();
+                bindingsTable.add(gamepadButton).width(1.9f * UI_SCALE).height(0.4f * UI_SCALE).pad(0.06f * UI_SCALE).row();
                 gamepadBindingButtons.put(action, gamepadButton);
             } else {
-                root.add().width(1.9f).pad(0.06f).row();
+                bindingsTable.add().width(1.9f * UI_SCALE).height(0.4f * UI_SCALE).pad(0.06f * UI_SCALE).row();
             }
             rows.add(new TextButton[]{keyButton, gamepadButton});
             rowAction.add(action);
@@ -175,12 +182,24 @@ public class OptionsScreen implements Disposable {
                 resetToDefaults();
             }
         });
-        root.add(resetButton).colspan(3).padTop(0.4f).height(0.4f).row();
+        bindingsTable.add(resetButton).colspan(3).padTop(0.4f * UI_SCALE).height(0.4f * UI_SCALE).row();
         rows.add(new TextButton[]{resetButton, null});
         rowAction.add(null);
 
+        bindingsScroll = new ScrollPane(bindingsTable);
+        bindingsScroll.setScrollingDisabled(true, false);
+        bindingsScroll.setFadeScrollBars(false);
+        // Smooth scrolling animates the visible scroll position toward its target over several
+        // frames, but setFocus()'s highlight restyle is instant - so right after a D-pad press,
+        // the newly-focused button is already shown highlighted while the still-catching-up
+        // scroll position renders the rest of the list as if it belongs to the previous target,
+        // making a focused row look detached/misaligned from its neighbors until the animation
+        // settles a few frames later. Disabled so scrollTo() takes effect immediately instead.
+        bindingsScroll.setSmoothScrolling(false);
+        root.add(bindingsScroll).colspan(3).expand().fill().row();
+
         Label backHint = new Label("Esc/Back - Back   D-Pad - Move   A - Select", skin);
-        root.add(backHint).colspan(3).padTop(0.35f);
+        root.add(backHint).colspan(3).padTop(0.35f * UI_SCALE);
 
         root.addListener(new InputListener() {
             @Override
@@ -256,8 +275,6 @@ public class OptionsScreen implements Disposable {
         return false;
     }
 
-    /** Restores a button to "focused" or "default" depending on whether it's the gamepad's
-     * currently-selected cell, once it's no longer showing the "listening" capture style. */
     private void applyIdleStyle(TextButton button) {
         boolean isFocused = focusedRow >= 0 && rows.get(focusedRow)[focusedCol] == button;
         button.setStyle(skin.get(isFocused ? "focused" : "default", TextButton.TextButtonStyle.class));
@@ -281,10 +298,12 @@ public class OptionsScreen implements Disposable {
         if (!isBeingListenedOn(newButton)) {
             newButton.setStyle(skin.get("focused", TextButton.TextButtonStyle.class));
         }
+
+        if (newButton.getWidth() > 0f) {
+            bindingsScroll.scrollTo(newButton.getX(), newButton.getY(), newButton.getWidth(), newButton.getHeight());
+        }
     }
 
-    /** Moves between rows (actions), snapping back to column 0 if the destination row has no
-     * Gamepad-column cell (e.g. the movement actions, which have no rebindable button). */
     private void moveRow(int delta) {
         if (rows.size == 0) return;
         int newRow = (focusedRow + delta + rows.size) % rows.size;
@@ -292,8 +311,6 @@ public class OptionsScreen implements Disposable {
         setFocus(newRow, newCol);
     }
 
-    /** Moves between the Keyboard/Gamepad columns of the current row; a no-op where the target
-     * column doesn't exist for this row. */
     private void moveCol(int delta) {
         if (focusedRow < 0) return;
         int newCol = focusedCol + delta;
@@ -301,13 +318,6 @@ public class OptionsScreen implements Disposable {
         setFocus(focusedRow, newCol);
     }
 
-    /** Polls the gamepad each frame so the menu is fully operable without a mouse or keyboard:
-     * D-pad up/down moves between rows, left/right moves between the Keyboard/Gamepad columns,
-     * and A activates the focused cell (opening key/button capture, or firing reset). While
-     * capturing a gamepad button, any button but Back is accepted as the new binding - Back is
-     * reserved for cancel/exit and handled by Main via {@link #handleControllerBackPressed()}.
-     * While capturing a *keyboard* key, a gamepad button can't satisfy it, so any non-Back press
-     * cancels that capture instead of leaving the "Press a key..." prompt stuck. */
     private void handleControllerNavigation() {
         Controller controller = Controllers.getCurrent();
         if (controller == null) return;

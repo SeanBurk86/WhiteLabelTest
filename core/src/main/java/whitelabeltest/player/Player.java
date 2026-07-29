@@ -73,6 +73,30 @@ public class Player {
     private final Circle haloHitbox = new Circle();
     private final Array<Enemy> haloDashHitEnemies = new Array<>(false, 8);
 
+    // ThunderboltWeapon's Hyper Attack (see ThunderboltWeapon.hyperAttack/triggerThunderboltHyperAttack):
+    // the halo launches out to hover in front of the ship - tracking it, rather than resting at a
+    // fixed spot like Basic's dash does - where it charges a bomb through four damage tiers (see
+    // THUNDERBOLT_CHARGE_DAMAGE), gaining a tier every THUNDERBOLT_CHARGE_LEVEL_TIME seconds it's
+    // held. Releasing the button detonates it at whatever tier it reached - see
+    // CollisionManager.checkThunderboltDetonation for the actual area damage and green-lightning
+    // visual this only queues up - then sends the halo gliding back to the player the same way
+    // Basic's does (shares haloReturning/haloDetached with it; see updateHaloMovement()).
+    private static final float THUNDERBOLT_HALO_FRONT_DISTANCE = 2.5f;
+    private static final float THUNDERBOLT_HALO_MOVE_SPEED = 10f;
+    private static final float THUNDERBOLT_CHARGE_LEVEL_TIME = 0.5f;
+    private static final int[] THUNDERBOLT_CHARGE_DAMAGE = {32, 64, 128, 256};
+    private static final float THUNDERBOLT_BLAST_RADIUS = 3.5f;
+
+    private boolean thunderboltHaloActive;
+    private boolean thunderboltMoving;
+    private boolean thunderboltCharging;
+    private float thunderboltChargeTimer;
+    private int thunderboltChargeLevel;
+    private int thunderboltChargeSoundLevel;
+    private boolean thunderboltDetonationPending;
+    private float thunderboltDetonationX, thunderboltDetonationY;
+    private int thunderboltDetonationDamage;
+
     private float invincibleFrameTime = 2f;
     private float invincibilityTimer = 0f;
     private boolean isInvincible;
@@ -183,6 +207,7 @@ public class Player {
         handleShooting(delta, input.isShooting(), assets, audio, bullets, enemies);
         maintainOrbitRing(bullets, assets, input.isShooting());
         handleHyperAttack(input.isHyperAttackJustPressed(), bullets, enemies, assets, audio);
+        updateThunderboltCharge(delta, input.isHyperAttackJustReleased(), audio);
         updateHaloMovement(delta);
         updateHaloFiring(delta, input.isShooting(), bullets, assets, audio);
         updateHitbox();
@@ -205,8 +230,10 @@ public class Player {
     // Hyper Attack triggers whichever weapon is currently active's own ability (a no-op for
     // weapons that don't define one yet - see Weapon.hyperAttack), independent of the fire button.
     // Blocked for every weapon but Basic while the halo hasn't reattached, so a different
-    // weapon's Hyper Attack can't start while Basic's is still out - Basic's own re-press still
-    // goes through, since that's what reattaches it (see triggerBasicHyperAttack()).
+    // weapon's Hyper Attack can't start - or, for Thunderbolt, restart - while the halo's still
+    // out on some other ability's business. Basic's own re-press still goes through, since that's
+    // what reattaches it (see triggerBasicHyperAttack()); Thunderbolt has no re-press step of its
+    // own since releasing the button is what detonates/recalls it (see updateThunderboltCharge()).
     private void handleHyperAttack(boolean hyperAttackJustPressed, Array<Weapon> bullets, Array<Enemy> enemies, AssetManager assets, AudioManager audio) {
         if (!hyperAttackJustPressed) return;
         if (haloDetached && getCurrentWeapon() != basicWeapon) return;
@@ -219,6 +246,10 @@ public class Player {
     private void recallHaloOnWeaponSwitch() {
         if (!haloDetached || haloReturning) return;
         haloDashing = false;
+        // Cancels a mid-flight Thunderbolt charge without detonating it - switching away is
+        // treated as a fizzle, not a release.
+        thunderboltMoving = false;
+        thunderboltCharging = false;
         haloReturning = true;
     }
 
@@ -242,15 +273,78 @@ public class Player {
         }
     }
 
+    /** ThunderboltWeapon's Hyper Attack (see ThunderboltWeapon.hyperAttack): launches the halo out
+     *  in front of the ship, detached, where it hovers - tracking the ship, unlike Basic's dash,
+     *  which rests wherever it lands - until this is called again. Ignored while the halo's
+     *  already out on either ability's business (mirrors triggerBasicHyperAttack's own re-press
+     *  guard) - Thunderbolt has no "press again" step of its own, since releasing the button (see
+     *  updateThunderboltCharge()) is what detonates and recalls it instead. */
+    public void triggerThunderboltHyperAttack() {
+        if (haloDetached) return;
+
+        haloDetached = true;
+        haloDashing = false;
+        haloReturning = false;
+        thunderboltHaloActive = true;
+        thunderboltMoving = true;
+        thunderboltCharging = false;
+        thunderboltChargeTimer = 0f;
+        thunderboltChargeLevel = 0;
+        thunderboltChargeSoundLevel = -1;
+        haloDetachedX = attachedHaloX();
+        haloDetachedY = attachedHaloY();
+    }
+
+    /** Advances the Thunderbolt bomb's charge tier while the halo is holding position in front of
+     *  the ship (see updateHaloMovement()'s thunderboltMoving branch, which flips thunderboltCharging
+     *  on once it arrives), playing thunderbolthyperlevel.wav/-001/-002/-003 in order as it climbs
+     *  through each tier - including the base tier the instant the attack starts, not just the
+     *  three tiers above it - and, on release, queues the actual detonation for
+     *  CollisionManager.checkThunderboltDetonation to apply next - this method only decides
+     *  where/how hard, not who it hits, since that needs the enemies list CollisionManager already
+     *  has wired up. Also watches for a release during the brief move-out (a quick tap, released
+     *  before the halo ever reaches its charge position) - the charge timer never started ticking
+     *  in that case, so it still detonates, just at the base tier, rather than silently swallowing
+     *  the release and leaving the halo charging forever with the button already let go. Snaps the
+     *  halo straight back onto the player on release - unlike Basic's dash, which glides back over
+     *  time (see haloReturning/updateHaloMovement) - since the detonation itself is the payoff
+     *  moment; there's no reason to keep the player waiting on a return flight afterward. */
+    private void updateThunderboltCharge(float delta, boolean hyperAttackJustReleased, AudioManager audio) {
+        if (!thunderboltMoving && !thunderboltCharging) return;
+
+        if (thunderboltCharging) {
+            thunderboltChargeTimer += delta;
+            thunderboltChargeLevel = Math.min((int) (thunderboltChargeTimer / THUNDERBOLT_CHARGE_LEVEL_TIME), THUNDERBOLT_CHARGE_DAMAGE.length - 1);
+        }
+
+        if (thunderboltChargeLevel != thunderboltChargeSoundLevel) {
+            thunderboltChargeSoundLevel = thunderboltChargeLevel;
+            audio.playThunderboltHyperLevel(thunderboltChargeLevel);
+        }
+
+        if (hyperAttackJustReleased) {
+            thunderboltDetonationPending = true;
+            thunderboltDetonationX = haloCenterX();
+            thunderboltDetonationY = haloCenterY();
+            thunderboltDetonationDamage = THUNDERBOLT_CHARGE_DAMAGE[thunderboltChargeLevel];
+
+            thunderboltMoving = false;
+            thunderboltCharging = false;
+            haloDetached = false;
+            thunderboltHaloActive = false;
+        }
+    }
+
     /** Fires BasicWeapon's pattern - split with whatever the player's own gun is firing (see
      *  handleShooting()) so the two firing points don't double the total bullet count - from
      *  wherever the halo currently is: dashing out, resting, or gliding back, on the weapon's own
      *  fire-rate cadence, for as long as it's detached, but only while the player is actually
      *  holding Shoot (mirrors handleShooting's own gating). The cooldown still accumulates in the
      *  background while not shooting, same as a normal weapon's, so it's ready to fire the instant
-     *  Shoot is pressed again. */
+     *  Shoot is pressed again. Skipped entirely while the halo is out on Thunderbolt's business
+     *  instead of Basic's - haloDetached alone doesn't say which ability sent it out there. */
     private void updateHaloFiring(float delta, boolean isShooting, Array<Weapon> bullets, AssetManager assets, AudioManager audio) {
-        if (!haloDetached) return;
+        if (!haloDetached || thunderboltHaloActive) return;
 
         haloFireTimer += delta;
         if (isShooting && haloFireTimer > basicWeapon.getFireRate()) {
@@ -273,6 +367,33 @@ public class Player {
                 haloDetachedY += step;
             }
             haloHitbox.set(haloCenterX(), haloCenterY(), Math.min(haloDrawWidth, haloDrawHeight) / 2f);
+        } else if (thunderboltMoving) {
+            // Chases a moving target (the ship keeps moving while this plays out) rather than a
+            // fixed point - the gap is small and this only runs for the brief trip out, so it
+            // converges close enough well before any real drift could accumulate.
+            float targetX = attachedHaloX();
+            float targetY = attachedHaloY() + THUNDERBOLT_HALO_FRONT_DISTANCE;
+            float dx = targetX - haloDetachedX;
+            float dy = targetY - haloDetachedY;
+            float dist = (float) Math.sqrt(dx * dx + dy * dy);
+            float step = THUNDERBOLT_HALO_MOVE_SPEED * delta;
+            if (dist <= Math.max(step, HALO_ARRIVE_EPSILON)) {
+                haloDetachedX = targetX;
+                haloDetachedY = targetY;
+                thunderboltMoving = false;
+                thunderboltCharging = true;
+                thunderboltChargeTimer = 0f;
+                thunderboltChargeLevel = 0;
+            } else {
+                haloDetachedX += dx / dist * step;
+                haloDetachedY += dy / dist * step;
+            }
+        } else if (thunderboltCharging) {
+            // Rigidly tracks the ship's front while charging, rather than drifting toward it like
+            // the move-in phase above - the ship's own per-frame movement is already smooth, so
+            // snapping here doesn't introduce any visible jitter.
+            haloDetachedX = attachedHaloX();
+            haloDetachedY = attachedHaloY() + THUNDERBOLT_HALO_FRONT_DISTANCE;
         } else if (haloReturning) {
             float targetX = attachedHaloX();
             float targetY = attachedHaloY();
@@ -283,6 +404,7 @@ public class Player {
             if (dist <= Math.max(step, HALO_ARRIVE_EPSILON)) {
                 haloDetached = false;
                 haloReturning = false;
+                thunderboltHaloActive = false;
             } else {
                 haloDetachedX += dx / dist * step;
                 haloDetachedY += dy / dist * step;
@@ -457,11 +579,27 @@ public class Player {
         isDead = false;
         deathTimer = 0f;
         grazePoints = 0f;
+        reattachHaloImmediately();
+    }
+
+    /** Snaps the halo straight back onto the player, canceling whatever hyper attack ability
+     *  currently has it detached (Basic's dash/return, or Thunderbolt's move-out/charge/return)
+     *  instead of leaving it stranded mid-flight - used by reset() on a full game restart, and by
+     *  startDeath() so losing a life doesn't otherwise require an extra Hyper Attack press just to
+     *  recall a halo that was already out when the hit landed. */
+    private void reattachHaloImmediately() {
         haloDetached = false;
         haloDashing = false;
         haloReturning = false;
         haloFireTimer = 0f;
         haloDashHitEnemies.clear();
+        thunderboltHaloActive = false;
+        thunderboltMoving = false;
+        thunderboltCharging = false;
+        thunderboltChargeTimer = 0f;
+        thunderboltChargeLevel = 0;
+        thunderboltChargeSoundLevel = 0;
+        thunderboltDetonationPending = false;
     }
 
     public Circle getHitbox() { return hitbox; }
@@ -472,6 +610,20 @@ public class Player {
     public boolean hasHaloDamaged(Enemy enemy) { return haloDashHitEnemies.contains(enemy, true); }
     public void markHaloDamaged(Enemy enemy) { haloDashHitEnemies.add(enemy); }
     public int getHaloDashDamage() { return HALO_DASH_DAMAGE; }
+    public boolean hasPendingThunderboltDetonation() { return thunderboltDetonationPending; }
+    public float getThunderboltDetonationX() { return thunderboltDetonationX; }
+    public float getThunderboltDetonationY() { return thunderboltDetonationY; }
+    public int getThunderboltDetonationDamage() { return thunderboltDetonationDamage; }
+    public float getThunderboltBlastRadius() { return THUNDERBOLT_BLAST_RADIUS; }
+    public void clearPendingThunderboltDetonation() { thunderboltDetonationPending = false; }
+    // True from the moment the bomb launches out until it detonates (moving out or holding
+    // position and charging) - i.e. for as long as a release would actually detonate it, since
+    // the blast radius itself doesn't change with charge tier - see debug hitbox overlay
+    // (Main.drawDebug), which uses this plus getHaloCenterX/Y/getThunderboltBlastRadius to show
+    // where the bomb will go off.
+    public boolean isThunderboltBombActive() { return thunderboltMoving || thunderboltCharging; }
+    public float getHaloCenterX() { return haloCenterX(); }
+    public float getHaloCenterY() { return haloCenterY(); }
     public boolean isShieldActive() { return orbitWeapon.isShieldActive(); }
     public float getShieldCooldownFraction() { return orbitWeapon.getShieldCooldownFraction(); }
     public float getShieldCooldownTimer() { return orbitWeapon.getShieldCooldownTimer(); }
@@ -564,6 +716,7 @@ public class Player {
         isInvincible = false;
         invincibilityTimer = 0f;
         disableGrazeHitbox();
+        reattachHaloImmediately();
     }
 
     public boolean isDead() { return isDead; }

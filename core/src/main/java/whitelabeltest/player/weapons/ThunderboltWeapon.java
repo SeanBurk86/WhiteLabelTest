@@ -6,6 +6,7 @@ import com.badlogic.gdx.graphics.Texture;
 import com.badlogic.gdx.graphics.g2d.Sprite;
 import com.badlogic.gdx.graphics.g2d.SpriteBatch;
 import com.badlogic.gdx.math.MathUtils;
+import com.badlogic.gdx.math.Rectangle;
 import com.badlogic.gdx.math.Vector2;
 import com.badlogic.gdx.utils.Array;
 import com.badlogic.gdx.utils.FloatArray;
@@ -48,6 +49,13 @@ public class ThunderboltWeapon extends BaseWeapon {
     private static final int LAYER_COUNT = 3;
     private static final int SPRITES_PER_SEGMENT = SPRITES_PER_LAYER * LAYER_COUNT;
 
+    // ThunderboltWeapon's Hyper Attack: see Player.triggerThunderboltHyperAttack for the halo's
+    // charge-then-detonate behavior this only kicks off - all of the actual charge/damage/arc
+    // logic lives on Player/CollisionManager, the same split BasicWeapon's halo dash uses.
+    // Uncooldowned, unlike WaveBlastWeapon's hyper attack - Player.triggerThunderboltHyperAttack
+    // already refuses to start a second charge while the halo's still out on this one, so there's
+    // nothing left for a cooldown to gate.
+
     // Public: EntityManager batches the GL_MAX blend section across every active strike instead
     // of each one flushing/toggling it independently - see drawBolts()/draw().
     public static final int GL_MAX = 0x8008;
@@ -57,6 +65,11 @@ public class ThunderboltWeapon extends BaseWeapon {
     private Texture circleTexture;
     private final Vector2 origin = new Vector2();
     private final Array<Enemy> hitEnemies = new Array<>(false, 4);
+    // Which enemies this specific strike is allowed to hit at all - picked once, up front (see
+    // selectTargets()), capped to `level` of the highest-health enemies within the hitbox instead
+    // of every enemy the hitbox happens to touch. hasDamaged() rejects anything not in here, so
+    // the normal per-frame CollisionManager loop doesn't need to know about the cap.
+    private final Array<Enemy> allowedTargets = new Array<>(false, 4);
     private final Array<Sprite> bolts = new Array<>(false, 96);
 
     private final FloatArray segX1 = new FloatArray(16);
@@ -73,6 +86,7 @@ public class ThunderboltWeapon extends BaseWeapon {
 
     private float dirX, dirY;
     private float halfWidth;
+    private float startReach;
     private float endReach;
 
     public void init(WeaponDefinition def, Texture texture, Texture circleTexture, Vector2 origin, Vector2 dir, float width, float worldHeight) {
@@ -82,11 +96,13 @@ public class ThunderboltWeapon extends BaseWeapon {
         this.origin.set(origin);
         this.lifeTime = 0f;
         this.hitEnemies.clear();
+        this.allowedTargets.clear();
         this.segCount = 0;
         this.hasRealHit = false;
 
         float startReach = def.radius;
         float endReach = Math.max(edgeDistance(origin, dir, worldHeight), startReach + 0.1f);
+        this.startReach = startReach;
 
         float startX = origin.x + dir.x * startReach;
         float startY = origin.y + dir.y * startReach;
@@ -341,9 +357,43 @@ public class ThunderboltWeapon extends BaseWeapon {
         return origin.y;
     }
 
+    /** Picks which enemies this strike is even allowed to hit - up to `level` of them (1 at level
+     *  1, 2/3/4 at higher levels), preferring the highest health first - out of whichever enemies
+     *  sit within the hitbox at the moment this strike spawns. The hitbox is static for its whole
+     *  lifetime, so this only needs to run once, here, rather than re-evaluating every frame. */
+    private void selectTargets(Array<Enemy> enemies) {
+        allowedTargets.clear();
+
+        Array<Enemy> candidates = new Array<>(false, 8);
+        for (int i = 0; i < enemies.size; i++) {
+            Enemy enemy = enemies.get(i);
+            if (enemy.isActive() && isWithinHitbox(enemy)) candidates.add(enemy);
+        }
+        candidates.sort((a, b) -> b.getHealth() - a.getHealth());
+
+        int maxTargets = MathUtils.clamp(level, 1, 4);
+        int count = Math.min(maxTargets, candidates.size);
+        for (int i = 0; i < count; i++) allowedTargets.add(candidates.get(i));
+    }
+
+    // Same (along, perp) local-frame transform addArc() uses to aim a bolt at a target, reused
+    // here to test whether an enemy's center sits within the hitbox's un-rotated bounds
+    // (along in [startReach, endReach], perp in [-halfWidth, halfWidth]) - i.e. a point-in-rect
+    // test against the same rectangle CollisionManager's rotated-rect overlap test checks.
+    private boolean isWithinHitbox(Enemy enemy) {
+        Rectangle r = enemy.getRectangle();
+        float px = r.x + r.width / 2f;
+        float py = r.y + r.height / 2f;
+        float dx = px - origin.x, dy = py - origin.y;
+        float along = dx * dirX + dy * dirY;
+        float perp = dy * dirX - dx * dirY;
+        return along >= startReach && along <= endReach && Math.abs(perp) <= halfWidth;
+    }
+
     @Override
     public boolean hasDamaged(Enemy enemy) {
         if (lifeTime >= STRIKE_DURATION) return true;
+        if (!allowedTargets.contains(enemy, true)) return true;
         return hitEnemies.contains(enemy, true);
     }
 
@@ -372,23 +422,24 @@ public class ThunderboltWeapon extends BaseWeapon {
         Texture pixel = assets.pixelTexture;
         Texture circle = assets.circleTexture;
 
-        strike(activeWeapons, pixel, circle, origin, new Vector2(0, 1), width, worldHeight);
+        strike(activeWeapons, pixel, circle, origin, new Vector2(0, 1), width, worldHeight, enemies);
 
         if (level >= 3) {
-            strike(activeWeapons, pixel, circle, origin, new Vector2(0, 1).rotateDeg(45), width, worldHeight);
-            strike(activeWeapons, pixel, circle, origin, new Vector2(0, 1).rotateDeg(-45), width, worldHeight);
+            strike(activeWeapons, pixel, circle, origin, new Vector2(0, 1).rotateDeg(45), width, worldHeight, enemies);
+            strike(activeWeapons, pixel, circle, origin, new Vector2(0, 1).rotateDeg(-45), width, worldHeight, enemies);
         }
         if (level >= 4) {
-            strike(activeWeapons, pixel, circle, origin, new Vector2(0, -1), width, worldHeight);
-            strike(activeWeapons, pixel, circle, origin, new Vector2(0, -1).rotateDeg(45), width, worldHeight);
-            strike(activeWeapons, pixel, circle, origin, new Vector2(0, -1).rotateDeg(-45), width, worldHeight);
+            strike(activeWeapons, pixel, circle, origin, new Vector2(0, -1), width, worldHeight, enemies);
+            strike(activeWeapons, pixel, circle, origin, new Vector2(0, -1).rotateDeg(45), width, worldHeight, enemies);
+            strike(activeWeapons, pixel, circle, origin, new Vector2(0, -1).rotateDeg(-45), width, worldHeight, enemies);
         }
     }
 
-    private void strike(Array<Weapon> activeWeapons, Texture texture, Texture circleTexture, Vector2 origin, Vector2 dir, float width, float worldHeight) {
+    private void strike(Array<Weapon> activeWeapons, Texture texture, Texture circleTexture, Vector2 origin, Vector2 dir, float width, float worldHeight, Array<Enemy> enemies) {
         ThunderboltWeapon w = ObjectPools.thunderboltWeaponPool.obtain();
         w.setLevel(this.level);
         w.init(def, texture, circleTexture, origin, dir.nor(), width, worldHeight);
+        w.selectTargets(enemies);
         activeWeapons.add(w);
     }
 
@@ -400,11 +451,20 @@ public class ThunderboltWeapon extends BaseWeapon {
         audio.playThunderboltWeaponSound(level);
     }
 
+    /** Starts the halo's charge-then-detonate sequence (see Player.triggerThunderboltHyperAttack)
+     *  - no cooldown of its own; Player already refuses to start a new charge while the halo's
+     *  still out from the last one. */
+    @Override
+    public void hyperAttack(Player player, Array<Weapon> activeWeapons, Array<Enemy> enemies, AssetManager assets, AudioManager audio) {
+        player.triggerThunderboltHyperAttack();
+    }
+
     @Override
     public void reset() {
         super.reset();
         lifeTime = 0f;
         hitEnemies.clear();
+        allowedTargets.clear();
         segCount = 0;
         hasRealHit = false;
     }

@@ -16,6 +16,12 @@ public class AudioManager implements Disposable {
     private final Sound gameOverSound;
     private final Sound powerupSound;
     private final Sound gemPickupSound;
+    // ThunderboltWeapon's Hyper Attack (see Player.updateThunderboltCharge/CollisionManager.
+    // checkThunderboltDetonation): one distinct sound per charge tier, played in a fixed order as
+    // the bomb climbs through them - not a random pick from a pool like the per-weapon-level
+    // sound banks below - plus a dedicated explosion sound on detonation.
+    private final Sound[] thunderboltHyperLevelSounds;
+    private final Sound thunderboltHyperExplosionSound;
     private final Music victoryFanfare;
     private final Music victoryLoop;
     private final ObjectMap<Integer, Array<Sound>> pointGemSounds;
@@ -31,6 +37,13 @@ public class AudioManager implements Disposable {
         gameOverSound = Gdx.audio.newSound(Gdx.files.internal("gameover.mp3"));
         powerupSound = Gdx.audio.newSound(Gdx.files.internal("powerup.mp3"));
         gemPickupSound = Gdx.audio.newSound(Gdx.files.internal("pointgem.mp3"));
+        thunderboltHyperLevelSounds = new Sound[] {
+            Gdx.audio.newSound(Gdx.files.internal("thunderbolthyperlevel.wav")),
+            Gdx.audio.newSound(Gdx.files.internal("thunderbolthyperlevel-001.wav")),
+            Gdx.audio.newSound(Gdx.files.internal("thunderbolthyperlevel-002.wav")),
+            Gdx.audio.newSound(Gdx.files.internal("thunderbolthyperlevel-003.wav"))
+        };
+        thunderboltHyperExplosionSound = Gdx.audio.newSound(Gdx.files.internal("thunderbolthyperexplosion.wav"));
         victoryFanfare = Gdx.audio.newMusic(Gdx.files.internal("victoryfanfare.mp3"));
         victoryLoop = Gdx.audio.newMusic(Gdx.files.internal("victory.mp3"));
         victoryLoop.setLooping(true);
@@ -127,6 +140,17 @@ public class AudioManager implements Disposable {
         if (!muted && thunderboltWeaponSounds != null && thunderboltWeaponSounds.containsKey(level)) thunderboltWeaponSounds.get(level).random().play();
     }
 
+    /** Plays the tier-th (0-based) charge sound for ThunderboltWeapon's Hyper Attack bomb - see
+     *  Player.updateThunderboltCharge, which calls this once per tier as the bomb climbs through
+     *  THUNDERBOLT_CHARGE_DAMAGE, in order, rather than picking randomly like the sound banks above. */
+    public void playThunderboltHyperLevel(int tier) {
+        if (!muted && tier >= 0 && tier < thunderboltHyperLevelSounds.length) thunderboltHyperLevelSounds[tier].play();
+    }
+
+    public void playThunderboltHyperExplosion() {
+        if (!muted) thunderboltHyperExplosionSound.play();
+    }
+
     @Override
     public void dispose() {
         playerDeathSound.dispose();
@@ -134,6 +158,8 @@ public class AudioManager implements Disposable {
         gameOverSound.dispose();
         powerupSound.dispose();
         gemPickupSound.dispose();
+        for (Sound s : thunderboltHyperLevelSounds) s.dispose();
+        thunderboltHyperExplosionSound.dispose();
         victoryFanfare.dispose();
         victoryLoop.dispose();
         disposeSoundsMap(pointGemSounds);

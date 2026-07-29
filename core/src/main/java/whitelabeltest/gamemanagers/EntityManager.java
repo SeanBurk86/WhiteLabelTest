@@ -10,6 +10,7 @@ import whitelabeltest.enemy.Enemy;
 import whitelabeltest.enemy.bullets.EnemyBullet;
 import whitelabeltest.player.Player;
 import whitelabeltest.player.powerups.Powerup;
+import whitelabeltest.player.weapons.GreenLightningBurst;
 import whitelabeltest.player.weapons.ThunderboltWeapon;
 import whitelabeltest.player.weapons.Weapon;
 
@@ -23,6 +24,7 @@ public class EntityManager {
     private final Array<PlayerTrailEffect> trails;
     private final Array<HitEffect> hitEffects;
     private final Array<PointGem> pointGems;
+    private final Array<GreenLightningBurst> greenLightningBursts;
 
     private final float worldWidth;
     private final float worldHeight;
@@ -67,6 +69,7 @@ public class EntityManager {
         this.trails = new Array<>();
         this.hitEffects = new Array<>();
         this.pointGems = new Array<>();
+        this.greenLightningBursts = new Array<>();
 
         EnemySpawnRegistry.init(assets, enemies, worldWidth, worldHeight);
     }
@@ -175,6 +178,15 @@ public class EntityManager {
             }
         }
 
+        for (int i = greenLightningBursts.size - 1; i >= 0; i--) {
+            GreenLightningBurst b = greenLightningBursts.get(i);
+            b.update(delta);
+            if (b.isFinished()) {
+                greenLightningBursts.removeIndex(i);
+                ObjectPools.freeGreenLightningBurst(b);
+            }
+        }
+
         boolean playerFiring = input.isShooting();
         for (int i = pointGems.size - 1; i >= 0; i--) {
             PointGem gem = pointGems.get(i);
@@ -200,6 +212,7 @@ public class EntityManager {
         for (ExplosionEffect e : explosions) e.draw(batch);
         for (Enemy e : enemies) if (!e.isGround()) e.draw(batch);
         for (HitEffect h : hitEffects) h.draw(batch);
+        for (GreenLightningBurst b : greenLightningBursts) b.draw(batch);
         if (bombActive) {
             TextureRegion frame = bombAnimation.getKeyFrame(bombAnimationTime);
             float bx = worldWidth / 2f - bombDrawWidth / 2f;
@@ -261,6 +274,8 @@ public class EntityManager {
         hitEffects.clear();
         for (PointGem g : pointGems) ObjectPools.freePointGem(g);
         pointGems.clear();
+        for (GreenLightningBurst b : greenLightningBursts) ObjectPools.freeGreenLightningBurst(b);
+        greenLightningBursts.clear();
         trailSpawnTimer = 0f;
         player.reset();
     }
@@ -282,6 +297,8 @@ public class EntityManager {
         hitEffects.clear();
         for (PointGem g : pointGems) ObjectPools.freePointGem(g);
         pointGems.clear();
+        for (GreenLightningBurst b : greenLightningBursts) ObjectPools.freeGreenLightningBurst(b);
+        greenLightningBursts.clear();
     }
 
     public void destroyAllPlayerBullets() {
@@ -310,4 +327,5 @@ public class EntityManager {
     public Array<ExplosionEffect> getExplosions() { return explosions; }
     public Array<HitEffect> getHitEffects() { return hitEffects; }
     public Array<PointGem> getPointGems() { return pointGems; }
+    public Array<GreenLightningBurst> getGreenLightningBursts() { return greenLightningBursts; }
 }

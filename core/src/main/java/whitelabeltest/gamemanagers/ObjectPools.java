@@ -73,6 +73,9 @@ public class ObjectPools {
     public static final Pool<PointGem> pointGemPool = new Pool<PointGem>() {
         @Override protected PointGem newObject() { return new PointGem(); }
     };
+    public static final Pool<GreenLightningBurst> greenLightningBurstPool = new Pool<GreenLightningBurst>() {
+        @Override protected GreenLightningBurst newObject() { return new GreenLightningBurst(); }
+    };
 
     public static void freeWeapon(Weapon w) {
         if (w instanceof BasicWeapon) weaponPool.free((BasicWeapon)w);
@@ -115,5 +118,9 @@ public class ObjectPools {
 
     public static void freePointGem(PointGem g) {
         pointGemPool.free(g);
+    }
+
+    public static void freeGreenLightningBurst(GreenLightningBurst b) {
+        greenLightningBurstPool.free(b);
     }
 }

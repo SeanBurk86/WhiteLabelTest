@@ -14,6 +14,8 @@ public class InputManager {
     private boolean bombJustPressed;
     private boolean weaponSwitchJustPressed;
     private boolean hyperAttackJustPressed;
+    private boolean hyperAttackHeld;
+    private boolean hyperAttackJustReleased;
     private boolean restartJustPressed;
     private boolean quitJustPressed;
     private boolean debugToggleJustPressed;
@@ -33,7 +35,7 @@ public class InputManager {
     private InputType activeInput = InputType.KEYBOARD;
     private boolean prevBombButton;
     private boolean prevWeaponSwitchButton;
-    private boolean prevHyperAttackButton;
+    private boolean prevHyperAttackHeld;
 
     public InputManager(KeyBindings keyBindings) {
         this.keyBindings = keyBindings;
@@ -49,6 +51,8 @@ public class InputManager {
         bombJustPressed = false;
         weaponSwitchJustPressed = false;
         hyperAttackJustPressed = false;
+        hyperAttackHeld = false;
+        hyperAttackJustReleased = false;
         restartJustPressed = false;
         quitJustPressed = false;
         debugToggleJustPressed = false;
@@ -74,7 +78,7 @@ public class InputManager {
             isShooting = Gdx.input.isKeyPressed(keyBindings.getKey(Action.SHOOT));
             bombJustPressed = Gdx.input.isKeyJustPressed(keyBindings.getKey(Action.BOMB));
             weaponSwitchJustPressed = Gdx.input.isKeyJustPressed(keyBindings.getKey(Action.WEAPON_SWITCH));
-            hyperAttackJustPressed = Gdx.input.isKeyJustPressed(keyBindings.getKey(Action.HYPER_ATTACK));
+            hyperAttackHeld = Gdx.input.isKeyPressed(keyBindings.getKey(Action.HYPER_ATTACK));
             restartJustPressed = Gdx.input.isKeyJustPressed(keyBindings.getKey(Action.RESTART));
             quitJustPressed = Gdx.input.isKeyJustPressed(keyBindings.getKey(Action.QUIT));
         }
@@ -103,14 +107,19 @@ public class InputManager {
                 if (weaponSwitchButton && !prevWeaponSwitchButton) weaponSwitchJustPressed = true;
                 prevWeaponSwitchButton = weaponSwitchButton;
 
-                boolean hyperAttackButton = controller.getButton(KeyBindings.rawCode(controller, keyBindings.getGamepadButton(Action.HYPER_ATTACK)));
-                if (hyperAttackButton && !prevHyperAttackButton) hyperAttackJustPressed = true;
-                prevHyperAttackButton = hyperAttackButton;
+                hyperAttackHeld |= controller.getButton(KeyBindings.rawCode(controller, keyBindings.getGamepadButton(Action.HYPER_ATTACK)));
 
                 if (controller.getButton(KeyBindings.rawCode(controller, keyBindings.getGamepadButton(Action.RESTART)))) restartJustPressed = true;
                 if (controller.getButton(KeyBindings.rawCode(controller, keyBindings.getGamepadButton(Action.QUIT)))) quitJustPressed = true;
             }
         }
+
+        // Held/edge state is derived once here instead of separately per input type, so a hyper
+        // attack charge started on one input type is still tracked correctly even if a rebind or
+        // input-type switch happens mid-charge - see Player.updateThunderboltCharge.
+        hyperAttackJustPressed = hyperAttackHeld && !prevHyperAttackHeld;
+        hyperAttackJustReleased = !hyperAttackHeld && prevHyperAttackHeld;
+        prevHyperAttackHeld = hyperAttackHeld;
 
         // Debug toggle/restart/menu always available regardless of input mode
         debugToggleJustPressed = Gdx.input.isKeyJustPressed(Input.Keys.F12);
@@ -137,6 +146,8 @@ public class InputManager {
     public boolean isBombJustPressed() { return bombJustPressed; }
     public boolean isWeaponSwitchJustPressed() { return weaponSwitchJustPressed; }
     public boolean isHyperAttackJustPressed() { return hyperAttackJustPressed; }
+    public boolean isHyperAttackHeld() { return hyperAttackHeld; }
+    public boolean isHyperAttackJustReleased() { return hyperAttackJustReleased; }
     public boolean isRestartJustPressed() { return restartJustPressed; }
     public boolean isQuitJustPressed() { return quitJustPressed; }
     public boolean isDebugToggleJustPressed() { return debugToggleJustPressed; }

@@ -7,12 +7,14 @@ import com.badlogic.gdx.math.Circle;
 import com.badlogic.gdx.math.Intersector;
 import com.badlogic.gdx.math.MathUtils;
 import com.badlogic.gdx.math.Rectangle;
+import com.badlogic.gdx.math.Vector2;
 import com.badlogic.gdx.utils.Array;
 import whitelabeltest.enemy.Enemy;
 import whitelabeltest.enemy.bullets.EnemyBullet;
 import whitelabeltest.player.Player;
 import whitelabeltest.player.powerups.Powerup;
 import whitelabeltest.player.powerups.WeaponPowerup;
+import whitelabeltest.player.weapons.GreenLightningBurst;
 import whitelabeltest.player.weapons.ReflectedBolt;
 import whitelabeltest.player.weapons.Weapon;
 
@@ -219,6 +221,45 @@ public class CollisionManager {
                 scoreManager.addScore(GameController.destroyEnemy(audio, entityManager, assets, worldWidth, worldHeight, enemy), 2.0f);
             }
         }
+    }
+
+    /** ThunderboltWeapon's Hyper Attack detonation (see Player.triggerThunderboltHyperAttack/
+     *  updateThunderboltCharge): once the charged bomb is released, this is called once - the
+     *  pending-flag on Player is what keeps it from firing again the following frame - and deals
+     *  its charge tier's damage to every active enemy within the blast radius in one pass, with
+     *  the same kill/score handling a normal hit gets, then spawns the green lightning arcing out
+     *  to each of them and plays thunderbolthyperexplosion.wav. */
+    public void checkThunderboltDetonation(Player player, Array<Enemy> enemies, AudioManager audio, EntityManager entityManager, AssetManager assets, float worldWidth, float worldHeight, ScoreManager scoreManager) {
+        if (!player.hasPendingThunderboltDetonation()) return;
+        player.clearPendingThunderboltDetonation();
+
+        float originX = player.getThunderboltDetonationX();
+        float originY = player.getThunderboltDetonationY();
+        Circle blast = new Circle(originX, originY, player.getThunderboltBlastRadius());
+        int damage = player.getThunderboltDetonationDamage();
+
+        Array<Vector2> hitPoints = new Array<>(false, 8);
+        for (int i = enemies.size - 1; i >= 0; i--) {
+            Enemy enemy = enemies.get(i);
+            if (!enemy.isActive()) continue;
+            if (!Intersector.overlaps(blast, enemy.getRectangle())) continue;
+
+            Rectangle rect = enemy.getRectangle();
+            hitPoints.add(new Vector2(rect.x + rect.width / 2f, rect.y + rect.height / 2f));
+
+            scoreManager.registerWeaponHit(0.1f, 2.5f);
+            if (enemy.takeDamage(damage)) {
+                scoreManager.addScore(GameController.destroyEnemy(audio, entityManager, assets, worldWidth, worldHeight, enemy), 2.5f);
+            }
+        }
+
+        if (hitPoints.size > 0) {
+            GreenLightningBurst burst = ObjectPools.greenLightningBurstPool.obtain();
+            burst.init(assets.pixelTexture, assets.circleTexture, originX, originY, hitPoints);
+            entityManager.getGreenLightningBursts().add(burst);
+        }
+
+        audio.playThunderboltHyperExplosion();
     }
 
     /** Spawns this bullet's impact animation (see WeaponDefinition.hitTexture) at the bullet's
