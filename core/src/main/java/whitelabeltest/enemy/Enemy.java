@@ -24,6 +24,9 @@ public interface Enemy extends Pool.Poolable {
     // Defiant enemies take no damage until they've fired at least once - see
     // BaseEnemy.takeDamage()/hasFiredOnce.
     default boolean isDefiant() { return false; }
+    // See EnemyDefinition.bulletCancel - GameController.destroyEnemy checks this to decide
+    // whether to also clear out this enemy's in-flight bullets when it dies.
+    default boolean cancelsBulletsOnDeath() { return false; }
     default int getScore() { return 10; }
     default String getExplosionPattern() { return null; }
 

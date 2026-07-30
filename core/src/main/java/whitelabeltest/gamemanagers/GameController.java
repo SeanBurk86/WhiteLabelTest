@@ -315,7 +315,7 @@ public class GameController implements Disposable {
     private boolean tryFireBomb() {
         if (!canFireBomb()) return false;
         sufferBombDamage(50, entities.getEnemies());
-        entities.destroyAllEnemyBullets();
+        entities.destroyAllEnemyBullets(assets);
         entities.getPlayer().setNumBombs(entities.getPlayer().getNumBombs() - 1);
         entities.triggerBombEffect();
         audio.playBomb();
@@ -351,6 +351,8 @@ public class GameController implements Disposable {
 
     public static int destroyEnemy(AudioManager audio, EntityManager entityManager, AssetManager assets, float worldWidth, float worldHeight, Enemy enemy) {
         int scoreValue = enemy.getScore();
+
+        if (enemy.cancelsBulletsOnDeath()) entityManager.destroyEnemyBullets(enemy, assets);
 
         float centerX = enemy.getRectangle().x + enemy.getRectangle().width / 2;
         float centerY = enemy.getRectangle().y + enemy.getRectangle().height / 2;

@@ -5,6 +5,7 @@ import com.badlogic.gdx.graphics.GL20;
 import com.badlogic.gdx.graphics.g2d.Animation;
 import com.badlogic.gdx.graphics.g2d.SpriteBatch;
 import com.badlogic.gdx.graphics.g2d.TextureRegion;
+import com.badlogic.gdx.math.Rectangle;
 import com.badlogic.gdx.utils.Array;
 import whitelabeltest.enemy.Enemy;
 import whitelabeltest.enemy.bullets.EnemyBullet;
@@ -23,6 +24,7 @@ public class EntityManager {
     private final Array<ExplosionEffect> explosions;
     private final Array<PlayerTrailEffect> trails;
     private final Array<HitEffect> hitEffects;
+    private final Array<BulletCancelEffect> bulletCancelEffects;
     private final Array<PointGem> pointGems;
     private final Array<GreenLightningBurst> greenLightningBursts;
 
@@ -37,6 +39,7 @@ public class EntityManager {
 
     private float trailSpawnTimer;
     private static final float TRAIL_SPAWN_INTERVAL = 0.02f;
+    private static final float BULLET_CANCEL_SIZE_SCALE = 4f;
 
     public EntityManager(AssetManager assets, float worldWidth, float worldHeight) {
         this.worldWidth = worldWidth;
@@ -68,6 +71,7 @@ public class EntityManager {
         this.explosions = new Array<>();
         this.trails = new Array<>();
         this.hitEffects = new Array<>();
+        this.bulletCancelEffects = new Array<>();
         this.pointGems = new Array<>();
         this.greenLightningBursts = new Array<>();
 
@@ -178,6 +182,15 @@ public class EntityManager {
             }
         }
 
+        for (int i = bulletCancelEffects.size - 1; i >= 0; i--) {
+            BulletCancelEffect e = bulletCancelEffects.get(i);
+            e.update(delta);
+            if (e.isFinished()) {
+                bulletCancelEffects.removeIndex(i);
+                ObjectPools.freeBulletCancelEffect(e);
+            }
+        }
+
         for (int i = greenLightningBursts.size - 1; i >= 0; i--) {
             GreenLightningBurst b = greenLightningBursts.get(i);
             b.update(delta);
@@ -212,6 +225,7 @@ public class EntityManager {
         for (ExplosionEffect e : explosions) e.draw(batch);
         for (Enemy e : enemies) if (!e.isGround()) e.draw(batch);
         for (HitEffect h : hitEffects) h.draw(batch);
+        for (BulletCancelEffect e : bulletCancelEffects) e.draw(batch);
         for (GreenLightningBurst b : greenLightningBursts) b.draw(batch);
         if (bombActive) {
             TextureRegion frame = bombAnimation.getKeyFrame(bombAnimationTime);
@@ -272,6 +286,8 @@ public class EntityManager {
         trails.clear();
         for (HitEffect h : hitEffects) ObjectPools.freeHitEffect(h);
         hitEffects.clear();
+        for (BulletCancelEffect e : bulletCancelEffects) ObjectPools.freeBulletCancelEffect(e);
+        bulletCancelEffects.clear();
         for (PointGem g : pointGems) ObjectPools.freePointGem(g);
         pointGems.clear();
         for (GreenLightningBurst b : greenLightningBursts) ObjectPools.freeGreenLightningBurst(b);
@@ -295,6 +311,8 @@ public class EntityManager {
         explosions.clear();
         for (HitEffect h : hitEffects) ObjectPools.freeHitEffect(h);
         hitEffects.clear();
+        for (BulletCancelEffect e : bulletCancelEffects) ObjectPools.freeBulletCancelEffect(e);
+        bulletCancelEffects.clear();
         for (PointGem g : pointGems) ObjectPools.freePointGem(g);
         pointGems.clear();
         for (GreenLightningBurst b : greenLightningBursts) ObjectPools.freeGreenLightningBurst(b);
@@ -308,12 +326,37 @@ public class EntityManager {
         bullets.clear();
     }
 
-    public void destroyAllEnemyBullets() {
+    public void destroyAllEnemyBullets(AssetManager assets) {
         for (int i = enemyBullets.size - 1; i >= 0; i--) {
             EnemyBullet b = enemyBullets.get(i);
             enemyBullets.removeIndex(i);
+            spawnBulletCancelEffect(b, assets);
             ObjectPools.freeEnemyBullet(b);
         }
+    }
+
+    /** Destroys every in-flight bullet fired by source - see Enemy.cancelsBulletsOnDeath()/
+     *  EnemyDefinition.bulletCancel. Must be called before source is freed back to its pool
+     *  (see GameController.destroyEnemy) - EnemyBullet.getSourceEnemy() compares by reference and
+     *  a freed enemy's pooled instance can be reused for an unrelated enemy afterward. */
+    public void destroyEnemyBullets(Enemy source, AssetManager assets) {
+        for (int i = enemyBullets.size - 1; i >= 0; i--) {
+            EnemyBullet b = enemyBullets.get(i);
+            if (b.getSourceEnemy() != source) continue;
+            enemyBullets.removeIndex(i);
+            spawnBulletCancelEffect(b, assets);
+            ObjectPools.freeEnemyBullet(b);
+        }
+    }
+
+    /** Shared by destroyAllEnemyBullets (bomb) and destroyEnemyBullets (enemy bullet-cancel death)
+     *  - the two ways a bullet is destroyed outright instead of expiring normally - see
+     *  BulletCancelEffect. */
+    private void spawnBulletCancelEffect(EnemyBullet b, AssetManager assets) {
+        Rectangle rect = b.getRectangle();
+        BulletCancelEffect effect = ObjectPools.bulletCancelEffectPool.obtain();
+        effect.init(assets, rect.x + rect.width / 2f, rect.y + rect.height / 2f, Math.max(rect.width, rect.height) * BULLET_CANCEL_SIZE_SCALE);
+        bulletCancelEffects.add(effect);
     }
 
     public void notifyBossKilled() { bossKilled = true; }
@@ -326,6 +369,7 @@ public class EntityManager {
     public Array<Powerup> getPowerups() { return powerups; }
     public Array<ExplosionEffect> getExplosions() { return explosions; }
     public Array<HitEffect> getHitEffects() { return hitEffects; }
+    public Array<BulletCancelEffect> getBulletCancelEffects() { return bulletCancelEffects; }
     public Array<PointGem> getPointGems() { return pointGems; }
     public Array<GreenLightningBurst> getGreenLightningBursts() { return greenLightningBursts; }
 }

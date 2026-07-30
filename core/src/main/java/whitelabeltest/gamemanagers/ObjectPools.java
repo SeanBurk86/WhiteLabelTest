@@ -70,6 +70,9 @@ public class ObjectPools {
     public static final Pool<HitEffect> hitEffectPool = new Pool<HitEffect>() {
         @Override protected HitEffect newObject() { return new HitEffect(); }
     };
+    public static final Pool<BulletCancelEffect> bulletCancelEffectPool = new Pool<BulletCancelEffect>() {
+        @Override protected BulletCancelEffect newObject() { return new BulletCancelEffect(); }
+    };
     public static final Pool<PointGem> pointGemPool = new Pool<PointGem>() {
         @Override protected PointGem newObject() { return new PointGem(); }
     };
@@ -114,6 +117,10 @@ public class ObjectPools {
 
     public static void freeHitEffect(HitEffect e) {
         hitEffectPool.free(e);
+    }
+
+    public static void freeBulletCancelEffect(BulletCancelEffect e) {
+        bulletCancelEffectPool.free(e);
     }
 
     public static void freePointGem(PointGem g) {

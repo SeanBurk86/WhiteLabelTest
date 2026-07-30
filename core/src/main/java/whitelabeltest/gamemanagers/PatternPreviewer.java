@@ -381,6 +381,7 @@ public class PatternPreviewer {
             d.isGround = src.isGround;
             d.sealable = src.sealable;
             d.defiant = src.defiant;
+            d.bulletCancel = src.bulletCancel;
             d.score = src.score;
             d.firingPattern = src.firingPattern;
             d.explosionPattern = src.explosionPattern;
@@ -597,6 +598,7 @@ public class PatternPreviewer {
         rows.add(toggleRow(1, "Is Ground", () -> d.isGround, v -> d.isGround = v));
         rows.add(toggleRow(1, "Sealable", () -> d.sealable, v -> d.sealable = v));
         rows.add(toggleRow(1, "Defiant", () -> d.defiant, v -> d.defiant = v));
+        rows.add(toggleRow(1, "Bullet Cancel", () -> d.bulletCancel, v -> d.bulletCancel = v));
         rows.add(idPickRow(1, "Explosion Pattern", () -> d.explosionPattern, PatternRegistry.getExplosionIds(), v -> { d.explosionPattern = v; applyChange(); }));
 
         rows.add(headerRow(1, "Spawn animation:"));

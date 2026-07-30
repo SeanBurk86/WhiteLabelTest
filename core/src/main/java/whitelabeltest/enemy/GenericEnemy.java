@@ -139,6 +139,9 @@ public class GenericEnemy extends BaseEnemy {
     public boolean isDefiant() { return def != null && def.defiant; }
 
     @Override
+    public boolean cancelsBulletsOnDeath() { return def != null && def.bulletCancel; }
+
+    @Override
     public int getScore() { return def != null ? def.score : 10; }
 
     @Override

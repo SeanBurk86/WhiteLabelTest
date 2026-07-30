@@ -17,6 +17,9 @@ public class EnemyDefinition {
     public boolean isGround = false;
     public boolean sealable = false;
     public boolean defiant = false;
+    // When true, destroying this enemy also destroys every bullet it has in flight - see
+    // GameController.destroyEnemy.
+    public boolean bulletCancel = false;
     public int score = 10;
     public String firingPattern;
     public String explosionPattern;
