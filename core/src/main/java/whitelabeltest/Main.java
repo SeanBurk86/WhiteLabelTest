@@ -17,6 +17,7 @@ import com.badlogic.gdx.utils.ScreenUtils;
 import com.badlogic.gdx.utils.viewport.ExtendViewport;
 import whitelabeltest.enemy.Enemy;
 import whitelabeltest.enemy.bullets.EnemyBullet;
+import whitelabeltest.gamemanagers.AudioSettings;
 import whitelabeltest.gamemanagers.EntityManager;
 import whitelabeltest.gamemanagers.GameController;
 import whitelabeltest.gamemanagers.InputType;
@@ -33,6 +34,7 @@ public class Main extends ApplicationAdapter {
     private StartScreen startScreen;
     private OptionsScreen optionsScreen;
     private KeyBindings keyBindings;
+    private AudioSettings audioSettings;
     private UIManager ui;
     private GameController game;
     private Sound startScreenConfirmSound;
@@ -55,6 +57,7 @@ public class Main extends ApplicationAdapter {
         shapeRenderer = new ShapeRenderer();
         viewport = new ExtendViewport(PLAY_AREA_WIDTH, PLAY_AREA_HEIGHT);
         keyBindings = new KeyBindings();
+        audioSettings = new AudioSettings();
         startScreen = new StartScreen(PLAY_AREA_WIDTH, PLAY_AREA_HEIGHT);
     }
 
@@ -88,7 +91,7 @@ public class Main extends ApplicationAdapter {
         startScreenConfirmSound = startScreen.getConfirmSound();
         startScreen.dispose();
         startScreen = null;
-        game = new GameController(PLAY_AREA_WIDTH, PLAY_AREA_HEIGHT, keyBindings);
+        game = new GameController(PLAY_AREA_WIDTH, PLAY_AREA_HEIGHT, keyBindings, audioSettings);
         game.setActiveInput(inputType);
         ui = new UIManager(inputType);
         state = AppState.PLAYING;
@@ -106,7 +109,7 @@ public class Main extends ApplicationAdapter {
 
     private void transitionToOptions() {
         if (optionsScreen == null) {
-            optionsScreen = new OptionsScreen(keyBindings, PLAY_AREA_WIDTH, PLAY_AREA_HEIGHT);
+            optionsScreen = new OptionsScreen(keyBindings, audioSettings, PLAY_AREA_WIDTH, PLAY_AREA_HEIGHT);
         }
         Gdx.input.setInputProcessor(optionsScreen.getStage());
         state = AppState.OPTIONS;

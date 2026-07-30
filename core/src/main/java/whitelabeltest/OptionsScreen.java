@@ -15,9 +15,11 @@ import com.badlogic.gdx.scenes.scene2d.Actor;
 import com.badlogic.gdx.scenes.scene2d.InputEvent;
 import com.badlogic.gdx.scenes.scene2d.InputListener;
 import com.badlogic.gdx.scenes.scene2d.Stage;
+import com.badlogic.gdx.scenes.scene2d.Touchable;
 import com.badlogic.gdx.scenes.scene2d.ui.Label;
 import com.badlogic.gdx.scenes.scene2d.ui.ScrollPane;
 import com.badlogic.gdx.scenes.scene2d.ui.Skin;
+import com.badlogic.gdx.scenes.scene2d.ui.Stack;
 import com.badlogic.gdx.scenes.scene2d.ui.Table;
 import com.badlogic.gdx.scenes.scene2d.ui.TextButton;
 import com.badlogic.gdx.scenes.scene2d.utils.ChangeListener;
@@ -25,13 +27,22 @@ import com.badlogic.gdx.scenes.scene2d.utils.TextureRegionDrawable;
 import com.badlogic.gdx.utils.Array;
 import com.badlogic.gdx.utils.Disposable;
 import com.badlogic.gdx.utils.viewport.ExtendViewport;
+import whitelabeltest.gamemanagers.AudioSettings;
 import whitelabeltest.gamemanagers.KeyBindings;
 import whitelabeltest.gamemanagers.KeyBindings.Action;
 import whitelabeltest.gamemanagers.KeyBindings.GamepadButton;
 
 import java.util.EnumMap;
 import java.util.Map;
+import java.util.function.Consumer;
+import java.util.function.Supplier;
 
+/** Options is a small menu tree: a top-level page with entries that open the Key Bindings and
+ *  Audio pages, each of which returns to the top level on Back rather than leaving Options
+ *  outright. All three pages share one row/column focus-navigation system (keyboard click,
+ *  mouse click and gamepad D-Pad+A all resolve to the same per-cell Runnable - see
+ *  {@link #rowActivators}) so moveRow/moveCol/activateFocused/handleControllerNavigation don't
+ *  need to know which page is showing. */
 public class OptionsScreen implements Disposable {
     // ScrollPane.updateActorPosition() (private, can't be overridden) truncates the scrolled
     // widget's position to the nearest *whole stage unit* - a pixel-snapping optimization that's
@@ -44,18 +55,40 @@ public class OptionsScreen implements Disposable {
     // 9x12-space value so that truncating to a whole stage unit becomes sub-pixel and negligible,
     // exactly like ScrollPane assumes - the on-screen appearance is unchanged.
     private static final float UI_SCALE = 100f;
+    private static final float VOLUME_STEP = 0.1f;
+
+    private enum Page { MENU, KEY_BINDINGS, AUDIO }
 
     private final Stage stage;
     private final KeyBindings keyBindings;
+    private final AudioSettings audioSettings;
     private final BitmapFont font;
     private final Texture pixel;
     private final Skin skin;
     private final Map<Action, TextButton> keyButtons = new EnumMap<>(Action.class);
     private final Map<Action, TextButton> gamepadBindingButtons = new EnumMap<>(Action.class);
-    private ScrollPane bindingsScroll;
 
-    private final Array<TextButton[]> rows = new Array<>();
-    private final Array<Action> rowAction = new Array<>();
+    private Label subtitleLabel;
+    private Table menuTable;
+    private ScrollPane bindingsScroll;
+    private Table audioTable;
+    private Label musicValueLabel;
+    private Label sfxValueLabel;
+
+    // Every page's row/activator lists, built once in the constructor. rows/rowActivators/
+    // activeScroll are simply re-pointed at one of these three pairs on switchPage() - see the
+    // class doc.
+    private final Array<TextButton[]> menuRows = new Array<>();
+    private final Array<Runnable[]> menuActivators = new Array<>();
+    private final Array<TextButton[]> keyBindingRows = new Array<>();
+    private final Array<Runnable[]> keyBindingActivators = new Array<>();
+    private final Array<TextButton[]> audioRows = new Array<>();
+    private final Array<Runnable[]> audioActivators = new Array<>();
+
+    private Page page = Page.MENU;
+    private Array<TextButton[]> rows = menuRows;
+    private Array<Runnable[]> rowActivators = menuActivators;
+    private ScrollPane activeScroll;
     private int focusedRow = -1;
     private int focusedCol = 0;
     private final boolean[] prevGamepadButtonDown = new boolean[GamepadButton.values().length];
@@ -66,8 +99,9 @@ public class OptionsScreen implements Disposable {
     private TextButton gamepadListeningButton;
     private boolean backRequested;
 
-    public OptionsScreen(KeyBindings keyBindings, float worldWidth, float worldHeight) {
+    public OptionsScreen(KeyBindings keyBindings, AudioSettings audioSettings, float worldWidth, float worldHeight) {
         this.keyBindings = keyBindings;
+        this.audioSettings = audioSettings;
         this.stage = new Stage(new ExtendViewport(worldWidth * UI_SCALE, worldHeight * UI_SCALE));
 
         FreeTypeFontGenerator generator = new FreeTypeFontGenerator(Gdx.files.internal("VT323-Regular.ttf"));
@@ -89,7 +123,7 @@ public class OptionsScreen implements Disposable {
         Table root = buildLayout();
         stage.addActor(root);
         stage.setKeyboardFocus(root);
-        setFocus(0, 0);
+        switchPage(Page.MENU);
     }
 
     private Skin buildSkin() {
@@ -131,11 +165,56 @@ public class OptionsScreen implements Disposable {
         root.top().padTop(0.6f * UI_SCALE);
 
         Label title = new Label("OPTIONS", skin, "header");
-        root.add(title).colspan(3).padBottom(0.5f * UI_SCALE).row();
+        root.add(title).padBottom(0.5f * UI_SCALE).row();
 
-        Label subtitle = new Label("KEY BINDINGS", skin);
-        root.add(subtitle).colspan(3).padBottom(0.2f * UI_SCALE).row();
+        subtitleLabel = new Label("", skin);
+        root.add(subtitleLabel).padBottom(0.2f * UI_SCALE).row();
 
+        menuTable = buildMenuTable();
+        buildKeyBindingsTable();
+        audioTable = buildAudioTable();
+
+        Stack contentStack = new Stack();
+        contentStack.add(menuTable);
+        contentStack.add(bindingsScroll);
+        contentStack.add(audioTable);
+        root.add(contentStack).expand().fill().row();
+
+        Label backHint = new Label("Esc/Back - Back   D-Pad - Move   A - Select", skin);
+        root.add(backHint).padTop(0.35f * UI_SCALE);
+
+        root.addListener(new InputListener() {
+            @Override
+            public boolean keyDown(InputEvent event, int keycode) {
+                return handleKeyDown(keycode);
+            }
+        });
+
+        return root;
+    }
+
+    private Table buildMenuTable() {
+        Table table = new Table();
+
+        TextButton keyBindingsButton = new TextButton("Key Bindings", skin);
+        TextButton audioButton = new TextButton("Audio", skin);
+        Runnable openKeyBindings = () -> switchPage(Page.KEY_BINDINGS);
+        Runnable openAudio = () -> switchPage(Page.AUDIO);
+        onClick(keyBindingsButton, openKeyBindings);
+        onClick(audioButton, openAudio);
+
+        table.add(keyBindingsButton).width(3f * UI_SCALE).height(0.4f * UI_SCALE).pad(0.08f * UI_SCALE).row();
+        table.add(audioButton).width(3f * UI_SCALE).height(0.4f * UI_SCALE).pad(0.08f * UI_SCALE).row();
+
+        menuRows.add(new TextButton[]{keyBindingsButton, null});
+        menuActivators.add(new Runnable[]{openKeyBindings, null});
+        menuRows.add(new TextButton[]{audioButton, null});
+        menuActivators.add(new Runnable[]{openAudio, null});
+
+        return table;
+    }
+
+    private void buildKeyBindingsTable() {
         Table bindingsTable = new Table();
 
         bindingsTable.add();
@@ -145,46 +224,35 @@ public class OptionsScreen implements Disposable {
         for (Action action : Action.values()) {
             Label nameLabel = new Label(action.label, skin);
             TextButton keyButton = new TextButton(Input.Keys.toString(keyBindings.getKey(action)), skin);
-            keyButton.addListener(new ChangeListener() {
-                @Override
-                public void changed(ChangeEvent event, Actor actor) {
-                    startListening(action, keyButton);
-                }
-            });
+            Runnable listenKey = () -> startListening(action, keyButton);
+            onClick(keyButton, listenKey);
 
             bindingsTable.add(nameLabel).left().width(2.6f * UI_SCALE).height(0.4f * UI_SCALE).pad(0.06f * UI_SCALE);
             bindingsTable.add(keyButton).width(1.9f * UI_SCALE).height(0.4f * UI_SCALE).pad(0.06f * UI_SCALE);
             keyButtons.put(action, keyButton);
 
             TextButton gamepadButton = null;
+            Runnable listenGamepad = null;
             if (action.hasGamepadBinding()) {
                 gamepadButton = new TextButton(keyBindings.getGamepadButton(action).displayName, skin);
                 TextButton finalGamepadButton = gamepadButton;
-                gamepadButton.addListener(new ChangeListener() {
-                    @Override
-                    public void changed(ChangeEvent event, Actor actor) {
-                        startGamepadListening(action, finalGamepadButton);
-                    }
-                });
+                listenGamepad = () -> startGamepadListening(action, finalGamepadButton);
+                onClick(gamepadButton, listenGamepad);
                 bindingsTable.add(gamepadButton).width(1.9f * UI_SCALE).height(0.4f * UI_SCALE).pad(0.06f * UI_SCALE).row();
                 gamepadBindingButtons.put(action, gamepadButton);
             } else {
                 bindingsTable.add().width(1.9f * UI_SCALE).height(0.4f * UI_SCALE).pad(0.06f * UI_SCALE).row();
             }
-            rows.add(new TextButton[]{keyButton, gamepadButton});
-            rowAction.add(action);
+            keyBindingRows.add(new TextButton[]{keyButton, gamepadButton});
+            keyBindingActivators.add(new Runnable[]{listenKey, listenGamepad});
         }
 
         TextButton resetButton = new TextButton("Reset to Defaults", skin);
-        resetButton.addListener(new ChangeListener() {
-            @Override
-            public void changed(ChangeEvent event, Actor actor) {
-                resetToDefaults();
-            }
-        });
+        Runnable resetKeyBindings = this::resetKeyBindingsToDefaults;
+        onClick(resetButton, resetKeyBindings);
         bindingsTable.add(resetButton).colspan(3).padTop(0.4f * UI_SCALE).height(0.4f * UI_SCALE).row();
-        rows.add(new TextButton[]{resetButton, null});
-        rowAction.add(null);
+        keyBindingRows.add(new TextButton[]{resetButton, null});
+        keyBindingActivators.add(new Runnable[]{resetKeyBindings, null});
 
         bindingsScroll = new ScrollPane(bindingsTable);
         bindingsScroll.setScrollingDisabled(true, false);
@@ -196,19 +264,108 @@ public class OptionsScreen implements Disposable {
         // making a focused row look detached/misaligned from its neighbors until the animation
         // settles a few frames later. Disabled so scrollTo() takes effect immediately instead.
         bindingsScroll.setSmoothScrolling(false);
-        root.add(bindingsScroll).colspan(3).expand().fill().row();
+    }
 
-        Label backHint = new Label("Esc/Back - Back   D-Pad - Move   A - Select", skin);
-        root.add(backHint).colspan(3).padTop(0.35f * UI_SCALE);
+    private Table buildAudioTable() {
+        Table table = new Table();
 
-        root.addListener(new InputListener() {
+        musicValueLabel = new Label(volumeText(audioSettings.getMusicVolume()), skin);
+        sfxValueLabel = new Label(volumeText(audioSettings.getSfxVolume()), skin);
+
+        addVolumeRow(table, "Music Volume", musicValueLabel, audioSettings::getMusicVolume, audioSettings::setMusicVolume);
+        addVolumeRow(table, "Sound Effects", sfxValueLabel, audioSettings::getSfxVolume, audioSettings::setSfxVolume);
+
+        TextButton resetButton = new TextButton("Reset to Defaults", skin);
+        Runnable resetAudio = this::resetAudioToDefaults;
+        onClick(resetButton, resetAudio);
+        table.add(resetButton).colspan(4).padTop(0.4f * UI_SCALE).height(0.4f * UI_SCALE).row();
+        audioRows.add(new TextButton[]{resetButton, null});
+        audioActivators.add(new Runnable[]{resetAudio, null});
+
+        return table;
+    }
+
+    /** One "Name   -   80%   +" row, with the "-"/"+" buttons taking the same two focus columns
+     *  the Key Bindings page's Keyboard/Gamepad buttons occupy - so moveCol/moveRow work on this
+     *  page without any page-specific navigation logic. */
+    private void addVolumeRow(Table table, String name, Label valueLabel, Supplier<Float> get, Consumer<Float> set) {
+        TextButton minusButton = new TextButton("-", skin);
+        TextButton plusButton = new TextButton("+", skin);
+        Runnable decrease = () -> { set.accept(get.get() - VOLUME_STEP); valueLabel.setText(volumeText(get.get())); };
+        Runnable increase = () -> { set.accept(get.get() + VOLUME_STEP); valueLabel.setText(volumeText(get.get())); };
+        onClick(minusButton, decrease);
+        onClick(plusButton, increase);
+
+        table.add(new Label(name, skin)).left().width(2.6f * UI_SCALE).height(0.4f * UI_SCALE).pad(0.06f * UI_SCALE);
+        table.add(minusButton).width(0.7f * UI_SCALE).height(0.4f * UI_SCALE).pad(0.06f * UI_SCALE);
+        table.add(valueLabel).width(1.2f * UI_SCALE).height(0.4f * UI_SCALE).pad(0.06f * UI_SCALE);
+        table.add(plusButton).width(0.7f * UI_SCALE).height(0.4f * UI_SCALE).pad(0.06f * UI_SCALE).row();
+
+        audioRows.add(new TextButton[]{minusButton, plusButton});
+        audioActivators.add(new Runnable[]{decrease, increase});
+    }
+
+    private static String volumeText(float volume) {
+        return Math.round(volume * 100) + "%";
+    }
+
+    private void onClick(TextButton button, Runnable action) {
+        button.addListener(new ChangeListener() {
             @Override
-            public boolean keyDown(InputEvent event, int keycode) {
-                return handleKeyDown(keycode);
+            public void changed(ChangeEvent event, Actor actor) {
+                action.run();
             }
         });
+    }
 
-        return root;
+    private void switchPage(Page newPage) {
+        cancelListening();
+        cancelGamepadListening();
+        page = newPage;
+
+        boolean isMenu = newPage == Page.MENU;
+        boolean isBindings = newPage == Page.KEY_BINDINGS;
+        boolean isAudio = newPage == Page.AUDIO;
+
+        switch (newPage) {
+            case MENU:
+                subtitleLabel.setText("");
+                rows = menuRows;
+                rowActivators = menuActivators;
+                activeScroll = null;
+                break;
+            case KEY_BINDINGS:
+                subtitleLabel.setText("KEY BINDINGS");
+                rows = keyBindingRows;
+                rowActivators = keyBindingActivators;
+                activeScroll = bindingsScroll;
+                break;
+            case AUDIO:
+                subtitleLabel.setText("AUDIO");
+                rows = audioRows;
+                rowActivators = audioActivators;
+                activeScroll = null;
+                break;
+        }
+
+        menuTableVisibility(isMenu);
+        bindingsScroll.setVisible(isBindings);
+        bindingsScroll.setTouchable(isBindings ? Touchable.enabled : Touchable.disabled);
+        audioTableVisibility(isAudio);
+
+        focusedRow = -1;
+        focusedCol = 0;
+        setFocus(0, 0);
+    }
+
+    private void menuTableVisibility(boolean visible) {
+        menuTable.setVisible(visible);
+        menuTable.setTouchable(visible ? Touchable.enabled : Touchable.disabled);
+    }
+
+    private void audioTableVisibility(boolean visible) {
+        audioTable.setVisible(visible);
+        audioTable.setTouchable(visible ? Touchable.enabled : Touchable.disabled);
     }
 
     private void startListening(Action action, TextButton button) {
@@ -253,8 +410,10 @@ public class OptionsScreen implements Disposable {
                 cancelListening();
             } else if (gamepadListeningFor != null) {
                 cancelGamepadListening();
-            } else {
+            } else if (page == Page.MENU) {
                 backRequested = true;
+            } else {
+                switchPage(Page.MENU);
             }
             return true;
         }
@@ -299,8 +458,8 @@ public class OptionsScreen implements Disposable {
             newButton.setStyle(skin.get("focused", TextButton.TextButtonStyle.class));
         }
 
-        if (newButton.getWidth() > 0f) {
-            bindingsScroll.scrollTo(newButton.getX(), newButton.getY(), newButton.getWidth(), newButton.getHeight());
+        if (activeScroll != null && newButton.getWidth() > 0f) {
+            activeScroll.scrollTo(newButton.getX(), newButton.getY(), newButton.getWidth(), newButton.getHeight());
         }
     }
 
@@ -365,18 +524,11 @@ public class OptionsScreen implements Disposable {
 
     private void activateFocused() {
         if (focusedRow < 0) return;
-        Action action = rowAction.get(focusedRow);
-        TextButton button = rows.get(focusedRow)[focusedCol];
-        if (action == null) {
-            resetToDefaults();
-        } else if (focusedCol == 1) {
-            startGamepadListening(action, button);
-        } else {
-            startListening(action, button);
-        }
+        Runnable activator = rowActivators.get(focusedRow)[focusedCol];
+        if (activator != null) activator.run();
     }
 
-    private void resetToDefaults() {
+    private void resetKeyBindingsToDefaults() {
         keyBindings.resetToDefaults();
         for (Map.Entry<Action, TextButton> entry : keyButtons.entrySet()) {
             entry.getValue().setText(Input.Keys.toString(keyBindings.getKey(entry.getKey())));
@@ -384,6 +536,12 @@ public class OptionsScreen implements Disposable {
         for (Map.Entry<Action, TextButton> entry : gamepadBindingButtons.entrySet()) {
             entry.getValue().setText(keyBindings.getGamepadButton(entry.getKey()).displayName);
         }
+    }
+
+    private void resetAudioToDefaults() {
+        audioSettings.resetToDefaults();
+        musicValueLabel.setText(volumeText(audioSettings.getMusicVolume()));
+        sfxValueLabel.setText(volumeText(audioSettings.getSfxVolume()));
     }
 
     public void render(float delta) {
@@ -406,14 +564,17 @@ public class OptionsScreen implements Disposable {
     }
 
     /** Gamepad equivalent of the Escape-key handling in {@link #handleKeyDown}: cancels an
-     * in-progress key/button capture if one is active, otherwise requests leaving the screen. */
+     * in-progress key/button capture if one is active, steps back up one page level if one is
+     * open, otherwise requests leaving Options entirely. */
     public void handleControllerBackPressed() {
         if (listeningFor != null) {
             cancelListening();
         } else if (gamepadListeningFor != null) {
             cancelGamepadListening();
-        } else {
+        } else if (page == Page.MENU) {
             backRequested = true;
+        } else {
+            switchPage(Page.MENU);
         }
     }
 
@@ -421,6 +582,7 @@ public class OptionsScreen implements Disposable {
         backRequested = false;
         cancelListening();
         cancelGamepadListening();
+        switchPage(Page.MENU);
     }
 
     @Override

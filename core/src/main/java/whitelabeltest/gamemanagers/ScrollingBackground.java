@@ -7,15 +7,17 @@ import com.badlogic.gdx.video.VideoPlayer;
 import com.badlogic.gdx.video.VideoPlayerCreator;
 
 public class ScrollingBackground {
+    private final AudioSettings settings;
     private VideoPlayer videoPlayer;
     private final float worldWidth;
     private final float worldHeight;
     private boolean stopped;
     private boolean muted;
 
-    public ScrollingBackground(float worldWidth, float worldHeight) {
+    public ScrollingBackground(float worldWidth, float worldHeight, AudioSettings settings) {
         this.worldWidth = worldWidth;
         this.worldHeight = worldHeight;
+        this.settings = settings;
         startVideo();
     }
 
@@ -27,7 +29,7 @@ public class ScrollingBackground {
             String videoFile = "level1.webm";
             videoPlayer.load(Gdx.files.internal(videoFile));
             videoPlayer.setLooping(true);
-            videoPlayer.setVolume(muted ? 0f : 1f);
+            videoPlayer.setVolume(muted ? 0f : settings.getMusicVolume());
             videoPlayer.play();
         } catch (Exception e) {
             Gdx.app.error("Video", "Could not play background video file", e);
@@ -36,7 +38,7 @@ public class ScrollingBackground {
 
     public void setMuted(boolean muted) {
         this.muted = muted;
-        if (videoPlayer != null) videoPlayer.setVolume(muted ? 0f : 1f);
+        if (videoPlayer != null) videoPlayer.setVolume(muted ? 0f : settings.getMusicVolume());
     }
 
     /** Stops the background video (e.g. on game over) until reset() restarts it. */

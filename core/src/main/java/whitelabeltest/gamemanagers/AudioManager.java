@@ -9,6 +9,7 @@ import com.badlogic.gdx.utils.Json;
 import com.badlogic.gdx.utils.ObjectMap;
 
 public class AudioManager implements Disposable {
+    private final AudioSettings settings;
     private boolean muted;
 
     private final Sound playerDeathSound;
@@ -31,7 +32,8 @@ public class AudioManager implements Disposable {
     private final ObjectMap<Integer, Array<Sound>> orbitWeaponSounds;
     private final ObjectMap<Integer, Array<Sound>> thunderboltWeaponSounds;
 
-    public AudioManager() {
+    public AudioManager(AudioSettings settings) {
+        this.settings = settings;
         playerDeathSound = Gdx.audio.newSound(Gdx.files.internal("playerdeath.mp3"));
         bombSound = Gdx.audio.newSound(Gdx.files.internal("bombsound.mp3"));
         gameOverSound = Gdx.audio.newSound(Gdx.files.internal("gameover.mp3"));
@@ -92,23 +94,27 @@ public class AudioManager implements Disposable {
     public boolean isMuted() { return muted; }
 
     public void playPlayerDeath() {
-        if (!muted) playerDeathSound.play();
+        if (!muted) playerDeathSound.play(settings.getSfxVolume());
     }
 
     public void playBomb() {
-        if (!muted) bombSound.play();
+        if (!muted) bombSound.play(settings.getSfxVolume());
     }
 
     public void playGameOver() {
-        if (!muted) gameOverSound.play();
+        if (!muted) gameOverSound.play(settings.getSfxVolume());
     }
 
     public void playPowerup() {
-        if (!muted) powerupSound.play();
+        if (!muted) powerupSound.play(settings.getSfxVolume());
     }
 
     public void playVictory() {
-        if (!muted) victoryFanfare.play();
+        if (!muted) {
+            victoryFanfare.setVolume(settings.getSfxVolume());
+            victoryLoop.setVolume(settings.getSfxVolume());
+            victoryFanfare.play();
+        }
     }
 
     public void stopVictory() {
@@ -117,38 +123,38 @@ public class AudioManager implements Disposable {
     }
 
     public void playPointGem() {
-        if (!muted && pointGemSounds != null) pointGemSounds.get(1).random().play();
+        if (!muted && pointGemSounds != null) pointGemSounds.get(1).random().play(settings.getSfxVolume());
     }
 
     public void playExplosion() {
-        if (!muted && explosionSounds != null) explosionSounds.get(1).random().play();
+        if (!muted && explosionSounds != null) explosionSounds.get(1).random().play(settings.getSfxVolume());
     }
 
     public void playBasicWeaponSound(int level) {
-        if (!muted && basicWeaponSounds != null && basicWeaponSounds.containsKey(level)) basicWeaponSounds.get(level).random().play();
+        if (!muted && basicWeaponSounds != null && basicWeaponSounds.containsKey(level)) basicWeaponSounds.get(level).random().play(settings.getSfxVolume());
     }
 
     public void playWaveBlastWeaponSound(int level) {
-        if (!muted && waveBlastWeaponSounds != null && waveBlastWeaponSounds.containsKey(level)) waveBlastWeaponSounds.get(level).random().play();
+        if (!muted && waveBlastWeaponSounds != null && waveBlastWeaponSounds.containsKey(level)) waveBlastWeaponSounds.get(level).random().play(settings.getSfxVolume());
     }
 
     public void playOrbitWeaponSound(int level) {
-        if (!muted && orbitWeaponSounds != null && orbitWeaponSounds.containsKey(level)) orbitWeaponSounds.get(level).random().play();
+        if (!muted && orbitWeaponSounds != null && orbitWeaponSounds.containsKey(level)) orbitWeaponSounds.get(level).random().play(settings.getSfxVolume());
     }
 
     public void playThunderboltWeaponSound(int level) {
-        if (!muted && thunderboltWeaponSounds != null && thunderboltWeaponSounds.containsKey(level)) thunderboltWeaponSounds.get(level).random().play();
+        if (!muted && thunderboltWeaponSounds != null && thunderboltWeaponSounds.containsKey(level)) thunderboltWeaponSounds.get(level).random().play(settings.getSfxVolume());
     }
 
     /** Plays the tier-th (0-based) charge sound for ThunderboltWeapon's Hyper Attack bomb - see
      *  Player.updateThunderboltCharge, which calls this once per tier as the bomb climbs through
      *  THUNDERBOLT_CHARGE_DAMAGE, in order, rather than picking randomly like the sound banks above. */
     public void playThunderboltHyperLevel(int tier) {
-        if (!muted && tier >= 0 && tier < thunderboltHyperLevelSounds.length) thunderboltHyperLevelSounds[tier].play();
+        if (!muted && tier >= 0 && tier < thunderboltHyperLevelSounds.length) thunderboltHyperLevelSounds[tier].play(settings.getSfxVolume());
     }
 
     public void playThunderboltHyperExplosion() {
-        if (!muted) thunderboltHyperExplosionSound.play();
+        if (!muted) thunderboltHyperExplosionSound.play(settings.getSfxVolume());
     }
 
     @Override

@@ -75,14 +75,14 @@ public class GameController implements Disposable {
     private final int[] fpsHistory = new int[FPS_HISTORY_SECONDS];
     private float fpsHistoryTimer = 0f;
 
-    public GameController(float worldWidth, float worldHeight, KeyBindings keyBindings) {
+    public GameController(float worldWidth, float worldHeight, KeyBindings keyBindings, AudioSettings audioSettings) {
         this.worldWidth = worldWidth;
         this.worldHeight = worldHeight;
         this.assets = new AssetManager();
-        this.audio = new AudioManager();
+        this.audio = new AudioManager(audioSettings);
         this.entities = new EntityManager(assets, worldWidth, worldHeight);
         this.collisionManager = new CollisionManager();
-        this.background = new ScrollingBackground(worldWidth, worldHeight);
+        this.background = new ScrollingBackground(worldWidth, worldHeight, audioSettings);
         this.input = new InputManager(keyBindings);
 
         this.scoreManager = new ScoreManager();
