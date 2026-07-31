@@ -156,6 +156,6 @@ public class BasicWeapon extends BaseWeapon {
      *  snapping back into place. */
     @Override
     public void hyperAttack(Player player, Array<Weapon> activeWeapons, Array<Enemy> enemies, AssetManager assets, AudioManager audio) {
-        player.triggerBasicHyperAttack();
+        player.triggerBasicHyperAttack(audio);
     }
 }

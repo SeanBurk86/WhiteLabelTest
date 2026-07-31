@@ -53,20 +53,30 @@ public class Player {
     private final float haloDrawWidth, haloDrawHeight;
     private float haloAnimationTime = 0;
 
+    // BasicWeapon's Hyper Attack (see triggerBasicHyperAttack()): the halo swaps to this sprite
+    // for as long as it's detached out on Basic's business - not Thunderbolt's, which keeps the
+    // regular haloAnimation (see isBasicHaloDetached()).
+    private final Animation<TextureRegion> basicHaloDetachAnimation;
+    private final float basicHaloDetachDrawWidth, basicHaloDetachDrawHeight;
+
     // BasicWeapon's Hyper Attack (see BasicWeapon.hyperAttack/triggerBasicHyperAttack): the halo
     // launches forward a short distance, dealing damage to anything it clips along the way, then
     // rests there - detached from the player, firing BasicWeapon's own stream on its own cadence
     // for as long as it's detached - until Hyper Attack is pressed again, at which point it glides
     // back to wherever the player currently is instead of snapping there.
     private static final float HALO_DASH_DISTANCE = 4.2f;
-    private static final float HALO_DASH_SPEED = 9f;
+    private static final float HALO_DASH_SPEED = 14f;
     private static final float HALO_RETURN_SPEED = 6f;
+    // Basic's own re-press reattaches noticeably snappier than a fizzled recall (switching weapons
+    // away mid-flight - see recallHaloOnWeaponSwitch()) or Thunderbolt's return leg glides back at.
+    private static final float HALO_FAST_RETURN_SPEED = 14f;
     private static final float HALO_ARRIVE_EPSILON = 0.05f;
     private static final int HALO_DASH_DAMAGE = 30;
 
     private boolean haloDetached;
     private boolean haloDashing;
     private boolean haloReturning;
+    private boolean haloFastReturn;
     private float haloDetachedX, haloDetachedY;
     private float haloDashTargetY;
     private float haloFireTimer;
@@ -109,6 +119,12 @@ public class Player {
     private float grazeFlashTimer;
     private static final float GRAZE_FLASH_DURATION = 0.12f;
 
+    // BasicWeapon's Hyper Attack dash (see CollisionManager.checkHaloDashCollisions): flashes the
+    // halo red for a moment each time it lands a hit, the same way grazeFlashTimer flashes it blue
+    // on a graze.
+    private float haloBashFlashTimer;
+    private static final float HALO_BASH_FLASH_DURATION = 0.15f;
+
     private static final int MAX_WEAPON_LEVEL = 4;
     private static final float BLINK_INTERVAL = 0.1f;
 
@@ -141,6 +157,14 @@ public class Player {
         float haloAspect = (float) haloFrames[0].getRegionHeight() / haloFrames[0].getRegionWidth();
         haloDrawWidth = haloSprite.size;
         haloDrawHeight = haloSprite.size * haloAspect;
+
+        PlayerDefinition.SpriteDef basicHaloDetachSprite = playerDef.basicHaloDetach;
+        basicHaloDetachAnimation = AnimationCache.get(assets.basicHaloDetachTexture, basicHaloDetachSprite.columns > 0 ? basicHaloDetachSprite.columns : basicHaloDetachSprite.frameCount,
+            basicHaloDetachSprite.rows, basicHaloDetachSprite.frameCount, 1f / 24f, Animation.PlayMode.LOOP);
+        TextureRegion[] basicHaloDetachFrames = basicHaloDetachAnimation.getKeyFrames();
+        float basicHaloDetachAspect = (float) basicHaloDetachFrames[0].getRegionHeight() / basicHaloDetachFrames[0].getRegionWidth();
+        basicHaloDetachDrawWidth = basicHaloDetachSprite.size;
+        basicHaloDetachDrawHeight = basicHaloDetachSprite.size * basicHaloDetachAspect;
 
         // Initialize weapons using the new dynamic AssetManager - before the hitboxes below,
         // since updateHitbox() reads orbitWeapon's shield radius.
@@ -196,11 +220,12 @@ public class Player {
         animationTime += delta;
         haloAnimationTime += delta;
         if (grazeFlashTimer > 0) grazeFlashTimer -= delta;
+        if (haloBashFlashTimer > 0) haloBashFlashTimer -= delta;
         sprite.setRegion(animation.getKeyFrame(animationTime));
 
         if (input.isWeaponSwitchJustPressed()) {
             switchActiveSlot();
-            recallHaloOnWeaponSwitch();
+            recallHaloOnWeaponSwitch(audio);
         }
 
         handleMovement(delta, input.getMoveDirection(), input.isShooting());
@@ -208,7 +233,7 @@ public class Player {
         maintainOrbitRing(bullets, assets, input.isShooting());
         handleHyperAttack(input.isHyperAttackJustPressed(), bullets, enemies, assets, audio);
         updateThunderboltCharge(delta, input.isHyperAttackJustReleased(), audio);
-        updateHaloMovement(delta);
+        updateHaloMovement(delta, audio);
         updateHaloFiring(delta, input.isShooting(), bullets, assets, audio);
         updateHitbox();
         updateGrazeHitbox();
@@ -243,7 +268,7 @@ public class Player {
     /** Switching weapons recalls a still-detached halo immediately, interrupting an in-progress
      *  dash if needed, instead of leaving it stranded away from the player while a different
      *  weapon is equipped. No-op once it's already heading back. */
-    private void recallHaloOnWeaponSwitch() {
+    private void recallHaloOnWeaponSwitch(AudioManager audio) {
         if (!haloDetached || haloReturning) return;
         haloDashing = false;
         // Cancels a mid-flight Thunderbolt charge without detonating it - switching away is
@@ -251,6 +276,8 @@ public class Player {
         thunderboltMoving = false;
         thunderboltCharging = false;
         haloReturning = true;
+        haloFastReturn = !thunderboltHaloActive;
+        audio.playHaloReturn();
     }
 
     /** BasicWeapon's Hyper Attack (see BasicWeapon.hyperAttack), toggled by each press: while
@@ -258,7 +285,7 @@ public class Player {
      *  damage dealt along the way - where it then rests, detached, until this is called again,
      *  which starts it gliding back to the player instead of snapping there. Ignored mid-launch
      *  or mid-return so a rapid second press can't restart either motion. */
-    public void triggerBasicHyperAttack() {
+    public void triggerBasicHyperAttack(AudioManager audio) {
         if (!haloDetached) {
             haloDetached = true;
             haloDashing = true;
@@ -268,8 +295,11 @@ public class Player {
             haloDetachedX = attachedHaloX();
             haloDetachedY = attachedHaloY();
             haloDashTargetY = haloDetachedY + HALO_DASH_DISTANCE;
+            audio.playHaloDetach();
         } else if (!haloDashing && !haloReturning) {
             haloReturning = true;
+            haloFastReturn = true;
+            audio.playHaloReturn();
         }
     }
 
@@ -354,7 +384,7 @@ public class Player {
         }
     }
 
-    private void updateHaloMovement(float delta) {
+    private void updateHaloMovement(float delta, AudioManager audio) {
         if (!haloDetached) return;
 
         if (haloDashing) {
@@ -400,11 +430,13 @@ public class Player {
             float dx = targetX - haloDetachedX;
             float dy = targetY - haloDetachedY;
             float dist = (float) Math.sqrt(dx * dx + dy * dy);
-            float step = HALO_RETURN_SPEED * delta;
+            float step = (haloFastReturn ? HALO_FAST_RETURN_SPEED : HALO_RETURN_SPEED) * delta;
             if (dist <= Math.max(step, HALO_ARRIVE_EPSILON)) {
                 haloDetached = false;
                 haloReturning = false;
+                haloFastReturn = false;
                 thunderboltHaloActive = false;
+                audio.playHaloLatch();
             } else {
                 haloDetachedX += dx / dist * step;
                 haloDetachedY += dy / dist * step;
@@ -523,24 +555,34 @@ public class Player {
 
         // Halo drawn under the player sprite, centered on the player - unless BasicWeapon's Hyper
         // Attack has detached it, in which case it's wherever the dash/return motion currently
-        // has it instead (see triggerBasicHyperAttack()/updateHaloMovement()).
-        TextureRegion haloFrame = haloAnimation.getKeyFrame(haloAnimationTime);
+        // has it instead (see triggerBasicHyperAttack()/updateHaloMovement()), and it swaps to
+        // basicHaloDetachAnimation for as long as it's out on Basic's business specifically.
+        boolean basicHaloDetached = isBasicHaloDetached();
+        TextureRegion haloFrame = basicHaloDetached ? basicHaloDetachAnimation.getKeyFrame(haloAnimationTime) : haloAnimation.getKeyFrame(haloAnimationTime);
+        float haloDrawW = basicHaloDetached ? basicHaloDetachDrawWidth : haloDrawWidth;
+        float haloDrawH = basicHaloDetached ? basicHaloDetachDrawHeight : haloDrawHeight;
         float drawHaloX = getHaloX();
         float drawHaloY = getHaloY();
         boolean grazeFlashing = grazeFlashTimer > 0;
+        boolean bashFlashing = haloBashFlashTimer > 0;
+        // Bash-flash (red, on a Hyper Attack dash hit) takes priority over graze-flash (blue, on a
+        // grazed bullet) if both happen to be active at once.
+        float haloR = bashFlashing ? 1f : (grazeFlashing ? 0.3f : 1f);
+        float haloG = bashFlashing ? 0.15f : (grazeFlashing ? 0.6f : 1f);
+        float haloB = bashFlashing ? 0.15f : 1f;
 
         if (isInvincible) {
             boolean visible = ((int) (invincibilityTimer / BLINK_INTERVAL) % 2) == 0;
             float alpha = visible ? 1f : 0f;
-            batch.setColor(grazeFlashing ? 0.3f : 1f, grazeFlashing ? 0.6f : 1f, 1f, alpha);
-            batch.draw(haloFrame, drawHaloX, drawHaloY, haloDrawWidth, haloDrawHeight);
+            batch.setColor(haloR, haloG, haloB, alpha);
+            batch.draw(haloFrame, drawHaloX, drawHaloY, haloDrawW, haloDrawH);
             batch.setColor(1f, 1f, 1f, 1f);
             sprite.setAlpha(visible ? 1f : 0f);
             sprite.draw(batch);
             sprite.setAlpha(1f);
         } else {
-            batch.setColor(grazeFlashing ? 0.3f : 1f, grazeFlashing ? 0.6f : 1f, 1f, 1f);
-            batch.draw(haloFrame, drawHaloX, drawHaloY, haloDrawWidth, haloDrawHeight);
+            batch.setColor(haloR, haloG, haloB, 1f);
+            batch.draw(haloFrame, drawHaloX, drawHaloY, haloDrawW, haloDrawH);
             batch.setColor(1f, 1f, 1f, 1f);
             sprite.draw(batch);
         }
@@ -591,6 +633,7 @@ public class Player {
         haloDetached = false;
         haloDashing = false;
         haloReturning = false;
+        haloFastReturn = false;
         haloFireTimer = 0f;
         haloDashHitEnemies.clear();
         thunderboltHaloActive = false;
@@ -638,15 +681,19 @@ public class Player {
     public float getWidth() { return sprite.getWidth(); }
     public float getHeight() { return sprite.getHeight(); }
     public TextureRegion getCurrentFrame() { return sprite; }
-    public TextureRegion getHaloFrame() { return haloAnimation.getKeyFrame(haloAnimationTime); }
+    public TextureRegion getHaloFrame() { return isBasicHaloDetached() ? basicHaloDetachAnimation.getKeyFrame(haloAnimationTime) : haloAnimation.getKeyFrame(haloAnimationTime); }
     public float getHaloX() { return haloDetached ? haloDetachedX : attachedHaloX(); }
     public float getHaloY() { return haloDetached ? haloDetachedY : attachedHaloY(); }
     private float attachedHaloX() { return sprite.getX() + sprite.getWidth() / 2f - haloDrawWidth / 2f; }
     private float attachedHaloY() { return sprite.getY() + sprite.getHeight() / 2f - haloDrawHeight / 2f; }
     private float haloCenterX() { return haloDetachedX + haloDrawWidth / 2f; }
     private float haloCenterY() { return haloDetachedY + haloDrawHeight / 2f; }
-    public float getHaloWidth() { return haloDrawWidth; }
-    public float getHaloHeight() { return haloDrawHeight; }
+    public float getHaloWidth() { return isBasicHaloDetached() ? basicHaloDetachDrawWidth : haloDrawWidth; }
+    public float getHaloHeight() { return isBasicHaloDetached() ? basicHaloDetachDrawHeight : haloDrawHeight; }
+    // True while the halo is detached specifically on Basic's Hyper Attack business, as opposed to
+    // Thunderbolt's - both share the haloDetached flag (see triggerThunderboltHyperAttack()), but
+    // only Basic's swaps in basicHaloDetachAnimation for the halo's visual.
+    private boolean isBasicHaloDetached() { return haloDetached && !thunderboltHaloActive; }
     public Vector2 getBulletSpawnPoint() { return new Vector2(getCenterX(), sprite.getY() + bulletSpawnOffsetY); }
     public Weapon getWeaponPrototype() { return getCurrentWeapon(); }
     public int getActiveSlot() { return activeSlot; }
@@ -702,6 +749,10 @@ public class Player {
 
     public void triggerGrazeFlash() {
         grazeFlashTimer = GRAZE_FLASH_DURATION;
+    }
+
+    public void triggerHaloBashFlash() {
+        haloBashFlashTimer = HALO_BASH_FLASH_DURATION;
     }
 
     public void disableGrazeHitbox() {

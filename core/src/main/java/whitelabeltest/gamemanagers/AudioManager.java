@@ -17,6 +17,22 @@ public class AudioManager implements Disposable {
     private final Sound gameOverSound;
     private final Sound powerupSound;
     private final Sound gemPickupSound;
+    // BasicWeapon's Hyper Attack (see Player.triggerBasicHyperAttack): plays once, the moment the
+    // halo actually detaches from the ship to dash out - not on the re-press that starts its
+    // return trip.
+    private final Sound haloDetachSound;
+    // BasicWeapon's Hyper Attack dash (see CollisionManager.checkHaloDashCollisions): plays once
+    // per enemy the halo clips while dashing out.
+    private final Sound haloBashSound;
+    // BasicWeapon's Hyper Attack (see Player.triggerBasicHyperAttack/recallHaloOnWeaponSwitch):
+    // plays once, the moment the halo starts gliding back to reattach.
+    private final Sound haloReturnSound;
+    // Sound.play()'s instance id for the currently-playing haloReturnSound, so playHaloLatch() can
+    // stop that specific instance rather than every playing copy of the sound - see playHaloLatch().
+    private long haloReturnSoundId = -1;
+    // BasicWeapon's Hyper Attack (see Player.updateHaloMovement): plays once, the moment the halo
+    // finishes its glide back and reattaches to the ship.
+    private final Sound haloLatchSound;
     // ThunderboltWeapon's Hyper Attack (see Player.updateThunderboltCharge/CollisionManager.
     // checkThunderboltDetonation): one distinct sound per charge tier, played in a fixed order as
     // the bomb climbs through them - not a random pick from a pool like the per-weapon-level
@@ -39,6 +55,10 @@ public class AudioManager implements Disposable {
         gameOverSound = Gdx.audio.newSound(Gdx.files.internal("gameover.mp3"));
         powerupSound = Gdx.audio.newSound(Gdx.files.internal("powerup.mp3"));
         gemPickupSound = Gdx.audio.newSound(Gdx.files.internal("pointgem.mp3"));
+        haloDetachSound = Gdx.audio.newSound(Gdx.files.internal("halo_release.mp3"));
+        haloBashSound = Gdx.audio.newSound(Gdx.files.internal("halo_bash.mp3"));
+        haloReturnSound = Gdx.audio.newSound(Gdx.files.internal("halo_return.mp3"));
+        haloLatchSound = Gdx.audio.newSound(Gdx.files.internal("halo_latch.mp3"));
         thunderboltHyperLevelSounds = new Sound[] {
             Gdx.audio.newSound(Gdx.files.internal("thunderbolthyperlevel.wav")),
             Gdx.audio.newSound(Gdx.files.internal("thunderbolthyperlevel-001.wav")),
@@ -109,6 +129,29 @@ public class AudioManager implements Disposable {
         if (!muted) powerupSound.play(settings.getSfxVolume());
     }
 
+    public void playHaloDetach() {
+        if (!muted) haloDetachSound.play(settings.getSfxVolume());
+    }
+
+    public void playHaloBash() {
+        if (!muted) haloBashSound.play(settings.getSfxVolume());
+    }
+
+    public void playHaloReturn() {
+        if (!muted) haloReturnSoundId = haloReturnSound.play(settings.getSfxVolume());
+    }
+
+    /** Cuts off halo_return.mp3 if it's still playing from the start of this same return trip -
+     *  the two can otherwise overlap when the glide back is short/fast enough that the return cue
+     *  hasn't finished by the time the halo actually reattaches. */
+    public void playHaloLatch() {
+        if (haloReturnSoundId != -1) {
+            haloReturnSound.stop(haloReturnSoundId);
+            haloReturnSoundId = -1;
+        }
+        if (!muted) haloLatchSound.play(settings.getSfxVolume());
+    }
+
     public void playVictory() {
         if (!muted) {
             victoryFanfare.setVolume(settings.getSfxVolume());
@@ -164,6 +207,10 @@ public class AudioManager implements Disposable {
         gameOverSound.dispose();
         powerupSound.dispose();
         gemPickupSound.dispose();
+        haloDetachSound.dispose();
+        haloBashSound.dispose();
+        haloReturnSound.dispose();
+        haloLatchSound.dispose();
         for (Sound s : thunderboltHyperLevelSounds) s.dispose();
         thunderboltHyperExplosionSound.dispose();
         victoryFanfare.dispose();

@@ -250,6 +250,8 @@ public class CollisionManager {
             if (!Intersector.overlaps(haloHitbox, enemy.getRectangle())) continue;
 
             player.markHaloDamaged(enemy);
+            player.triggerHaloBashFlash();
+            audio.playHaloBash();
             scoreManager.registerWeaponHit(0.1f, 2.0f);
             if (enemy.takeDamage(player.getHaloDashDamage())) {
                 scoreManager.addScore(GameController.destroyEnemy(audio, entityManager, assets, worldWidth, worldHeight, enemy), 2.0f);

@@ -16,6 +16,7 @@ public class PlayerDefinition {
 
     public SpriteDef player;
     public SpriteDef playerHalo;
+    public SpriteDef basicHaloDetach;
     public SpriteDef playerDeath;
     public SpriteDef reflectShield;
 

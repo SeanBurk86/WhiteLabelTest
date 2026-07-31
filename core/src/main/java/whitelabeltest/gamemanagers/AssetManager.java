@@ -26,6 +26,7 @@ public class AssetManager implements Disposable {
     public final Texture playerTexture;
     public final Texture playerDeathTexture;
     public final Texture playerHaloTexture;
+    public final Texture basicHaloDetachTexture;
     public final Texture playerReflectShieldTexture;
     public final Texture bombSpriteTexture;
     public final Texture[] bulletCancelTextures;
@@ -77,6 +78,7 @@ public class AssetManager implements Disposable {
         playerTexture = new Texture(playerDefinition.player.texture);
         playerDeathTexture = new Texture(playerDefinition.playerDeath.texture);
         playerHaloTexture = new Texture(playerDefinition.playerHalo.texture);
+        basicHaloDetachTexture = new Texture(playerDefinition.basicHaloDetach.texture);
         playerReflectShieldTexture = new Texture(playerDefinition.reflectShield.texture);
         bombSpriteTexture = new Texture("BombSprite.png");
         bulletCancelTextures = new Texture[] {
@@ -191,6 +193,7 @@ public class AssetManager implements Disposable {
         playerTexture.dispose();
         playerDeathTexture.dispose();
         playerHaloTexture.dispose();
+        basicHaloDetachTexture.dispose();
         playerReflectShieldTexture.dispose();
         bombSpriteTexture.dispose();
         for (Texture t : bulletCancelTextures) t.dispose();
