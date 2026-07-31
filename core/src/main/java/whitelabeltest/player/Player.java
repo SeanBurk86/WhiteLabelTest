@@ -54,8 +54,8 @@ public class Player {
     private float haloAnimationTime = 0;
 
     // BasicWeapon's Hyper Attack (see triggerBasicHyperAttack()): the halo swaps to this sprite
-    // for as long as it's detached out on Basic's business - not Thunderbolt's, which keeps the
-    // regular haloAnimation (see isBasicHaloDetached()).
+    // for as long as it's detached out on Basic's business - not Thunderbolt's, which uses its own
+    // sprites instead (see resolveHaloVisual()).
     private final Animation<TextureRegion> basicHaloDetachAnimation;
     private final float basicHaloDetachDrawWidth, basicHaloDetachDrawHeight;
 
@@ -95,7 +95,25 @@ public class Player {
     private static final float THUNDERBOLT_HALO_MOVE_SPEED = 10f;
     private static final float THUNDERBOLT_CHARGE_LEVEL_TIME = 0.5f;
     private static final int[] THUNDERBOLT_CHARGE_DAMAGE = {32, 64, 128, 256};
+    // Blast radius grows with charge tier, same as damage does - level 4 (index 3) is the full
+    // radius the detonation has always used; levels 1-3 are smaller fractions of it.
     private static final float THUNDERBOLT_BLAST_RADIUS = 3.5f;
+    private static final float[] THUNDERBOLT_BLAST_RADII = {
+        THUNDERBOLT_BLAST_RADIUS * 0.25f,
+        THUNDERBOLT_BLAST_RADIUS * 0.5f,
+        THUNDERBOLT_BLAST_RADIUS * 0.75f,
+        THUNDERBOLT_BLAST_RADIUS,
+    };
+    // One animation per charge tier (ThunderHyperHaloShrink1-4.png, indexed by thunderboltChargeLevel)
+    // shown on the halo while it's out charging, plus a one-shot ThunderHaloBomb.png played in place
+    // once released - see resolveHaloVisual()/updateThunderboltDetonationAnim().
+    private final Animation<TextureRegion>[] thunderShrinkAnimations;
+    private final float[] thunderShrinkDrawWidth, thunderShrinkDrawHeight;
+    private final Animation<TextureRegion> thunderHaloBombAnimation;
+    // player.json's thunderHaloBomb.size is the sprite's size at the top charge tier (full
+    // THUNDERBOLT_BLAST_RADIUS) - resolveHaloVisual() scales it down by thunderboltDetonationVisualScale
+    // for lower tiers, so the drawn explosion always matches how big the actual blast was.
+    private final float thunderHaloBombDrawWidth, thunderHaloBombDrawHeight;
 
     private boolean thunderboltHaloActive;
     private boolean thunderboltMoving;
@@ -106,6 +124,22 @@ public class Player {
     private boolean thunderboltDetonationPending;
     private float thunderboltDetonationX, thunderboltDetonationY;
     private int thunderboltDetonationDamage;
+    private float thunderboltDetonationRadius;
+    // thunderboltDetonationRadius expressed as a fraction of THUNDERBOLT_BLAST_RADIUS - how much to
+    // scale thunderHaloBombDrawWidth/Height down by so the explosion sprite matches this particular
+    // detonation's actual (smaller-if-not-fully-charged) blast size - see resolveHaloVisual().
+    private float thunderboltDetonationVisualScale = 1f;
+    // True from the moment the charge is released until the ThunderHaloBomb animation finishes
+    // playing in place - see updateThunderboltDetonationAnim(). The area damage itself already
+    // applied the instant the charge was released (see CollisionManager.checkThunderboltDetonation);
+    // this only delays the halo's snap-back to the player so the explosion has a visual.
+    private boolean thunderboltDetonating;
+    private float thunderboltDetonationAnimTime;
+    // Set when Hyper Attack is pressed while thunderboltDetonating is still true (see
+    // handleHyperAttack()) - consumed by updateThunderboltDetonationAnim() the moment the halo
+    // reattaches, immediately starting Thunderbolt charging again instead of requiring a second,
+    // separately-timed press.
+    private boolean thunderboltHyperAttackBuffered;
 
     private float invincibleFrameTime = 2f;
     private float invincibilityTimer = 0f;
@@ -166,6 +200,29 @@ public class Player {
         basicHaloDetachDrawWidth = basicHaloDetachSprite.size;
         basicHaloDetachDrawHeight = basicHaloDetachSprite.size * basicHaloDetachAspect;
 
+        @SuppressWarnings("unchecked")
+        Animation<TextureRegion>[] shrinkAnims = new Animation[4];
+        float[] shrinkWidths = new float[4];
+        float[] shrinkHeights = new float[4];
+        PlayerDefinition.SpriteDef[] shrinkSprites = {
+            playerDef.thunderHyperHaloShrink1, playerDef.thunderHyperHaloShrink2,
+            playerDef.thunderHyperHaloShrink3, playerDef.thunderHyperHaloShrink4,
+        };
+        for (int i = 0; i < shrinkSprites.length; i++) {
+            float[] dims = new float[2];
+            shrinkAnims[i] = buildHaloAnimation(assets.thunderHyperHaloShrinkTextures[i], shrinkSprites[i], Animation.PlayMode.LOOP, dims);
+            shrinkWidths[i] = dims[0];
+            shrinkHeights[i] = dims[1];
+        }
+        thunderShrinkAnimations = shrinkAnims;
+        thunderShrinkDrawWidth = shrinkWidths;
+        thunderShrinkDrawHeight = shrinkHeights;
+
+        float[] bombDims = new float[2];
+        thunderHaloBombAnimation = buildHaloAnimation(assets.thunderHaloBombTexture, playerDef.thunderHaloBomb, Animation.PlayMode.NORMAL, bombDims);
+        thunderHaloBombDrawWidth = bombDims[0];
+        thunderHaloBombDrawHeight = bombDims[1];
+
         // Initialize weapons using the new dynamic AssetManager - before the hitboxes below,
         // since updateHitbox() reads orbitWeapon's shield radius.
         WeaponDefinition bDef = assets.getWeaponDefinition("BasicWeapon");
@@ -203,6 +260,19 @@ public class Player {
         isInvincible = false;
     }
 
+    /** Builds a player.json-driven halo animation the same way haloAnimation/basicHaloDetachAnimation
+     *  are built above, writing its {width, height} into dimsOut so callers can assign their own
+     *  final fields from it. */
+    private Animation<TextureRegion> buildHaloAnimation(Texture texture, PlayerDefinition.SpriteDef sprite, Animation.PlayMode mode, float[] dimsOut) {
+        Animation<TextureRegion> anim = AnimationCache.get(texture, sprite.columns > 0 ? sprite.columns : sprite.frameCount,
+            sprite.rows, sprite.frameCount, 1f / 24f, mode);
+        TextureRegion[] frames = anim.getKeyFrames();
+        float aspect = (float) frames[0].getRegionHeight() / frames[0].getRegionWidth();
+        dimsOut[0] = sprite.size;
+        dimsOut[1] = sprite.size * aspect;
+        return anim;
+    }
+
     public void update(float delta, InputManager input, AssetManager assets, AudioManager audio, Array<Weapon> bullets, Array<Enemy> enemies) {
         if (isDead) {
             deathTimer += delta;
@@ -233,6 +303,7 @@ public class Player {
         maintainOrbitRing(bullets, assets, input.isShooting());
         handleHyperAttack(input.isHyperAttackJustPressed(), bullets, enemies, assets, audio);
         updateThunderboltCharge(delta, input.isHyperAttackJustReleased(), audio);
+        updateThunderboltDetonationAnim(delta);
         updateHaloMovement(delta, audio);
         updateHaloFiring(delta, input.isShooting(), bullets, assets, audio);
         updateHitbox();
@@ -259,17 +330,26 @@ public class Player {
     // out on some other ability's business. Basic's own re-press still goes through, since that's
     // what reattaches it (see triggerBasicHyperAttack()); Thunderbolt has no re-press step of its
     // own since releasing the button is what detonates/recalls it (see updateThunderboltCharge()).
+    // A press that lands specifically while the ThunderHaloBomb animation is still playing out is
+    // buffered instead of dropped, so Thunderbolt immediately starts charging again the instant the
+    // halo reattaches - see updateThunderboltDetonationAnim().
     private void handleHyperAttack(boolean hyperAttackJustPressed, Array<Weapon> bullets, Array<Enemy> enemies, AssetManager assets, AudioManager audio) {
         if (!hyperAttackJustPressed) return;
+        if (thunderboltDetonating) {
+            thunderboltHyperAttackBuffered = true;
+            return;
+        }
         if (haloDetached && getCurrentWeapon() != basicWeapon) return;
         getCurrentWeapon().hyperAttack(this, bullets, enemies, assets, audio);
     }
 
     /** Switching weapons recalls a still-detached halo immediately, interrupting an in-progress
      *  dash if needed, instead of leaving it stranded away from the player while a different
-     *  weapon is equipped. No-op once it's already heading back. */
+     *  weapon is equipped. No-op once it's already heading back, or while the ThunderHaloBomb
+     *  animation is playing out - see updateThunderboltDetonationAnim(), which reattaches it on
+     *  its own moments later regardless. */
     private void recallHaloOnWeaponSwitch(AudioManager audio) {
-        if (!haloDetached || haloReturning) return;
+        if (!haloDetached || haloReturning || thunderboltDetonating) return;
         haloDashing = false;
         // Cancels a mid-flight Thunderbolt charge without detonating it - switching away is
         // treated as a fizzle, not a release.
@@ -335,10 +415,11 @@ public class Player {
      *  has wired up. Also watches for a release during the brief move-out (a quick tap, released
      *  before the halo ever reaches its charge position) - the charge timer never started ticking
      *  in that case, so it still detonates, just at the base tier, rather than silently swallowing
-     *  the release and leaving the halo charging forever with the button already let go. Snaps the
-     *  halo straight back onto the player on release - unlike Basic's dash, which glides back over
-     *  time (see haloReturning/updateHaloMovement) - since the detonation itself is the payoff
-     *  moment; there's no reason to keep the player waiting on a return flight afterward. */
+     *  the release and leaving the halo charging forever with the button already let go. Starts the
+     *  ThunderHaloBomb animation in place on release, rather than snapping the halo straight back
+     *  onto the player - see updateThunderboltDetonationAnim(), which handles the actual snap-back
+     *  once that animation finishes. The area damage itself still applies instantly, on release -
+     *  only the halo's visual return is delayed for the explosion. */
     private void updateThunderboltCharge(float delta, boolean hyperAttackJustReleased, AudioManager audio) {
         if (!thunderboltMoving && !thunderboltCharging) return;
 
@@ -357,11 +438,36 @@ public class Player {
             thunderboltDetonationX = haloCenterX();
             thunderboltDetonationY = haloCenterY();
             thunderboltDetonationDamage = THUNDERBOLT_CHARGE_DAMAGE[thunderboltChargeLevel];
+            thunderboltDetonationRadius = THUNDERBOLT_BLAST_RADII[thunderboltChargeLevel];
+            thunderboltDetonationVisualScale = thunderboltDetonationRadius / THUNDERBOLT_BLAST_RADIUS;
 
             thunderboltMoving = false;
             thunderboltCharging = false;
+            thunderboltDetonating = true;
+            thunderboltDetonationAnimTime = 0f;
+        }
+    }
+
+    /** Plays the ThunderHaloBomb animation once, in place at wherever the halo detonated, before
+     *  finally reattaching it to the player - see updateThunderboltCharge()'s release branch, which
+     *  starts this instead of reattaching immediately. If Hyper Attack was pressed while this was
+     *  still playing (see handleHyperAttack()'s thunderboltHyperAttackBuffered branch), immediately
+     *  starts Thunderbolt charging again the instant it reattaches - unless the player switched off
+     *  Thunderbolt in the meantime, in which case the buffered press is just dropped. */
+    private void updateThunderboltDetonationAnim(float delta) {
+        if (!thunderboltDetonating) return;
+
+        thunderboltDetonationAnimTime += delta;
+        if (thunderHaloBombAnimation.isAnimationFinished(thunderboltDetonationAnimTime)) {
+            thunderboltDetonating = false;
             haloDetached = false;
             thunderboltHaloActive = false;
+
+            boolean replay = thunderboltHyperAttackBuffered;
+            thunderboltHyperAttackBuffered = false;
+            if (replay && getCurrentWeapon() == thunderboltWeapon) {
+                triggerThunderboltHyperAttack();
+            }
         }
     }
 
@@ -444,8 +550,12 @@ public class Player {
         }
     }
 
+    // The weapon's focus-fire movement slowdown (getShootSpeedMultiplier()) also applies for as
+    // long as a Hyper Attack has the halo detached - Basic's dash/rest/return or Thunderbolt's
+    // move-out/charge/detonate - not just while actually holding Shoot, so aiming the halo's
+    // dash/charge position gets the same precision movement firing does.
     private void handleMovement(float delta, Vector2 moveDirection, boolean isShooting) {
-        float speed = isShooting ? movementSpeed * getCurrentWeapon().getShootSpeedMultiplier() : movementSpeed;
+        float speed = (isShooting || haloDetached) ? movementSpeed * getCurrentWeapon().getShootSpeedMultiplier() : movementSpeed;
         if (moveDirection.x != 0 || moveDirection.y != 0) {
             sprite.translateX(moveDirection.x * speed * delta);
             sprite.translateY(moveDirection.y * speed * delta);
@@ -553,16 +663,15 @@ public class Player {
             return;
         }
 
-        // Halo drawn under the player sprite, centered on the player - unless BasicWeapon's Hyper
-        // Attack has detached it, in which case it's wherever the dash/return motion currently
-        // has it instead (see triggerBasicHyperAttack()/updateHaloMovement()), and it swaps to
-        // basicHaloDetachAnimation for as long as it's out on Basic's business specifically.
-        boolean basicHaloDetached = isBasicHaloDetached();
-        TextureRegion haloFrame = basicHaloDetached ? basicHaloDetachAnimation.getKeyFrame(haloAnimationTime) : haloAnimation.getKeyFrame(haloAnimationTime);
-        float haloDrawW = basicHaloDetached ? basicHaloDetachDrawWidth : haloDrawWidth;
-        float haloDrawH = basicHaloDetached ? basicHaloDetachDrawHeight : haloDrawHeight;
-        float drawHaloX = getHaloX();
-        float drawHaloY = getHaloY();
+        // Halo drawn under the player sprite, centered on the player - unless a Hyper Attack has
+        // detached it, in which case it's wherever that ability's motion currently has it instead,
+        // and it swaps to that ability's own sprite - see resolveHaloVisual().
+        HaloVisual haloVisual = resolveHaloVisual();
+        TextureRegion haloFrame = haloVisual.frame;
+        float haloDrawW = haloVisual.width;
+        float haloDrawH = haloVisual.height;
+        float drawHaloX = haloDrawX(haloVisual);
+        float drawHaloY = haloDrawY(haloVisual);
         boolean grazeFlashing = grazeFlashTimer > 0;
         boolean bashFlashing = haloBashFlashTimer > 0;
         // Bash-flash (red, on a Hyper Attack dash hit) takes priority over graze-flash (blue, on a
@@ -643,6 +752,9 @@ public class Player {
         thunderboltChargeLevel = 0;
         thunderboltChargeSoundLevel = 0;
         thunderboltDetonationPending = false;
+        thunderboltDetonating = false;
+        thunderboltDetonationAnimTime = 0f;
+        thunderboltHyperAttackBuffered = false;
     }
 
     public Circle getHitbox() { return hitbox; }
@@ -657,13 +769,19 @@ public class Player {
     public float getThunderboltDetonationX() { return thunderboltDetonationX; }
     public float getThunderboltDetonationY() { return thunderboltDetonationY; }
     public int getThunderboltDetonationDamage() { return thunderboltDetonationDamage; }
-    public float getThunderboltBlastRadius() { return THUNDERBOLT_BLAST_RADIUS; }
+    // The radius actually applied on detonation, captured at release time alongside the damage/X/Y
+    // above - see CollisionManager.checkThunderboltDetonation.
+    public float getThunderboltDetonationRadius() { return thunderboltDetonationRadius; }
+    // The radius a release would detonate at *right now*, given the current charge tier - grows
+    // with thunderboltChargeLevel the same way the damage does (see THUNDERBOLT_BLAST_RADII),
+    // reaching THUNDERBOLT_BLAST_RADIUS only at the top tier. Used by the debug hitbox overlay
+    // (Main.drawDebug) to preview where/how big the blast will be.
+    public float getThunderboltBlastRadius() { return THUNDERBOLT_BLAST_RADII[thunderboltChargeLevel]; }
     public void clearPendingThunderboltDetonation() { thunderboltDetonationPending = false; }
     // True from the moment the bomb launches out until it detonates (moving out or holding
-    // position and charging) - i.e. for as long as a release would actually detonate it, since
-    // the blast radius itself doesn't change with charge tier - see debug hitbox overlay
-    // (Main.drawDebug), which uses this plus getHaloCenterX/Y/getThunderboltBlastRadius to show
-    // where the bomb will go off.
+    // position and charging) - i.e. for as long as a release would actually detonate it - see
+    // debug hitbox overlay (Main.drawDebug), which uses this plus
+    // getHaloCenterX/Y/getThunderboltBlastRadius to show where the bomb will go off.
     public boolean isThunderboltBombActive() { return thunderboltMoving || thunderboltCharging; }
     public float getHaloCenterX() { return haloCenterX(); }
     public float getHaloCenterY() { return haloCenterY(); }
@@ -681,19 +799,52 @@ public class Player {
     public float getWidth() { return sprite.getWidth(); }
     public float getHeight() { return sprite.getHeight(); }
     public TextureRegion getCurrentFrame() { return sprite; }
-    public TextureRegion getHaloFrame() { return isBasicHaloDetached() ? basicHaloDetachAnimation.getKeyFrame(haloAnimationTime) : haloAnimation.getKeyFrame(haloAnimationTime); }
-    public float getHaloX() { return haloDetached ? haloDetachedX : attachedHaloX(); }
-    public float getHaloY() { return haloDetached ? haloDetachedY : attachedHaloY(); }
+    public TextureRegion getHaloFrame() { return resolveHaloVisual().frame; }
+    public float getHaloX() { return haloDrawX(resolveHaloVisual()); }
+    public float getHaloY() { return haloDrawY(resolveHaloVisual()); }
+    // haloDetachedX/Y track the halo's logical center (via haloCenterX/Y below), not any particular
+    // sprite's bottom-left corner - the different Hyper Attack sprites (basicHaloDetach, the
+    // Thunderbolt shrink tiers, the bomb) all differ in size, so the actual draw-space bottom-left
+    // has to be re-derived from whichever one is currently active, or it'll render off-center from
+    // wherever the halo actually is (see resolveHaloVisual()).
+    private float haloDrawX(HaloVisual visual) { return haloDetached ? haloCenterX() - visual.width / 2f : attachedHaloX(); }
+    private float haloDrawY(HaloVisual visual) { return haloDetached ? haloCenterY() - visual.height / 2f : attachedHaloY(); }
     private float attachedHaloX() { return sprite.getX() + sprite.getWidth() / 2f - haloDrawWidth / 2f; }
     private float attachedHaloY() { return sprite.getY() + sprite.getHeight() / 2f - haloDrawHeight / 2f; }
     private float haloCenterX() { return haloDetachedX + haloDrawWidth / 2f; }
     private float haloCenterY() { return haloDetachedY + haloDrawHeight / 2f; }
-    public float getHaloWidth() { return isBasicHaloDetached() ? basicHaloDetachDrawWidth : haloDrawWidth; }
-    public float getHaloHeight() { return isBasicHaloDetached() ? basicHaloDetachDrawHeight : haloDrawHeight; }
-    // True while the halo is detached specifically on Basic's Hyper Attack business, as opposed to
-    // Thunderbolt's - both share the haloDetached flag (see triggerThunderboltHyperAttack()), but
-    // only Basic's swaps in basicHaloDetachAnimation for the halo's visual.
-    private boolean isBasicHaloDetached() { return haloDetached && !thunderboltHaloActive; }
+    public float getHaloWidth() { return resolveHaloVisual().width; }
+    public float getHaloHeight() { return resolveHaloVisual().height; }
+
+    private static final class HaloVisual {
+        final TextureRegion frame;
+        final float width, height;
+        HaloVisual(TextureRegion frame, float width, float height) {
+            this.frame = frame;
+            this.width = width;
+            this.height = height;
+        }
+    }
+
+    /** Picks which sprite the halo is currently wearing: the ThunderHaloBomb one-shot while its
+     *  detonation animation plays, the charge-tier ThunderHyperHaloShrink while Thunderbolt's Hyper
+     *  Attack has it out charging, basicHaloDetachAnimation while Basic's Hyper Attack has it out
+     *  dashing/resting/returning, or the regular attached haloAnimation otherwise - both Hyper
+     *  Attacks share the haloDetached flag itself (see triggerThunderboltHyperAttack()), so the
+     *  more specific states have to be checked first. */
+    private HaloVisual resolveHaloVisual() {
+        if (thunderboltDetonating) {
+            TextureRegion frame = thunderHaloBombAnimation.getKeyFrame(thunderboltDetonationAnimTime);
+            return new HaloVisual(frame, thunderHaloBombDrawWidth * thunderboltDetonationVisualScale, thunderHaloBombDrawHeight * thunderboltDetonationVisualScale);
+        }
+        if (thunderboltHaloActive) {
+            return new HaloVisual(thunderShrinkAnimations[thunderboltChargeLevel].getKeyFrame(haloAnimationTime), thunderShrinkDrawWidth[thunderboltChargeLevel], thunderShrinkDrawHeight[thunderboltChargeLevel]);
+        }
+        if (haloDetached) {
+            return new HaloVisual(basicHaloDetachAnimation.getKeyFrame(haloAnimationTime), basicHaloDetachDrawWidth, basicHaloDetachDrawHeight);
+        }
+        return new HaloVisual(haloAnimation.getKeyFrame(haloAnimationTime), haloDrawWidth, haloDrawHeight);
+    }
     public Vector2 getBulletSpawnPoint() { return new Vector2(getCenterX(), sprite.getY() + bulletSpawnOffsetY); }
     public Weapon getWeaponPrototype() { return getCurrentWeapon(); }
     public int getActiveSlot() { return activeSlot; }

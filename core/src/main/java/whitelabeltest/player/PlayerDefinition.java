@@ -17,6 +17,11 @@ public class PlayerDefinition {
     public SpriteDef player;
     public SpriteDef playerHalo;
     public SpriteDef basicHaloDetach;
+    public SpriteDef thunderHyperHaloShrink1;
+    public SpriteDef thunderHyperHaloShrink2;
+    public SpriteDef thunderHyperHaloShrink3;
+    public SpriteDef thunderHyperHaloShrink4;
+    public SpriteDef thunderHaloBomb;
     public SpriteDef playerDeath;
     public SpriteDef reflectShield;
 

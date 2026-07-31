@@ -271,7 +271,7 @@ public class CollisionManager {
 
         float originX = player.getThunderboltDetonationX();
         float originY = player.getThunderboltDetonationY();
-        Circle blast = new Circle(originX, originY, player.getThunderboltBlastRadius());
+        Circle blast = new Circle(originX, originY, player.getThunderboltDetonationRadius());
         int damage = player.getThunderboltDetonationDamage();
 
         Array<Vector2> hitPoints = new Array<>(false, 8);
