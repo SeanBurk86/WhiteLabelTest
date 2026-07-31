@@ -10,6 +10,7 @@ import whitelabeltest.enemy.Enemy;
 import whitelabeltest.enemy.ExplosionPatternDef;
 import whitelabeltest.enemy.PatternRegistry;
 import whitelabeltest.player.Player;
+import whitelabeltest.player.WeaponLoadout;
 import whitelabeltest.player.powerups.Powerup;
 import whitelabeltest.player.powerups.WeaponPowerup;
 
@@ -21,6 +22,10 @@ public class GameController implements Disposable {
     private final ScrollingBackground background;
     private final SpawnScheduler spawnScheduler;
     private final InputManager input;
+    // The starting weapon-slot pairing chosen on WeaponSelectScreen before this GameController was
+    // created - kept for reset() (debug restart, F9) to reapply on every restart within this run
+    // instead of forcing the player back through weapon selection.
+    private final WeaponLoadout loadout;
 
     private final ScoreManager scoreManager;
     private boolean gameOver;
@@ -75,9 +80,10 @@ public class GameController implements Disposable {
     private final int[] fpsHistory = new int[FPS_HISTORY_SECONDS];
     private float fpsHistoryTimer = 0f;
 
-    public GameController(float worldWidth, float worldHeight, KeyBindings keyBindings, AudioSettings audioSettings) {
+    public GameController(float worldWidth, float worldHeight, KeyBindings keyBindings, AudioSettings audioSettings, WeaponLoadout loadout) {
         this.worldWidth = worldWidth;
         this.worldHeight = worldHeight;
+        this.loadout = loadout;
         this.assets = new AssetManager();
         this.audio = new AudioManager(audioSettings);
         this.entities = new EntityManager(assets, worldWidth, worldHeight);
@@ -429,7 +435,7 @@ public class GameController implements Disposable {
         levelCompleteLivesMultiplier = 0;
         audio.stopVictory();
         patternPreviewer.close(entities);
-        entities.reset();
+        entities.reset(loadout);
         collisionManager.reset();
         background.reset();
         spawnScheduler.reset();

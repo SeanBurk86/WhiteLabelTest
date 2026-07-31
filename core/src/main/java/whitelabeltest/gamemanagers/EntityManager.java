@@ -10,6 +10,7 @@ import com.badlogic.gdx.utils.Array;
 import whitelabeltest.enemy.Enemy;
 import whitelabeltest.enemy.bullets.EnemyBullet;
 import whitelabeltest.player.Player;
+import whitelabeltest.player.WeaponLoadout;
 import whitelabeltest.player.powerups.Powerup;
 import whitelabeltest.player.weapons.GreenLightningBurst;
 import whitelabeltest.player.weapons.ThunderboltWeapon;
@@ -271,7 +272,7 @@ public class EntityManager {
         }
     }
 
-    public void reset() {
+    public void reset(WeaponLoadout loadout) {
         for (Enemy e : enemies) ObjectPools.freeEnemy(e);
         enemies.clear();
         for (Weapon b : bullets) ObjectPools.freeWeapon(b);
@@ -293,7 +294,7 @@ public class EntityManager {
         for (GreenLightningBurst b : greenLightningBursts) ObjectPools.freeGreenLightningBurst(b);
         greenLightningBursts.clear();
         trailSpawnTimer = 0f;
-        player.reset();
+        player.reset(loadout);
     }
 
     /** Debug-only: wipes every non-player entity so a spawn-schedule seek doesn't leave stale

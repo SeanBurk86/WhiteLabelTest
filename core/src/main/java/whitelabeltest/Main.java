@@ -23,15 +23,18 @@ import whitelabeltest.gamemanagers.GameController;
 import whitelabeltest.gamemanagers.InputType;
 import whitelabeltest.gamemanagers.KeyBindings;
 import whitelabeltest.gamemanagers.UIManager;
+import whitelabeltest.player.WeaponLoadout;
 import whitelabeltest.player.powerups.Powerup;
 import whitelabeltest.player.weapons.ThunderboltWeapon;
 import whitelabeltest.player.weapons.Weapon;
 
 public class Main extends ApplicationAdapter {
-    private enum AppState { START, OPTIONS, PLAYING }
+    private enum AppState { START, WEAPON_SELECT, OPTIONS, PLAYING }
 
     private AppState state = AppState.START;
     private StartScreen startScreen;
+    private WeaponSelectScreen weaponSelectScreen;
+    private InputType pendingInputType;
     private OptionsScreen optionsScreen;
     private KeyBindings keyBindings;
     private AudioSettings audioSettings;
@@ -68,9 +71,15 @@ public class Main extends ApplicationAdapter {
             InputType detected = startScreen.update(delta);
             drawStartScreen();
             if (detected != null) {
-                transitionToGame(detected);
+                transitionToWeaponSelect(detected);
             } else if (Gdx.input.isKeyJustPressed(Input.Keys.ESCAPE) || isControllerBackJustPressed()) {
                 transitionToOptions();
+            }
+        } else if (state == AppState.WEAPON_SELECT) {
+            WeaponLoadout chosen = weaponSelectScreen.update(delta);
+            drawWeaponSelectScreen();
+            if (chosen != null) {
+                transitionToGame(pendingInputType, chosen);
             }
         } else if (state == AppState.OPTIONS) {
             ScreenUtils.clear(Color.BLACK);
@@ -87,11 +96,19 @@ public class Main extends ApplicationAdapter {
         }
     }
 
-    private void transitionToGame(InputType inputType) {
+    private void transitionToWeaponSelect(InputType inputType) {
         startScreenConfirmSound = startScreen.getConfirmSound();
         startScreen.dispose();
         startScreen = null;
-        game = new GameController(PLAY_AREA_WIDTH, PLAY_AREA_HEIGHT, keyBindings, audioSettings);
+        pendingInputType = inputType;
+        weaponSelectScreen = new WeaponSelectScreen(PLAY_AREA_WIDTH, PLAY_AREA_HEIGHT);
+        state = AppState.WEAPON_SELECT;
+    }
+
+    private void transitionToGame(InputType inputType, WeaponLoadout loadout) {
+        weaponSelectScreen.dispose();
+        weaponSelectScreen = null;
+        game = new GameController(PLAY_AREA_WIDTH, PLAY_AREA_HEIGHT, keyBindings, audioSettings, loadout);
         game.setActiveInput(inputType);
         ui = new UIManager(inputType);
         state = AppState.PLAYING;
@@ -127,6 +144,15 @@ public class Main extends ApplicationAdapter {
         spriteBatch.setProjectionMatrix(viewport.getCamera().combined);
         spriteBatch.begin();
         startScreen.draw(spriteBatch);
+        spriteBatch.end();
+    }
+
+    private void drawWeaponSelectScreen() {
+        ScreenUtils.clear(Color.BLACK);
+        viewport.apply();
+        spriteBatch.setProjectionMatrix(viewport.getCamera().combined);
+        spriteBatch.begin();
+        weaponSelectScreen.draw(spriteBatch);
         spriteBatch.end();
     }
 
@@ -303,6 +329,7 @@ public class Main extends ApplicationAdapter {
     @Override
     public void dispose() {
         if (startScreen != null) startScreen.dispose();
+        if (weaponSelectScreen != null) weaponSelectScreen.dispose();
         if (optionsScreen != null) optionsScreen.dispose();
         if (startScreenConfirmSound != null) startScreenConfirmSound.dispose();
         if (game != null) game.dispose();

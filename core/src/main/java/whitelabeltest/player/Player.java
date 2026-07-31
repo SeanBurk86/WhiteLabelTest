@@ -706,15 +706,21 @@ public class Player {
         }
     }
 
-    public void reset() {
+    /** Starts (or restarts) a run with the given starting loadout - see WeaponSelectScreen, which
+     *  picks it before the run begins, and GameController, which holds onto it across debug
+     *  restarts so those don't force a re-pick. Only the two chosen weapons start at level 1 and
+     *  equipped; everything else (including WaveBlastWeapon, never a starting choice, and whichever
+     *  of Basic/Thunderbolt/Orbit wasn't picked) starts at level 0 and unequipped, same as any
+     *  weapon the player hasn't collected a powerup for yet. */
+    public void reset(WeaponLoadout loadout) {
         sprite.setPosition(worldWidth / 2f - sprite.getWidth() / 2f, 0);
         updateHitbox();
         updateGrazeHitbox();
-        basicWeapon.setLevel(1);
+        basicWeapon.setLevel(0);
         waveBlastWeapon.setLevel(0);
         orbitWeapon.setLevel(0);
         thunderboltWeapon.setLevel(0);
-        weaponSlots[0] = basicWeapon;
+        weaponSlots[0] = null;
         weaponSlots[1] = null;
         activeSlot = 0;
         basicWeapon.resetShootTimer();
@@ -731,6 +737,8 @@ public class Player {
         deathTimer = 0f;
         grazePoints = 0f;
         reattachHaloImmediately();
+        setSlotWeapon(0, loadout.slotAWeaponId);
+        setSlotWeapon(1, loadout.slotBWeaponId);
     }
 
     /** Snaps the halo straight back onto the player, canceling whatever hyper attack ability
