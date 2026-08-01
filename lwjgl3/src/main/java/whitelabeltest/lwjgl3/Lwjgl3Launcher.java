@@ -33,7 +33,14 @@ public class Lwjgl3Launcher {
 
         //// You can change these files; they are in lwjgl3/src/main/resources/ .
         //// They can also be loaded from the root of assets/ .
-        configuration.setWindowIcon("libgdx128.png", "libgdx64.png", "libgdx32.png", "libgdx16.png");
+        configuration.setWindowIcon("testskull128.png", "testskull64.png", "testskull32.png", "testskull16.png");
+
+        // Default OpenAL simultaneous-source limit (16) is too low for this game's overlapping
+        // sound effects (multi-bullet weapon fire, chained explosions, pickups) - once it's
+        // exhausted, OpenAL can't grant new sources and audio drops out instead of just skipping
+        // the one sound that didn't fit. Bumped well above what a busy moment realistically needs;
+        // buffer size/count left at their libGDX defaults (512, 9).
+        configuration.setAudioConfig(64, 512, 9);
 
         //// This could improve compatibility with Windows machines with buggy OpenGL drivers, Macs
         //// with Apple Silicon that have to emulate compatibility with OpenGL anyway, and more.
