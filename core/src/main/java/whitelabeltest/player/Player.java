@@ -308,7 +308,7 @@ public class Player {
         maintainOrbitRing(bullets, assets, input.isShooting());
         handleHyperAttack(input.isHyperAttackJustPressed(), bullets, enemies, assets, audio);
         updateThunderboltCharge(delta, input.isHyperAttackJustReleased(), audio);
-        updateThunderboltDetonationAnim(delta);
+        updateThunderboltDetonationAnim(delta, input.isHyperAttackHeld(), audio);
         updateHaloMovement(delta, audio);
         updateHaloFiring(delta, input.isShooting(), bullets, assets, audio);
         updateHitbox();
@@ -462,8 +462,13 @@ public class Player {
      *  starts this instead of reattaching immediately. If Hyper Attack was pressed while this was
      *  still playing (see handleHyperAttack()'s thunderboltHyperAttackBuffered branch), immediately
      *  starts Thunderbolt charging again the instant it reattaches - unless the player switched off
-     *  Thunderbolt in the meantime, in which case the buffered press is just dropped. */
-    private void updateThunderboltDetonationAnim(float delta) {
+     *  Thunderbolt in the meantime, in which case the buffered press is just dropped. That buffered
+     *  press was a single tap already completed (pressed and released) before this replay fires, so
+     *  if the button isn't still held right now, there's no future release edge left for
+     *  updateThunderboltCharge() to catch - detonating immediately at the base tier here instead
+     *  (same as its own "quick tap" handling) avoids leaving the bomb charging forever with nothing
+     *  left to end it. */
+    private void updateThunderboltDetonationAnim(float delta, boolean hyperAttackHeld, AudioManager audio) {
         if (!thunderboltDetonating) return;
 
         thunderboltDetonationAnimTime += delta;
@@ -476,6 +481,9 @@ public class Player {
             thunderboltHyperAttackBuffered = false;
             if (replay && getCurrentWeapon() == thunderboltWeapon) {
                 triggerThunderboltHyperAttack();
+                if (!hyperAttackHeld) {
+                    updateThunderboltCharge(0f, true, audio);
+                }
             }
         }
     }
