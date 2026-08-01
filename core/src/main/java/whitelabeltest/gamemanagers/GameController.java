@@ -334,15 +334,24 @@ public class GameController implements Disposable {
      *  window (see hitGraceTimer) expires unused. */
     private void applyPlayerHit() {
         scoreManager.breakChain();
-        if (entities.getPlayer().getNumLives() <= 0) {
+        Player player = entities.getPlayer();
+        if (player.getNumLives() <= 0) {
             gameOver = true;
             background.stop();
             audio.playGameOver();
         } else {
-            entities.getPlayer().setNumLives(entities.getPlayer().getNumLives() - 1);
-            entities.getPlayer().startDeath();
+            player.setNumLives(player.getNumLives() - 1);
+            float restoreX = player.getX();
+            float restoreY = player.getY();
+            player.startDeath();
             audio.playPlayerDeath();
             entities.destroyAllPlayerBullets();
+            // Dying just dropped both weapons to level 1 (see Player.resetWeaponsOnDeath()) - drop
+            // a powerup right where it happened that hands the lost level straight back, unless
+            // there wasn't one to lose (already at the level-1 floor).
+            if (player.getDeathRestoreLevel() > 1) {
+                spawnRestorePowerup(entities.getPowerups(), assets, player, restoreX, restoreY, worldWidth, worldHeight);
+            }
         }
     }
 
@@ -368,9 +377,9 @@ public class GameController implements Disposable {
         explosion.init(explosionPattern, centerX, centerY, enemy.getRectangle().width);
         entityManager.getExplosions().add(explosion);
 
-        String guaranteed = enemy.getGuaranteedPowerup();
-        if (guaranteed != null) {
-            spawnPowerup(entityManager.getPowerups(), assets, enemy.getRectangle().x, enemy.getRectangle().y, worldWidth, worldHeight, guaranteed);
+        Integer guaranteedTier = enemy.getGuaranteedPowerup();
+        if (guaranteedTier != null) {
+            spawnPowerup(entityManager.getPowerups(), assets, enemy.getRectangle().x, enemy.getRectangle().y, worldWidth, worldHeight, guaranteedTier);
         }
 
         int gemCount = enemy.getMaxHealth() / 10;
@@ -388,35 +397,47 @@ public class GameController implements Disposable {
         return scoreValue;
     }
 
-    private static final String[] POWERUP_WEAPON_IDS = {"BasicWeapon", "WaveBlastWeapon", "Thunderbolt", "OrbitWeapon"};
+    private static final int POWERUP_TIER_COUNT = 3;
 
-    private static int powerupChoiceForWeaponId(String weaponId) {
-        for (int i = 0; i < POWERUP_WEAPON_IDS.length; i++) {
-            if (POWERUP_WEAPON_IDS[i].equals(weaponId)) return i;
-        }
-        return POWERUP_WEAPON_IDS.length - 1;
+    // tier is 1-based; clamped defensively since a death-restore drop's level (see
+    // spawnRestorePowerup()) can exceed POWERUP_TIER_COUNT - it just reuses the biggest sprite in
+    // that case, there being no dedicated art past tier 3.
+    private static Texture powerupTextureForTier(AssetManager assets, int tier) {
+        int index = com.badlogic.gdx.math.MathUtils.clamp(tier, 1, POWERUP_TIER_COUNT) - 1;
+        return assets.powerupTierTextures[index];
     }
 
-    private static Texture powerupTextureForChoice(AssetManager assets, int choice) {
-        switch (choice) {
-            case 0: return assets.powerup1;
-            case 1: return assets.powerup2;
-            case 2: return assets.powerup3;
-            default: return assets.powerup4;
-        }
-    }
-
-    public static void spawnPowerup(Array<Powerup> powerups, AssetManager assets, float x, float y, float worldWidth, float worldHeight, String forcedType) {
+    /** Spawns a normal weapon-level powerup - forcedTier null picks a random tier 1-3, non-null
+     *  forces a specific one (e.g. a guaranteed drop - see Enemy.getGuaranteedPowerup()). Collecting
+     *  it levels up both currently equipped weapons at once by the tier amount - see
+     *  Player.levelUpEquippedWeapons()/WeaponPowerup.apply(). */
+    public static void spawnPowerup(Array<Powerup> powerups, AssetManager assets, float x, float y, float worldWidth, float worldHeight, Integer forcedTier) {
         WeaponPowerup wp = ObjectPools.weaponPowerupPool.obtain();
-        int choice = forcedType != null ? powerupChoiceForWeaponId(forcedType) : com.badlogic.gdx.math.MathUtils.random(0, POWERUP_WEAPON_IDS.length - 1);
-        wp.initWithType(powerupTextureForChoice(assets, choice), POWERUP_WEAPON_IDS[choice], x, y, worldWidth, worldHeight);
+        int tier = forcedTier != null ? com.badlogic.gdx.math.MathUtils.clamp(forcedTier, 1, POWERUP_TIER_COUNT)
+            : com.badlogic.gdx.math.MathUtils.random(1, POWERUP_TIER_COUNT);
+        wp.initWithAmount(powerupTextureForTier(assets, tier), tier, x, y, worldWidth, worldHeight);
         powerups.add(wp);
     }
 
-    /** Cycles a shot-but-not-collected powerup to the next weapon type in the pickup, in place. */
-    public static void cyclePowerupType(WeaponPowerup wp, AssetManager assets) {
-        int next = (powerupChoiceForWeaponId(wp.getWeaponId()) + 1) % POWERUP_WEAPON_IDS.length;
-        wp.setType(POWERUP_WEAPON_IDS[next], powerupTextureForChoice(assets, next));
+    /** Spawned in place of a normal drop when the player dies (see Player.startDeath()/
+     *  resetWeaponsOnDeath(), which floors both weapons to level 1 and captures the level lost) -
+     *  an ordinary additive level-up sized to add that lost amount back, same as a normal drop,
+     *  just not cyclable - see WeaponPowerup.initAsRestore(). Additive (rather than an absolute
+     *  "set to the old level") so it stacks correctly no matter whether the player collects it
+     *  before or after some other pickup in the meantime, instead of one clobbering the other. */
+    public static void spawnRestorePowerup(Array<Powerup> powerups, AssetManager assets, Player player, float x, float y, float worldWidth, float worldHeight) {
+        WeaponPowerup wp = ObjectPools.weaponPowerupPool.obtain();
+        int amount = player.getDeathRestoreLevel() - 1;
+        wp.initAsRestore(powerupTextureForTier(assets, amount), amount, x, y, worldWidth, worldHeight);
+        powerups.add(wp);
+    }
+
+    /** Cycles a shot-but-not-collected powerup to the next tier in place - a no-op for a
+     *  death-restore drop (see WeaponPowerup.isCyclable()), so a stray bullet can't shrink it. */
+    public static void cyclePowerupTier(WeaponPowerup wp, AssetManager assets) {
+        if (!wp.isCyclable()) return;
+        int next = (wp.getAmount() % POWERUP_TIER_COUNT) + 1;
+        wp.setAmount(next, powerupTextureForTier(assets, next));
     }
 
     public void draw(com.badlogic.gdx.graphics.g2d.SpriteBatch batch) {

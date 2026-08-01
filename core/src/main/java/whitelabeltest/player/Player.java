@@ -43,6 +43,11 @@ public class Player {
     private int numLives;
     private float grazePoints;
 
+    // The level resetWeaponsOnDeath() just floored both weapons down from, so the restore powerup
+    // GameController.applyPlayerHit() spawns at the death spot can be sized to add it back - see
+    // getDeathRestoreLevel().
+    private int deathRestoreLevel;
+
     private final Animation<TextureRegion> animation;
     private float animationTime = 0;
 
@@ -339,8 +344,12 @@ public class Player {
             thunderboltHyperAttackBuffered = true;
             return;
         }
-        if (haloDetached && getCurrentWeapon() != basicWeapon) return;
-        getCurrentWeapon().hyperAttack(this, bullets, enemies, assets, audio);
+        Weapon currentWeapon = getCurrentWeapon();
+        // Briefly true right after a death wipes both weapon slots (see resetWeaponsOnDeath()),
+        // until the restore powerup re-equips one - nothing to trigger a Hyper Attack with yet.
+        if (currentWeapon == null) return;
+        if (haloDetached && currentWeapon != basicWeapon) return;
+        currentWeapon.hyperAttack(this, bullets, enemies, assets, audio);
     }
 
     /** Switching weapons recalls a still-detached halo immediately, interrupting an in-progress
@@ -555,7 +564,11 @@ public class Player {
     // move-out/charge/detonate - not just while actually holding Shoot, so aiming the halo's
     // dash/charge position gets the same precision movement firing does.
     private void handleMovement(float delta, Vector2 moveDirection, boolean isShooting) {
-        float speed = (isShooting || haloDetached) ? movementSpeed * getCurrentWeapon().getShootSpeedMultiplier() : movementSpeed;
+        // No weapon at all briefly after a death wipe (see resetWeaponsOnDeath()) falls back to
+        // full movement speed rather than dereferencing a null current weapon.
+        Weapon currentWeapon = getCurrentWeapon();
+        float speed = (currentWeapon != null && (isShooting || haloDetached))
+            ? movementSpeed * currentWeapon.getShootSpeedMultiplier() : movementSpeed;
         if (moveDirection.x != 0 || moveDirection.y != 0) {
             sprite.translateX(moveDirection.x * speed * delta);
             sprite.translateY(moveDirection.y * speed * delta);
@@ -568,6 +581,8 @@ public class Player {
         advanceWeaponTimers(delta);
 
         Weapon currentWeapon = getCurrentWeapon();
+        // No weapon at all briefly after a death wipe - see resetWeaponsOnDeath().
+        if (currentWeapon == null) return;
         if (isShooting && currentWeapon.getShootTimer() > currentWeapon.getFireRate()) {
             currentWeapon.resetShootTimer();
 
@@ -739,6 +754,7 @@ public class Player {
         reattachHaloImmediately();
         setSlotWeapon(0, loadout.slotAWeaponId);
         setSlotWeapon(1, loadout.slotBWeaponId);
+        deathRestoreLevel = 0;
     }
 
     /** Snaps the halo straight back onto the player, canceling whatever hyper attack ability
@@ -858,17 +874,13 @@ public class Player {
     public int getActiveSlot() { return activeSlot; }
     public String getSlotWeaponId(int slot) { return weaponId(weaponSlots[slot]); }
 
-    /** Collecting a weapon powerup levels up that weapon type. If it isn't already equipped in
-     *  either slot, it's placed into the unequipped slot, replacing whatever weapon was there -
-     *  a weapon is never allowed to occupy both slots at once. */
-    public void levelUpWeapon(String weaponId) {
-        Weapon target = weaponById(weaponId);
-
-        if (target != null) {
-            target.setLevel(Math.min(target.getLevel() + 1, MAX_WEAPON_LEVEL));
-            if (weaponSlots[0] != target && weaponSlots[1] != target) {
-                weaponSlots[1 - activeSlot] = target;
-            }
+    /** A normal weapon powerup (see WeaponPowerup.apply()) levels up both currently equipped
+     *  weapons at once by the same amount, instead of a single specific weapon - there's no more
+     *  "collect this weapon's own powerup to equip/level it" path, so a slot left empty (only one
+     *  weapon equipped) is simply skipped rather than being filled. */
+    public void levelUpEquippedWeapons(int amount) {
+        for (Weapon w : weaponSlots) {
+            if (w != null) w.setLevel(Math.min(w.getLevel() + amount, MAX_WEAPON_LEVEL));
         }
     }
 
@@ -927,7 +939,23 @@ public class Player {
         invincibilityTimer = 0f;
         disableGrazeHitbox();
         reattachHaloImmediately();
+        resetWeaponsOnDeath();
     }
+
+    /** Dying strips both equipped weapons down to level 1 - still equipped, just back to their
+     *  base level - capturing the level being lost first, so GameController.applyPlayerHit() can
+     *  size a restore powerup to add it back (see getDeathRestoreLevel()). */
+    private void resetWeaponsOnDeath() {
+        deathRestoreLevel = Math.max(
+            weaponSlots[0] != null ? weaponSlots[0].getLevel() : 0,
+            weaponSlots[1] != null ? weaponSlots[1].getLevel() : 0);
+
+        for (Weapon w : weaponSlots) {
+            if (w != null) w.setLevel(1);
+        }
+    }
+
+    public int getDeathRestoreLevel() { return deathRestoreLevel; }
 
     public boolean isDead() { return isDead; }
 

@@ -35,7 +35,9 @@ public class AssetManager implements Disposable {
     public final Texture bulletTexture;
     public final Texture pixelTexture;
     public final Texture circleTexture;
-    public final Texture powerup1, powerup2, powerup3, powerup4;
+    // Index 0 = tier 1 (PowerUp1.png) ... index 2 = tier 3 (PowerUp3.png) - see WeaponPowerup's
+    // amount/GameController.powerupTextureForTier().
+    public final Texture[] powerupTierTextures;
     public final Texture pointGemTexture;
 
     public AssetManager() {
@@ -98,10 +100,11 @@ public class AssetManager implements Disposable {
             new Texture("BulletCancel05.png"),
         };
 
-        powerup1 = new Texture("RainPowerUp.png");
-        powerup2 = new Texture("ForcePowerUp.png");
-        powerup3 = new Texture("LightningPowerUp.png");
-        powerup4 = new Texture("MoonPowerUp.png");
+        powerupTierTextures = new Texture[] {
+            new Texture("PowerUp1.png"),
+            new Texture("PowerUp2.png"),
+            new Texture("PowerUp3.png"),
+        };
         pointGemTexture = new Texture("PointGem.png");
 
         Pixmap pixmap = new Pixmap(1, 1, Pixmap.Format.RGBA8888);
@@ -212,9 +215,6 @@ public class AssetManager implements Disposable {
         bulletTexture.dispose();
         pixelTexture.dispose();
         circleTexture.dispose();
-        powerup1.dispose();
-        powerup2.dispose();
-        powerup3.dispose();
-        powerup4.dispose();
+        for (Texture t : powerupTierTextures) t.dispose();
     }
 }

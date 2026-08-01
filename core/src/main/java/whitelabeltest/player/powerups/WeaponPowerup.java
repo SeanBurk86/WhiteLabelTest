@@ -23,10 +23,15 @@ public class WeaponPowerup implements Powerup {
     private final Rectangle rectangle;
     private final Vector2 velocity = new Vector2();
     private float worldWidth, worldHeight;
-    private String weaponId; // Changed from Class to String to match the new ID-based system
 
-    private float lifeTime = 0;
-    private final float maxLifeTime = 8.0f;
+    // How many levels this adds to both equipped weapons at once on pickup (see
+    // Player.levelUpEquippedWeapons()) - same for a normal drop and a death-restore drop (see
+    // initAsRestore()); the latter is just a non-cyclable drop sized to whatever death took away.
+    private int amount;
+    // False only for a death-restore drop - see GameController.cyclePowerupTier(), which no-ops
+    // for one of these rather than letting a stray bullet shrink the guaranteed restore amount.
+    private boolean cyclable = true;
+
     private float cycleCooldownTimer = 0f;
 
     public WeaponPowerup() {
@@ -52,7 +57,6 @@ public class WeaponPowerup implements Powerup {
         sprite.setColor(1, 1, 1, 1);
         sprite.setRotation(0);
 
-        this.lifeTime = 0;
         this.cycleCooldownTimer = CYCLE_COOLDOWN;
         this.rectangle.set(sprite.getX(), sprite.getY(), sprite.getWidth(), sprite.getHeight());
 
@@ -61,18 +65,32 @@ public class WeaponPowerup implements Powerup {
         }
     }
 
-    public void initWithType(Texture texture, String weaponId, float x, float y, float worldWidth, float worldHeight) {
-        this.weaponId = weaponId;
+    /** A normal weapon-level pickup - adds `amount` levels (1-3, see GameController's tier
+     *  textures) to both currently equipped weapons on pickup (see Player.levelUpEquippedWeapons()). */
+    public void initWithAmount(Texture texture, int amount, float x, float y, float worldWidth, float worldHeight) {
+        this.amount = amount;
+        this.cyclable = true;
         init(texture, x, y, worldWidth, worldHeight);
     }
 
-    public String getWeaponId() {
-        return weaponId;
+    /** The pickup GameController.applyPlayerHit() spawns at the death spot: adds back the levels
+     *  death's floor-to-1 just took away (see Player.resetWeaponsOnDeath()) - an ordinary additive
+     *  level-up like initWithAmount(), just not cyclable, so a stray bullet can't shrink it, and so
+     *  it stacks correctly with any other pickup collected before or after it instead of clobbering
+     *  whichever arrived second with a flat "restore to X" that ignored the other's gain. */
+    public void initAsRestore(Texture texture, int amount, float x, float y, float worldWidth, float worldHeight) {
+        this.amount = amount;
+        this.cyclable = false;
+        init(texture, x, y, worldWidth, worldHeight);
     }
 
-    /** Swaps this pickup to a different weapon type in place, keeping its current position/velocity/lifetime. */
-    public void setType(String weaponId, Texture texture) {
-        this.weaponId = weaponId;
+    public int getAmount() { return amount; }
+    public boolean isCyclable() { return cyclable; }
+
+    /** Swaps this shot-but-not-collected pickup to a different tier in place, keeping its current
+     *  position/velocity - see GameController.cyclePowerupTier(). */
+    public void setAmount(int amount, Texture texture) {
+        this.amount = amount;
         animation = AnimationCache.get(texture, FRAME_COLUMNS, FRAME_ROWS, FRAME_COUNT, FRAME_DURATION, Animation.PlayMode.LOOP);
         animationTime = 0;
         sprite.setRegion(animation.getKeyFrame(0));
@@ -88,7 +106,6 @@ public class WeaponPowerup implements Powerup {
 
     @Override
     public void update(float delta) {
-        lifeTime += delta;
         if (cycleCooldownTimer > 0f) cycleCooldownTimer -= delta;
         animationTime += delta;
         sprite.setRegion(animation.getKeyFrame(animationTime));
@@ -118,9 +135,11 @@ public class WeaponPowerup implements Powerup {
         if (sprite != null) sprite.draw(batch);
     }
 
+    // No longer time-limited - a dropped weapon powerup stays on screen (bouncing off the world
+    // edges, see update()) until collected. Bounds check kept only as a pooling safety net.
     @Override
     public boolean isOffScreen() {
-        return lifeTime >= maxLifeTime || sprite.getY() < -sprite.getHeight() || sprite.getY() > worldHeight + sprite.getHeight()
+        return sprite.getY() < -sprite.getHeight() || sprite.getY() > worldHeight + sprite.getHeight()
                || sprite.getX() + sprite.getWidth() < 0f || sprite.getX() > worldWidth;
     }
 
@@ -131,16 +150,16 @@ public class WeaponPowerup implements Powerup {
 
     @Override
     public void apply(Player player) {
-        player.levelUpWeapon(weaponId);
+        player.levelUpEquippedWeapons(amount);
     }
 
     @Override
     public void reset() {
         if (sprite != null) sprite.setRotation(0);
-        lifeTime = 0;
         animationTime = 0;
         cycleCooldownTimer = 0f;
         velocity.setZero();
-        weaponId = null;
+        amount = 0;
+        cyclable = true;
     }
 }

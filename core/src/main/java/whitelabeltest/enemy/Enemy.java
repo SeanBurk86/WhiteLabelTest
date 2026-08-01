@@ -39,8 +39,10 @@ public interface Enemy extends Pool.Poolable {
     default boolean isDying() { return false; }
 
 
-    void setGuaranteedPowerup(String powerupType);
-    String getGuaranteedPowerup();
+    // The guaranteed weapon-powerup tier (1-3, see GameController.spawnPowerup()) this enemy drops
+    // on death, or null for no guarantee.
+    void setGuaranteedPowerup(Integer powerupTier);
+    Integer getGuaranteedPowerup();
 
 
     void setInvertMovement(boolean invert);

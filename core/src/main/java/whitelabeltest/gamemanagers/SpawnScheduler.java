@@ -17,7 +17,9 @@ public class SpawnScheduler {
         public String type;
         public float x = Float.NaN;
         public float y = Float.NaN;
-        public String powerup;
+        // Guaranteed weapon-powerup tier (1-3) this spawn drops on death - see
+        // Enemy.setGuaranteedPowerup()/GameController.spawnPowerup(). Null means no guarantee.
+        public Integer powerup;
         public boolean inverseMovement = false;
         public boolean spawned = false;
 

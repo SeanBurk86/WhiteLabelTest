@@ -21,7 +21,7 @@ public abstract class BaseEnemy implements Enemy {
     protected Rectangle rectangle;
     protected int health;
     protected int maxHealth;
-    protected String guaranteedPowerup;
+    protected Integer guaranteedPowerup;
     protected float worldWidth, worldHeight;
     protected boolean invertMovement; // Added field to store inversion state
     protected boolean rotateWithMovement = true;
@@ -267,12 +267,12 @@ public abstract class BaseEnemy implements Enemy {
     }
 
     @Override
-    public void setGuaranteedPowerup(String type) {
-        this.guaranteedPowerup = type;
+    public void setGuaranteedPowerup(Integer tier) {
+        this.guaranteedPowerup = tier;
     }
 
     @Override
-    public String getGuaranteedPowerup() {
+    public Integer getGuaranteedPowerup() {
         return guaranteedPowerup;
     }
 
