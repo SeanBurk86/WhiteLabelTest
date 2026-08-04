@@ -21,7 +21,7 @@ public class ThunderboltWeapon extends BaseWeapon {
     private static final float FADE_DURATION = 0.7f;
     private static final float HITBOX_GROWTH_PER_LEVEL = 0.75f;
     private static final float MISS_BOLT_THICKNESS = 0.0625f;
-    private static final float HIT_BOLT_THICKNESS = 0.33f;
+    private static final float HIT_BOLT_THICKNESS = 0.5f;
     private static final float FORK_ALPHA_SCALE = 0.75f;
     private static final float MISS_ALPHA_SCALE = 0.75f;
     private static final float MISS_WIDTH_FALLOFF = 0.75f;
@@ -39,6 +39,14 @@ public class ThunderboltWeapon extends BaseWeapon {
     private static final float CORE_ALPHA_SCALE = 1.0f;
     private static final float CORE_WIDTH_SCALE = 0.5f;
 
+    // Same hue as the additive glow, just driven far down in value, and drawn with normal alpha
+    // blending (see drawOutline()) instead of GL_MAX - MAX can only brighten a pixel, so against a
+    // light background (bg1.png) a "darker" additive layer would just lose to the background and
+    // vanish. This layer is what actually reads as dark, visible contrast there.
+    private static final float OUTLINE_WIDTH_SCALE = 2.4f;
+    private static final float OUTLINE_COLOR_R = 0.12f, OUTLINE_COLOR_G = 0.02f, OUTLINE_COLOR_B = 0.02f;
+    private static final float OUTLINE_ALPHA_SCALE = 0.6f;
+
     private static final float FADE_BLUR_GROWTH = 2.0f;
 
     private static final float NOISE_AMPLITUDE = 0.04f;
@@ -46,7 +54,10 @@ public class ThunderboltWeapon extends BaseWeapon {
     private static final float NOISE_SPEED_2 = 23f;
 
     private static final int SPRITES_PER_LAYER = 5;
-    private static final int LAYER_COUNT = 3;
+    // Layers 0-2 (outer glow, inner glow, core) are additive/GL_MAX; layer 3 (outline) is normal
+    // alpha blend - see drawOutline()/drawGlowAndCore() for why they're drawn in separate passes.
+    private static final int LAYER_COUNT = 4;
+    private static final int OUTLINE_LAYER_OFFSET = SPRITES_PER_LAYER * 3;
     private static final int SPRITES_PER_SEGMENT = SPRITES_PER_LAYER * LAYER_COUNT;
 
     // ThunderboltWeapon's Hyper Attack: see Player.triggerThunderboltHyperAttack for the halo's
@@ -195,6 +206,7 @@ public class ThunderboltWeapon extends BaseWeapon {
         prepareLayer(base);
         prepareLayer(base + SPRITES_PER_LAYER);
         prepareLayer(base + SPRITES_PER_LAYER * 2);
+        prepareLayer(base + OUTLINE_LAYER_OFFSET);
 
         repositionSegment(i, fadeProgress());
     }
@@ -245,33 +257,37 @@ public class ThunderboltWeapon extends BaseWeapon {
         float midX = (x1 + x2) / 2f + perpX * wobble;
         float midY = (y1 + y2) / 2f + perpY * wobble;
 
-        // Every layer is drawn with a MAX blend equation (see draw()) so overlapping joints -
-        // e.g. where one segment's end cap sits on top of the next segment's start cap - don't
-        // compound into a brighter seam the way normal alpha blending would; max(a, a) is just a,
-        // no matter how many times the same spot gets drawn. MAX ignores blend factors entirely,
-        // so the fade has to be baked into RGB brightness instead of the alpha channel. The glow
-        // layers also spread wider as they fade (blurScale), a cheap stand-in for a real blur.
+        // The three glow/core layers are drawn with a MAX blend equation (see draw()) so
+        // overlapping joints - e.g. where one segment's end cap sits on top of the next segment's
+        // start cap - don't compound into a brighter seam the way normal alpha blending would;
+        // max(a, a) is just a, no matter how many times the same spot gets drawn. MAX ignores
+        // blend factors entirely, so their fade has to be baked into RGB brightness instead of the
+        // alpha channel. The glow layers also spread wider as they fade (blurScale), a cheap
+        // stand-in for a real blur. The outline layer is normal alpha blend instead (see
+        // drawOutline()), so its fade is carried in the alpha channel like usual.
         float blurScale = 1f + FADE_BLUR_GROWTH * t;
         float coreBrightness = baseAlpha * CORE_ALPHA_SCALE;
 
         int base = i * SPRITES_PER_SEGMENT;
         positionLayer(base, x1, y1, midX, midY, x2, y2, width * GLOW_OUTER_WIDTH_SCALE * blurScale,
-            baseAlpha, OUTER_TINT_G * baseAlpha, OUTER_TINT_B * baseAlpha);
+            baseAlpha, OUTER_TINT_G * baseAlpha, OUTER_TINT_B * baseAlpha, 1f);
         positionLayer(base + SPRITES_PER_LAYER, x1, y1, midX, midY, x2, y2, width * GLOW_INNER_WIDTH_SCALE * blurScale,
-            baseAlpha, INNER_TINT_G * baseAlpha, INNER_TINT_B * baseAlpha);
+            baseAlpha, INNER_TINT_G * baseAlpha, INNER_TINT_B * baseAlpha, 1f);
         positionLayer(base + SPRITES_PER_LAYER * 2, x1, y1, midX, midY, x2, y2, width * CORE_WIDTH_SCALE,
-            coreBrightness, coreBrightness, coreBrightness);
+            coreBrightness, coreBrightness, coreBrightness, 1f);
+        positionLayer(base + OUTLINE_LAYER_OFFSET, x1, y1, midX, midY, x2, y2, width * OUTLINE_WIDTH_SCALE * blurScale,
+            OUTLINE_COLOR_R, OUTLINE_COLOR_G, OUTLINE_COLOR_B, baseAlpha * OUTLINE_ALPHA_SCALE);
     }
 
-    private void positionLayer(int base, float x1, float y1, float midX, float midY, float x2, float y2, float width, float r, float g, float b) {
-        positionHalf(base, x1, y1, midX, midY, width, r, g, b);
-        positionHalf(base + 1, midX, midY, x2, y2, width, r, g, b);
-        positionCap(base + 2, x1, y1, width, r, g, b);
-        positionCap(base + 3, midX, midY, width, r, g, b);
-        positionCap(base + 4, x2, y2, width, r, g, b);
+    private void positionLayer(int base, float x1, float y1, float midX, float midY, float x2, float y2, float width, float r, float g, float b, float a) {
+        positionHalf(base, x1, y1, midX, midY, width, r, g, b, a);
+        positionHalf(base + 1, midX, midY, x2, y2, width, r, g, b, a);
+        positionCap(base + 2, x1, y1, width, r, g, b, a);
+        positionCap(base + 3, midX, midY, width, r, g, b, a);
+        positionCap(base + 4, x2, y2, width, r, g, b, a);
     }
 
-    private void positionHalf(int spriteIndex, float ax, float ay, float bx, float by, float width, float r, float g, float b) {
+    private void positionHalf(int spriteIndex, float ax, float ay, float bx, float by, float width, float r, float g, float b, float a) {
         Sprite bolt = bolts.get(spriteIndex);
         float dx = bx - ax, dy = by - ay;
         float dist = Math.max((float) Math.sqrt(dx * dx + dy * dy), 0.01f);
@@ -280,16 +296,16 @@ public class ThunderboltWeapon extends BaseWeapon {
         bolt.setOrigin(width / 2f, 0f);
         bolt.setPosition(ax - width / 2f, ay);
         bolt.setRotation((float) Math.toDegrees(Math.atan2(dy, dx)) - 90f);
-        bolt.setColor(r, g, b, 1f);
+        bolt.setColor(r, g, b, a);
     }
 
-    private void positionCap(int spriteIndex, float cx, float cy, float width, float r, float g, float b) {
+    private void positionCap(int spriteIndex, float cx, float cy, float width, float r, float g, float b, float a) {
         Sprite bolt = bolts.get(spriteIndex);
         bolt.setSize(width, width);
         bolt.setOrigin(width / 2f, width / 2f);
         bolt.setPosition(cx - width / 2f, cy - width / 2f);
         bolt.setRotation(0f);
-        bolt.setColor(r, g, b, 1f);
+        bolt.setColor(r, g, b, a);
     }
 
     @Override
@@ -302,30 +318,49 @@ public class ThunderboltWeapon extends BaseWeapon {
         }
     }
 
-    /** Draws just this strike's sprites, with no blend-state changes of its own - callers that
-     *  have several active strikes (the common case: a level-4 fire spawns up to 6 at once) must
-     *  wrap the whole batch of them in a single GL_MAX blend section themselves (see
-     *  EntityManager.drawThunderboltBolts), so the flush()/glBlendEquation() cost - each a forced
-     *  GPU sync point - is paid once per frame instead of once per strike. */
-    public void drawBolts(SpriteBatch batch) {
-        int spriteCount = segCount * SPRITES_PER_SEGMENT;
-        for (int i = 0; i < spriteCount; i++) {
-            bolts.get(i).draw(batch);
+    /** Draws just this strike's dark outline layer, with no blend-state changes of its own - it
+     *  needs normal alpha blending (not the glow/core layers' GL_MAX), so callers must draw it
+     *  before opening a GL_MAX section. See EntityManager.drawThunderboltBolts for the batched
+     *  multi-strike version this exists for. */
+    public void drawOutline(SpriteBatch batch) {
+        for (int i = 0; i < segCount; i++) {
+            int base = i * SPRITES_PER_SEGMENT + OUTLINE_LAYER_OFFSET;
+            for (int k = 0; k < SPRITES_PER_LAYER; k++) {
+                bolts.get(base + k).draw(batch);
+            }
         }
     }
 
-    /** Self-contained fallback for callers that draw a single strike in isolation - wraps
-     *  drawBolts() in its own GL_MAX blend section. EntityManager doesn't use this path; it calls
-     *  drawBolts() directly inside one shared section instead (see drawThunderboltBolts). */
+    /** Draws just this strike's outer glow, inner glow, and core sprites, with no blend-state
+     *  changes of its own - callers that have several active strikes (the common case: a level-4
+     *  fire spawns up to 6 at once) must wrap the whole batch of them in a single GL_MAX blend
+     *  section themselves (see EntityManager.drawThunderboltBolts), so the flush()/
+     *  glBlendEquation() cost - each a forced GPU sync point - is paid once per frame instead of
+     *  once per strike. */
+    public void drawGlowAndCore(SpriteBatch batch) {
+        for (int i = 0; i < segCount; i++) {
+            int base = i * SPRITES_PER_SEGMENT;
+            for (int k = 0; k < OUTLINE_LAYER_OFFSET; k++) {
+                bolts.get(base + k).draw(batch);
+            }
+        }
+    }
+
+    /** Self-contained fallback for callers that draw a single strike in isolation - draws the
+     *  outline with the batch's normal blending, then wraps drawGlowAndCore() in its own GL_MAX
+     *  section. EntityManager doesn't use this path; it calls drawOutline()/drawGlowAndCore()
+     *  directly inside its own shared sections instead (see drawThunderboltBolts). */
     @Override
     public void draw(SpriteBatch batch) {
         int srcFunc = batch.getBlendSrcFunc();
         int dstFunc = batch.getBlendDstFunc();
 
+        drawOutline(batch);
+
         batch.flush();
         Gdx.gl.glBlendEquation(GL_MAX);
         batch.setBlendFunction(GL20.GL_SRC_ALPHA, GL20.GL_ONE);
-        drawBolts(batch);
+        drawGlowAndCore(batch);
 
         batch.flush();
         Gdx.gl.glBlendEquation(GL20.GL_FUNC_ADD);

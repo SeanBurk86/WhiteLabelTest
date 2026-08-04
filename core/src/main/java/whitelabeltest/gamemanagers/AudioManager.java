@@ -41,6 +41,7 @@ public class AudioManager implements Disposable {
     private final Sound thunderboltHyperExplosionSound;
     private final Music victoryFanfare;
     private final Music victoryLoop;
+    private final Music stageMusic;
     private final ObjectMap<Integer, Array<Sound>> pointGemSounds;
     private final ObjectMap<Integer, Array<Sound>> explosionSounds;
     private final ObjectMap<Integer, Array<Sound>> basicWeaponSounds;
@@ -70,6 +71,8 @@ public class AudioManager implements Disposable {
         victoryLoop = Gdx.audio.newMusic(Gdx.files.internal("victory.mp3"));
         victoryLoop.setLooping(true);
         victoryFanfare.setOnCompletionListener(music -> victoryLoop.play());
+        stageMusic = Gdx.audio.newMusic(Gdx.files.internal("battleontheedge.mp3"));
+        stageMusic.setLooping(true);
         Json json = new Json();
         basicWeaponSounds = new ObjectMap<>();
         waveBlastWeaponSounds = new ObjectMap<>();
@@ -110,8 +113,20 @@ public class AudioManager implements Disposable {
         soundsArray.put(sBank.level, tempArray);
     }
 
-    public void setMuted(boolean muted) { this.muted = muted; }
+    public void setMuted(boolean muted) {
+        this.muted = muted;
+        stageMusic.setVolume(muted ? 0f : settings.getMusicVolume());
+    }
     public boolean isMuted() { return muted; }
+
+    public void playStageMusic() {
+        stageMusic.setVolume(muted ? 0f : settings.getMusicVolume());
+        stageMusic.play();
+    }
+
+    public void stopStageMusic() {
+        stageMusic.stop();
+    }
 
     public void playPlayerDeath() {
         if (!muted) playerDeathSound.play(settings.getSfxVolume());
@@ -215,6 +230,7 @@ public class AudioManager implements Disposable {
         thunderboltHyperExplosionSound.dispose();
         victoryFanfare.dispose();
         victoryLoop.dispose();
+        stageMusic.dispose();
         disposeSoundsMap(pointGemSounds);
         disposeSoundsMap(explosionSounds);
         disposeSoundsMap(basicWeaponSounds);

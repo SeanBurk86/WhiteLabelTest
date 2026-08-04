@@ -88,7 +88,7 @@ public class GameController implements Disposable {
         this.audio = new AudioManager(audioSettings);
         this.entities = new EntityManager(assets, worldWidth, worldHeight);
         this.collisionManager = new CollisionManager();
-        this.background = new ScrollingBackground(worldWidth, worldHeight, audioSettings);
+        this.background = new ScrollingBackground(worldWidth, worldHeight);
         this.input = new InputManager(keyBindings);
 
         this.scoreManager = new ScoreManager();
@@ -169,6 +169,7 @@ public class GameController implements Disposable {
         if (entities.consumeBossKilled()) {
             levelComplete = true;
             background.stop();
+            audio.stopStageMusic();
             audio.playVictory();
             applyLevelCompleteBonus();
             return;
@@ -290,6 +291,7 @@ public class GameController implements Disposable {
     private void seekToTime(float targetTime) {
         spawnScheduler.seekTo(targetTime);
         entities.clearWorld();
+        background.seekTo(targetTime);
         debugMenuOpen = false;
     }
 
@@ -338,6 +340,7 @@ public class GameController implements Disposable {
         if (player.getNumLives() <= 0) {
             gameOver = true;
             background.stop();
+            audio.stopStageMusic();
             audio.playGameOver();
         } else {
             player.setNumLives(player.getNumLives() - 1);
@@ -455,6 +458,7 @@ public class GameController implements Disposable {
         levelCompleteBombBonus = 0;
         levelCompleteLivesMultiplier = 0;
         audio.stopVictory();
+        audio.playStageMusic();
         patternPreviewer.close(entities);
         entities.reset(loadout);
         collisionManager.reset();

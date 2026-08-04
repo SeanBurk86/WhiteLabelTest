@@ -243,12 +243,18 @@ public class EntityManager {
         for (EnemyBullet eb : enemyBullets) eb.draw(batch);
     }
 
-    /** Draws every active Thunderbolt strike's bolt sprites inside one shared GL_MAX blend
-     *  section, instead of each strike's own draw() flushing the batch and toggling
-     *  glBlendEquation independently (see ThunderboltWeapon.draw()/drawBolts()). A level-4 fire
-     *  spawns up to 6 concurrent strikes, so batching this here turns what would be up to a dozen
-     *  forced flushes (each a GPU sync point) per frame into just two. */
+    /** Draws every active Thunderbolt strike's dark outline sprites first (normal alpha blend, the
+     *  batch's existing blend state - see ThunderboltWeapon.OUTLINE_COLOR_R/G/B), then their glow
+     *  and core sprites inside one shared GL_MAX blend section, instead of each strike's own
+     *  draw() flushing the batch and toggling glBlendEquation independently (see
+     *  ThunderboltWeapon.draw()/drawOutline()/drawGlowAndCore()). A level-4 fire spawns up to 6
+     *  concurrent strikes, so batching this here turns what would be up to a dozen forced flushes
+     *  (each a GPU sync point) per frame into just two. */
     private void drawThunderboltBolts(SpriteBatch batch) {
+        for (Weapon b : bullets) {
+            if (b instanceof ThunderboltWeapon) ((ThunderboltWeapon) b).drawOutline(batch);
+        }
+
         boolean blendSectionOpen = false;
         int srcFunc = 0, dstFunc = 0;
 
@@ -262,7 +268,7 @@ public class EntityManager {
                 batch.setBlendFunction(GL20.GL_SRC_ALPHA, GL20.GL_ONE);
                 blendSectionOpen = true;
             }
-            ((ThunderboltWeapon) b).drawBolts(batch);
+            ((ThunderboltWeapon) b).drawGlowAndCore(batch);
         }
 
         if (blendSectionOpen) {
