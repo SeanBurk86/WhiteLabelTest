@@ -569,13 +569,17 @@ public class Player {
 
     // The weapon's focus-fire movement slowdown (getShootSpeedMultiplier()) also applies for as
     // long as a Hyper Attack has the halo detached - Basic's dash/rest/return or Thunderbolt's
-    // move-out/charge/detonate - not just while actually holding Shoot, so aiming the halo's
-    // dash/charge position gets the same precision movement firing does.
+    // move-out/charge - not just while actually holding Shoot, so aiming the halo's dash/charge
+    // position gets the same precision movement firing does. Excludes thunderboltDetonating: the
+    // area damage already applied the instant the charge was released (see
+    // updateThunderboltCharge()), and there's nothing left to aim once the halo's just replaying
+    // its explosion animation in place before reattaching, so movement speed snaps back to normal
+    // immediately on detonation instead of staying slowed until the animation finishes.
     private void handleMovement(float delta, Vector2 moveDirection, boolean isShooting) {
         // No weapon at all briefly after a death wipe (see resetWeaponsOnDeath()) falls back to
         // full movement speed rather than dereferencing a null current weapon.
         Weapon currentWeapon = getCurrentWeapon();
-        float speed = (currentWeapon != null && (isShooting || haloDetached))
+        float speed = (currentWeapon != null && (isShooting || (haloDetached && !thunderboltDetonating)))
             ? movementSpeed * currentWeapon.getShootSpeedMultiplier() : movementSpeed;
         if (moveDirection.x != 0 || moveDirection.y != 0) {
             sprite.translateX(moveDirection.x * speed * delta);

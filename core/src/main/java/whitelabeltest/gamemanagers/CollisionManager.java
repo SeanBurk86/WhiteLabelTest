@@ -185,27 +185,6 @@ public class CollisionManager {
         }
     }
 
-    public void checkBulletPowerupCollisions(Array<Weapon> bullets, Array<Powerup> powerups, AssetManager assets) {
-        for (int i = powerups.size - 1; i >= 0; i--) {
-            Powerup p = powerups.get(i);
-            if (!(p instanceof WeaponPowerup)) continue;
-            WeaponPowerup wp = (WeaponPowerup) p;
-            for (int j = bullets.size - 1; j >= 0; j--) {
-                Weapon bullet = bullets.get(j);
-                if (overlaps(p.getRectangle(), bullet)) {
-                    if (wp.isCyclable() && wp.registerHit()) {
-                        GameController.cyclePowerupTier(wp, assets);
-                    }
-                    if (bullet.shouldDestroyOnCollision()) {
-                        bullets.removeIndex(j);
-                        ObjectPools.freeWeapon(bullet);
-                    }
-                    break;
-                }
-            }
-        }
-    }
-
     public void checkBulletEnemyCollisions(Array<Weapon> bullets, Array<Enemy> enemies, AudioManager audio, EntityManager entityManager, AssetManager assets, float worldWidth, float worldHeight, ScoreManager scoreManager) {
         for (int i = enemies.size - 1; i >= 0; i--) {
             Enemy enemy = enemies.get(i);

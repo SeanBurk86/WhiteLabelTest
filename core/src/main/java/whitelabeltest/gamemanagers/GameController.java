@@ -194,7 +194,6 @@ public class GameController implements Disposable {
         }
 
         collisionManager.checkPlayerPowerupCollisions(entities.getPlayer(), entities.getPowerups(), audio);
-        collisionManager.checkBulletPowerupCollisions(entities.getBullets(), entities.getPowerups(), assets);
         collisionManager.checkPlayerGemCollisions(entities.getPlayer(), entities.getPointGems(), scoreManager, audio);
 
         collisionManager.checkBulletEnemyCollisions(entities.getBullets(), entities.getEnemies(), audio, entities, assets, worldWidth, worldHeight, scoreManager);
@@ -424,23 +423,15 @@ public class GameController implements Disposable {
 
     /** Spawned in place of a normal drop when the player dies (see Player.startDeath()/
      *  resetWeaponsOnDeath(), which floors both weapons to level 1 and captures the level lost) -
-     *  an ordinary additive level-up sized to add that lost amount back, same as a normal drop,
-     *  just not cyclable - see WeaponPowerup.initAsRestore(). Additive (rather than an absolute
-     *  "set to the old level") so it stacks correctly no matter whether the player collects it
-     *  before or after some other pickup in the meantime, instead of one clobbering the other. */
+     *  an ordinary additive level-up sized to add that lost amount back, same as a normal drop -
+     *  see WeaponPowerup.initAsRestore(). Additive (rather than an absolute "set to the old
+     *  level") so it stacks correctly no matter whether the player collects it before or after
+     *  some other pickup in the meantime, instead of one clobbering the other. */
     public static void spawnRestorePowerup(Array<Powerup> powerups, AssetManager assets, Player player, float x, float y, float worldWidth, float worldHeight) {
         WeaponPowerup wp = ObjectPools.weaponPowerupPool.obtain();
         int amount = player.getDeathRestoreLevel() - 1;
         wp.initAsRestore(powerupTextureForTier(assets, amount), amount, x, y, worldWidth, worldHeight);
         powerups.add(wp);
-    }
-
-    /** Cycles a shot-but-not-collected powerup to the next tier in place - a no-op for a
-     *  death-restore drop (see WeaponPowerup.isCyclable()), so a stray bullet can't shrink it. */
-    public static void cyclePowerupTier(WeaponPowerup wp, AssetManager assets) {
-        if (!wp.isCyclable()) return;
-        int next = (wp.getAmount() % POWERUP_TIER_COUNT) + 1;
-        wp.setAmount(next, powerupTextureForTier(assets, next));
     }
 
     public void draw(com.badlogic.gdx.graphics.g2d.SpriteBatch batch) {

@@ -77,9 +77,9 @@ public class ThunderboltWeapon extends BaseWeapon {
     private final Vector2 origin = new Vector2();
     private final Array<Enemy> hitEnemies = new Array<>(false, 4);
     // Which enemies this specific strike is allowed to hit at all - picked once, up front (see
-    // selectTargets()), capped to `level` of the highest-health enemies within the hitbox instead
-    // of every enemy the hitbox happens to touch. hasDamaged() rejects anything not in here, so
-    // the normal per-frame CollisionManager loop doesn't need to know about the cap.
+    // selectTargets()), capped to the closest 2/4/6/8 (by level) enemies within the hitbox
+    // instead of every enemy the hitbox happens to touch. hasDamaged() rejects anything not in
+    // here, so the normal per-frame CollisionManager loop doesn't need to know about the cap.
     private final Array<Enemy> allowedTargets = new Array<>(false, 4);
     private final Array<Sprite> bolts = new Array<>(false, 96);
 
@@ -392,10 +392,11 @@ public class ThunderboltWeapon extends BaseWeapon {
         return origin.y;
     }
 
-    /** Picks which enemies this strike is even allowed to hit - up to `level` of them (1 at level
-     *  1, 2/3/4 at higher levels), preferring the highest health first - out of whichever enemies
-     *  sit within the hitbox at the moment this strike spawns. The hitbox is static for its whole
-     *  lifetime, so this only needs to run once, here, rather than re-evaluating every frame. */
+    /** Picks which enemies this strike is even allowed to hit - up to 2 at level 1, 4/6/8 at
+     *  higher levels, preferring the closest to the strike's origin (the player's position at
+     *  spawn time) first - out of whichever enemies sit within the hitbox at the moment this
+     *  strike spawns. The hitbox is static for its whole lifetime, so this only needs to run once,
+     *  here, rather than re-evaluating every frame. */
     private void selectTargets(Array<Enemy> enemies) {
         allowedTargets.clear();
 
@@ -404,11 +405,18 @@ public class ThunderboltWeapon extends BaseWeapon {
             Enemy enemy = enemies.get(i);
             if (enemy.isActive() && isWithinHitbox(enemy)) candidates.add(enemy);
         }
-        candidates.sort((a, b) -> b.getHealth() - a.getHealth());
+        candidates.sort((a, b) -> Float.compare(distanceSqToOrigin(a), distanceSqToOrigin(b)));
 
-        int maxTargets = MathUtils.clamp(level, 1, 4);
+        int maxTargets = MathUtils.clamp(level, 1, 4) * 2;
         int count = Math.min(maxTargets, candidates.size);
         for (int i = 0; i < count; i++) allowedTargets.add(candidates.get(i));
+    }
+
+    private float distanceSqToOrigin(Enemy enemy) {
+        Rectangle r = enemy.getRectangle();
+        float dx = r.x + r.width / 2f - origin.x;
+        float dy = r.y + r.height / 2f - origin.y;
+        return dx * dx + dy * dy;
     }
 
     // Same (along, perp) local-frame transform addArc() uses to aim a bolt at a target, reused
