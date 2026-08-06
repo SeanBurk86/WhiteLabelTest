@@ -30,6 +30,8 @@ public class GameController implements Disposable {
     private final ScoreManager scoreManager;
     private boolean gameOver;
     private boolean levelComplete;
+    private boolean bossVideoTriggered;
+    private boolean musicFadeTriggered;
     private boolean debugMode;
     private float levelStartTimer;
     private float bombCooldownTimer;
@@ -88,7 +90,7 @@ public class GameController implements Disposable {
         this.audio = new AudioManager(audioSettings);
         this.entities = new EntityManager(assets, worldWidth, worldHeight);
         this.collisionManager = new CollisionManager();
-        this.background = new ScrollingBackground(worldWidth, worldHeight);
+        this.background = new ScrollingBackground(worldWidth, worldHeight, audioSettings);
         this.input = new InputManager(keyBindings);
 
         this.scoreManager = new ScoreManager();
@@ -105,6 +107,7 @@ public class GameController implements Disposable {
 
     public void update(float delta) {
         scoreManager.update(delta);
+        audio.update(delta);
         levelStartTimer += delta;
         if (bombCooldownTimer > 0) {
             bombCooldownTimer -= delta;
@@ -164,7 +167,17 @@ public class GameController implements Disposable {
 
         background.update();
         entities.update(delta, input, assets, audio);
-        spawnScheduler.update(delta, entities);
+        spawnScheduler.update(delta, entities, audio);
+
+        if (!bossVideoTriggered && spawnScheduler.isBackgroundVideoTriggered()) {
+            bossVideoTriggered = true;
+            background.triggerBossVideo();
+        }
+
+        if (!musicFadeTriggered && spawnScheduler.isMusicFadeOutTriggered()) {
+            musicFadeTriggered = true;
+            audio.fadeOutStageMusic();
+        }
 
         if (entities.consumeBossKilled()) {
             levelComplete = true;
@@ -443,6 +456,8 @@ public class GameController implements Disposable {
         scoreManager.reset();
         gameOver = false;
         levelComplete = false;
+        bossVideoTriggered = false;
+        musicFadeTriggered = false;
         levelStartTimer = 0f;
         bombCooldownTimer = 0f;
         hitGraceTimer = -1f;

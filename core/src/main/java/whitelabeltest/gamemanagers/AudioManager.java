@@ -9,8 +9,13 @@ import com.badlogic.gdx.utils.Json;
 import com.badlogic.gdx.utils.ObjectMap;
 
 public class AudioManager implements Disposable {
+    private static final float STAGE_MUSIC_FADE_DURATION = 2f;
+
     private final AudioSettings settings;
     private boolean muted;
+    private boolean fadingOutStageMusic;
+    private float stageMusicFadeTimer;
+    private float stageMusicFadeStartVolume;
 
     private final Sound playerDeathSound;
     private final Sound bombSound;
@@ -48,6 +53,10 @@ public class AudioManager implements Disposable {
     private final ObjectMap<Integer, Array<Sound>> waveBlastWeaponSounds;
     private final ObjectMap<Integer, Array<Sound>> orbitWeaponSounds;
     private final ObjectMap<Integer, Array<Sound>> thunderboltWeaponSounds;
+    // Scripted one-off SFX triggered by SpawnScheduler's SoundCue (see playCueSound()) - keyed by
+    // asset path and loaded lazily the first time each is cued, since these are level-specific and
+    // not worth preloading into a dedicated field like the sounds above.
+    private final ObjectMap<String, Sound> cueSounds = new ObjectMap<>();
 
     public AudioManager(AudioSettings settings) {
         this.settings = settings;
@@ -120,12 +129,36 @@ public class AudioManager implements Disposable {
     public boolean isMuted() { return muted; }
 
     public void playStageMusic() {
+        fadingOutStageMusic = false;
         stageMusic.setVolume(muted ? 0f : settings.getMusicVolume());
         stageMusic.play();
     }
 
     public void stopStageMusic() {
+        fadingOutStageMusic = false;
         stageMusic.stop();
+    }
+
+    /** Gradually lowers stageMusic to silence over STAGE_MUSIC_FADE_DURATION and then stops it,
+     *  instead of stopStageMusic()'s hard cut - see update(). Used for the boss video/audio
+     *  handoff in ScrollingBackground, where an abrupt cut would clash with the video's own audio. */
+    public void fadeOutStageMusic() {
+        if (!stageMusic.isPlaying() || fadingOutStageMusic) return;
+        fadingOutStageMusic = true;
+        stageMusicFadeTimer = 0f;
+        stageMusicFadeStartVolume = stageMusic.getVolume();
+    }
+
+    public void update(float delta) {
+        if (fadingOutStageMusic) {
+            stageMusicFadeTimer += delta;
+            float t = Math.min(stageMusicFadeTimer / STAGE_MUSIC_FADE_DURATION, 1f);
+            stageMusic.setVolume(stageMusicFadeStartVolume * (1f - t));
+            if (t >= 1f) {
+                stageMusic.stop();
+                fadingOutStageMusic = false;
+            }
+        }
     }
 
     public void playPlayerDeath() {
@@ -215,6 +248,19 @@ public class AudioManager implements Disposable {
         if (!muted) thunderboltHyperExplosionSound.play(settings.getSfxVolume());
     }
 
+    /** Plays a scripted one-off SFX by asset path - see SpawnScheduler.SoundCue. Loads and caches
+     *  the Sound the first time this path is triggered rather than up front, since which cue
+     *  sounds exist is entirely down to spawn_schedule.json. */
+    public void playCueSound(String path) {
+        if (path == null) return;
+        Sound sound = cueSounds.get(path);
+        if (sound == null) {
+            sound = Gdx.audio.newSound(Gdx.files.internal(path));
+            cueSounds.put(path, sound);
+        }
+        if (!muted) sound.play(settings.getSfxVolume());
+    }
+
     @Override
     public void dispose() {
         playerDeathSound.dispose();
@@ -237,6 +283,7 @@ public class AudioManager implements Disposable {
         disposeSoundsMap(waveBlastWeaponSounds);
         disposeSoundsMap(orbitWeaponSounds);
         disposeSoundsMap(thunderboltWeaponSounds);
+        for (Sound s : cueSounds.values()) s.dispose();
     }
 
     private void disposeSoundsMap(ObjectMap<Integer, Array<Sound>> soundsMap) {

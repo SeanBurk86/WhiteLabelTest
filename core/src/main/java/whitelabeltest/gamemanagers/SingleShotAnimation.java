@@ -11,14 +11,21 @@ import com.badlogic.gdx.utils.Pool;
  *  pick their animation. */
 abstract class SingleShotAnimation implements Pool.Poolable {
     private Animation<TextureRegion> animation;
-    private float x, y, size;
+    private float x, y, width, height;
     private float stateTime;
 
     protected void init(Animation<TextureRegion> animation, float x, float y, float size) {
+        init(animation, x, y, size, size);
+    }
+
+    // Non-square variant - see ScheduledSpriteEffect, whose scripted sprites (e.g. wide banner art
+    // like WarningSign.png) aren't necessarily square like HitEffect/BulletCancelEffect's are.
+    protected void init(Animation<TextureRegion> animation, float x, float y, float width, float height) {
         this.animation = animation;
         this.x = x;
         this.y = y;
-        this.size = size;
+        this.width = width;
+        this.height = height;
         this.stateTime = 0f;
     }
 
@@ -28,7 +35,7 @@ abstract class SingleShotAnimation implements Pool.Poolable {
 
     public void draw(SpriteBatch batch) {
         TextureRegion frame = animation.getKeyFrame(stateTime);
-        batch.draw(frame, x - size / 2f, y - size / 2f, size, size);
+        batch.draw(frame, x - width / 2f, y - height / 2f, width, height);
     }
 
     public boolean isFinished() {

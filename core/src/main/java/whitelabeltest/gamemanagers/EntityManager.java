@@ -28,6 +28,7 @@ public class EntityManager {
     private final Array<BulletCancelEffect> bulletCancelEffects;
     private final Array<PointGem> pointGems;
     private final Array<GreenLightningBurst> greenLightningBursts;
+    private final Array<ScheduledSpriteEffect> scheduledSprites;
 
     private final float worldWidth;
     private final float worldHeight;
@@ -75,6 +76,7 @@ public class EntityManager {
         this.bulletCancelEffects = new Array<>();
         this.pointGems = new Array<>();
         this.greenLightningBursts = new Array<>();
+        this.scheduledSprites = new Array<>();
 
         EnemySpawnRegistry.init(assets, enemies, worldWidth, worldHeight);
     }
@@ -82,6 +84,16 @@ public class EntityManager {
     public void triggerBombEffect() {
         bombActive = true;
         bombAnimationTime = 0f;
+    }
+
+    /** Spawns a scripted sprite cue - see SpawnScheduler.spawnSpriteCue(), which builds the
+     *  animation from spawn_schedule.json's SpriteCue and hands it off here. width/height (rather
+     *  than a single square size) so wide/tall sheet art like WarningSign.png draws at its true
+     *  aspect ratio instead of being squashed into a square. */
+    public void spawnScheduledSprite(Animation<TextureRegion> animation, float x, float y, float width, float height) {
+        ScheduledSpriteEffect effect = ObjectPools.scheduledSpriteEffectPool.obtain();
+        effect.init(animation, x, y, width, height);
+        scheduledSprites.add(effect);
     }
 
     public void update(float delta, InputManager input, AssetManager assets, AudioManager audio) {
@@ -201,6 +213,15 @@ public class EntityManager {
             }
         }
 
+        for (int i = scheduledSprites.size - 1; i >= 0; i--) {
+            ScheduledSpriteEffect s = scheduledSprites.get(i);
+            s.update(delta);
+            if (s.isFinished()) {
+                scheduledSprites.removeIndex(i);
+                ObjectPools.freeScheduledSpriteEffect(s);
+            }
+        }
+
         boolean playerFiring = input.isShooting();
         for (int i = pointGems.size - 1; i >= 0; i--) {
             PointGem gem = pointGems.get(i);
@@ -241,6 +262,8 @@ public class EntityManager {
 
         player.draw(batch);
         for (EnemyBullet eb : enemyBullets) eb.draw(batch);
+
+        for (ScheduledSpriteEffect s : scheduledSprites) s.draw(batch);
     }
 
     /** Draws every active Thunderbolt strike's dark outline sprites first (normal alpha blend, the
@@ -299,6 +322,8 @@ public class EntityManager {
         pointGems.clear();
         for (GreenLightningBurst b : greenLightningBursts) ObjectPools.freeGreenLightningBurst(b);
         greenLightningBursts.clear();
+        for (ScheduledSpriteEffect s : scheduledSprites) ObjectPools.freeScheduledSpriteEffect(s);
+        scheduledSprites.clear();
         trailSpawnTimer = 0f;
         player.reset(loadout);
     }
@@ -324,6 +349,8 @@ public class EntityManager {
         pointGems.clear();
         for (GreenLightningBurst b : greenLightningBursts) ObjectPools.freeGreenLightningBurst(b);
         greenLightningBursts.clear();
+        for (ScheduledSpriteEffect s : scheduledSprites) ObjectPools.freeScheduledSpriteEffect(s);
+        scheduledSprites.clear();
     }
 
     public void destroyAllPlayerBullets() {

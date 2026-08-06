@@ -79,6 +79,9 @@ public class ObjectPools {
     public static final Pool<GreenLightningBurst> greenLightningBurstPool = new Pool<GreenLightningBurst>() {
         @Override protected GreenLightningBurst newObject() { return new GreenLightningBurst(); }
     };
+    public static final Pool<ScheduledSpriteEffect> scheduledSpriteEffectPool = new Pool<ScheduledSpriteEffect>() {
+        @Override protected ScheduledSpriteEffect newObject() { return new ScheduledSpriteEffect(); }
+    };
 
     public static void freeWeapon(Weapon w) {
         if (w instanceof BasicWeapon) weaponPool.free((BasicWeapon)w);
@@ -129,5 +132,9 @@ public class ObjectPools {
 
     public static void freeGreenLightningBurst(GreenLightningBurst b) {
         greenLightningBurstPool.free(b);
+    }
+
+    public static void freeScheduledSpriteEffect(ScheduledSpriteEffect e) {
+        scheduledSpriteEffectPool.free(e);
     }
 }
