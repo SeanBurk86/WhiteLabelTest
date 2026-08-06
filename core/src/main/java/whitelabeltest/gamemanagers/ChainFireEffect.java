@@ -23,19 +23,22 @@ public class ChainFireEffect implements Disposable {
     // the flame's shape (noise scale/aperture/speed all key off intensity) instead of snapping it.
     private static final float INTENSITY_SMOOTHING_SPEED = 3f;
 
-    private static final Color EMBER_BOTTOM = new Color(0.35f, 0.05f, 0.0f, 1f);
-    private static final Color EMBER_MIDDLE = new Color(0.55f, 0.16f, 0.02f, 1f);
-    private static final Color EMBER_TOP = new Color(0.22f, 0.02f, 0.0f, 1f);
+    // Dim green embers at low chain counts - a muted version of UIManager's own HUD_GREEN_DIM.
+    private static final Color EMBER_BOTTOM = new Color(0.10f, 0.3f, 0.16f, 1f);
+    private static final Color EMBER_MIDDLE = UIManager.HUD_GREEN_DIM;
+    private static final Color EMBER_TOP = new Color(0.04f, 0.1f, 0.06f, 1f);
 
-    // Full-blaze ramp matches the original shader's default uniform colors.
-    private static final Color BLAZE_BOTTOM = new Color(0.0f, 0.7f, 1.0f, 1f);
-    private static final Color BLAZE_MIDDLE = new Color(1.0f, 0.5f, 0.0f, 1f);
-    private static final Color BLAZE_TOP = new Color(1.0f, 0.03f, 0.001f, 1f);
+    // Full-blaze ramp at the chain's normal max intensity - bright HUD_GREEN core cooling to
+    // HUD_AMBER at the tip, the same two colors the rest of the HUD reads as "healthy/active".
+    private static final Color BLAZE_BOTTOM = new Color(0.6f, 1.0f, 0.75f, 1f);
+    private static final Color BLAZE_MIDDLE = UIManager.HUD_GREEN;
+    private static final Color BLAZE_TOP = UIManager.HUD_AMBER;
 
-    // Purple-bluish "mystic" ramp, blended in once the chain climbs past CHAIN_COUNT_AT_MAX_INTENSITY.
-    private static final Color MYSTIC_BOTTOM = new Color(0.25f, 0.05f, 0.55f, 1f);
-    private static final Color MYSTIC_MIDDLE = new Color(0.55f, 0.15f, 0.95f, 1f);
-    private static final Color MYSTIC_TOP = new Color(0.65f, 0.55f, 1.0f, 1f);
+    // "Mystic" overdrive ramp, blended in once the chain climbs past CHAIN_COUNT_AT_MAX_INTENSITY -
+    // pushes further along the same palette into HUD_RED, matching the HUD's own "critical" color.
+    private static final Color MYSTIC_BOTTOM = new Color(1.0f, 0.85f, 0.55f, 1f);
+    private static final Color MYSTIC_MIDDLE = UIManager.HUD_AMBER;
+    private static final Color MYSTIC_TOP = UIManager.HUD_RED;
 
     private static final String VERTEX_SHADER =
         "attribute vec4 a_position;\n" +

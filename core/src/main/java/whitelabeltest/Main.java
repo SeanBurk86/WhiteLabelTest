@@ -195,7 +195,7 @@ public class Main extends ApplicationAdapter {
         spriteBatch.flush();
         Gdx.gl.glDisable(GL20.GL_SCISSOR_TEST);
 
-        ui.drawHUD(spriteBatch, game.getScoreManager(), game.getEntities().getPlayer(), PLAY_AREA_HEIGHT, leftX, game.getBombCooldownTimer(), game.getBombCooldownFraction());
+        ui.drawHUD(spriteBatch, game.getScoreManager(), game.getEntities().getPlayer(), PLAY_AREA_HEIGHT, leftX, PLAY_AREA_WIDTH, panelWidth, game.getBombCooldownTimer(), game.getBombCooldownFraction());
 
         ui.drawTextCues(spriteBatch, game.getLevelStartTimer(), game.getTextCues());
 
