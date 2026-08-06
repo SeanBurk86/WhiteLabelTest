@@ -30,6 +30,12 @@ public interface Enemy extends Pool.Poolable {
     default int getScore() { return 10; }
     default String getExplosionPattern() { return null; }
 
+    // Forces this enemy's firing pattern to its next stage immediately - see
+    // GameController.destroyEnemy, which calls this on every other boss whenever any enemy dies,
+    // and FiringPattern.advance()/SequencedFiringPattern.advance() for the actual step logic. A
+    // no-op default since only BaseEnemy (with a FiringPattern to forward to) does anything with it.
+    default void advanceFiringPattern() {}
+
 
     default int getHealth() { return 0; }
     default int getMaxHealth() { return 0; }

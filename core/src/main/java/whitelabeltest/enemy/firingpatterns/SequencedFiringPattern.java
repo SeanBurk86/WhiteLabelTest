@@ -42,4 +42,14 @@ public class SequencedFiringPattern implements FiringPattern {
         timer = 0;
         for (FiringPattern p : patterns) p.reset();
     }
+
+    // Same step the timer-expiry branch of update() takes, just triggered externally instead of by
+    // durations[currentIndex] elapsing - see Enemy.advanceFiringPattern().
+    @Override
+    public void advance() {
+        if (patterns.size == 0) return;
+        timer = 0;
+        patterns.get(currentIndex).reset();
+        currentIndex = (currentIndex + 1) % patterns.size;
+    }
 }

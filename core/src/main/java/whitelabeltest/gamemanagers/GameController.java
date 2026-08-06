@@ -409,6 +409,14 @@ public class GameController implements Disposable {
         }
 
         audio.playExplosion();
+
+        // Every other boss on screen steps to the next stage of its firing sequence whenever any
+        // enemy dies - see Enemy.advanceFiringPattern()/SequencedFiringPattern.advance(). Excludes
+        // the enemy that just died so a boss's own death doesn't also advance itself.
+        for (Enemy other : entityManager.getEnemies()) {
+            if (other != enemy && other.isBoss()) other.advanceFiringPattern();
+        }
+
         return scoreValue;
     }
 

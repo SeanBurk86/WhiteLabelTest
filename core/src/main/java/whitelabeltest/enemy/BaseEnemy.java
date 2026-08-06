@@ -267,6 +267,11 @@ public abstract class BaseEnemy implements Enemy {
     }
 
     @Override
+    public void advanceFiringPattern() {
+        if (firing != null) firing.advance();
+    }
+
+    @Override
     public void setGuaranteedPowerup(Integer tier) {
         this.guaranteedPowerup = tier;
     }
