@@ -30,6 +30,9 @@ public class GameController implements Disposable {
 
     private final ScoreManager scoreManager;
     private boolean gameOver;
+    // Seconds since gameOver first became true - drives UIManager.drawGameOver's GameOverSign
+    // reveal animation, reset alongside gameOver itself in reset() and applyPlayerHit().
+    private float gameOverTimer;
     private boolean levelComplete;
     private boolean bossVideoTriggered;
     private boolean musicFadeTriggered;
@@ -186,6 +189,7 @@ public class GameController implements Disposable {
         }
 
         if (gameOver || levelComplete) {
+            if (gameOver) gameOverTimer += delta;
             handleGameOverInput();
             return;
         }
@@ -421,6 +425,7 @@ public class GameController implements Disposable {
         Player player = entities.getPlayer();
         if (player.getNumLives() <= 0) {
             gameOver = true;
+            gameOverTimer = 0f;
             background.stop();
             audio.stopStageMusic();
             audio.playGameOver();
@@ -534,6 +539,7 @@ public class GameController implements Disposable {
     public void reset() {
         scoreManager.reset();
         gameOver = false;
+        gameOverTimer = 0f;
         levelComplete = false;
         bossVideoTriggered = false;
         musicFadeTriggered = false;
@@ -575,6 +581,7 @@ public class GameController implements Disposable {
     public int getHighScore() { return scoreManager.getHighScore(); }
     public ScoreManager getScoreManager() { return scoreManager; }
     public boolean isGameOver() { return gameOver; }
+    public float getGameOverTimer() { return gameOverTimer; }
     public boolean isLevelComplete() { return levelComplete; }
     public int getLevelCompleteBombBonus() { return levelCompleteBombBonus; }
     public int getLevelCompleteLivesMultiplier() { return levelCompleteLivesMultiplier; }

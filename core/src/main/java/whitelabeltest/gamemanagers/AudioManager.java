@@ -9,7 +9,7 @@ import com.badlogic.gdx.utils.Json;
 import com.badlogic.gdx.utils.ObjectMap;
 
 public class AudioManager implements Disposable {
-    private static final float STAGE_MUSIC_FADE_DURATION = 2f;
+    private static final float STAGE_MUSIC_FADE_DURATION = 3f;
 
     private final AudioSettings settings;
     private boolean muted;

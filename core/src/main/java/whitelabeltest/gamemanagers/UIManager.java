@@ -4,9 +4,11 @@ import com.badlogic.gdx.Gdx;
 import com.badlogic.gdx.graphics.Color;
 import com.badlogic.gdx.graphics.Pixmap;
 import com.badlogic.gdx.graphics.Texture;
+import com.badlogic.gdx.graphics.g2d.Animation;
 import com.badlogic.gdx.graphics.g2d.BitmapFont;
 import com.badlogic.gdx.graphics.g2d.GlyphLayout;
 import com.badlogic.gdx.graphics.g2d.SpriteBatch;
+import com.badlogic.gdx.graphics.g2d.TextureRegion;
 import com.badlogic.gdx.graphics.g2d.freetype.FreeTypeFontGenerator;
 import com.badlogic.gdx.graphics.g2d.freetype.FreeTypeFontGenerator.FreeTypeFontParameter;
 import com.badlogic.gdx.math.MathUtils;
@@ -36,6 +38,11 @@ public class UIManager implements Disposable {
     private final GlyphLayout measureLayout;
     private final Texture whitePixel;
     private final Texture heartIcon;
+    // GameOverSign.png (4 columns x 3 rows, 12 frames) - see drawGameOver(), which plays it once
+    // and freezes on the last frame via Animation.PlayMode.NORMAL rather than looping.
+    private final Texture gameOverSignTexture;
+    private final Animation<TextureRegion> gameOverSignAnimation;
+    private static final float GAME_OVER_SIGN_FRAME_DURATION = 0.07f;
     private final InputType inputType;
     private final CircleMeterEffect circleMeterEffect;
     private final ChainFireEffect chainFireEffect;
@@ -74,6 +81,9 @@ public class UIManager implements Disposable {
         heartPixmap.fillTriangle(2, 12, 30, 12, 16, 30);
         heartIcon = new Texture(heartPixmap);
         heartPixmap.dispose();
+
+        gameOverSignTexture = new Texture(Gdx.files.internal("GameOverSign.png"));
+        gameOverSignAnimation = AnimationCache.get(gameOverSignTexture, 4, 3, 12, GAME_OVER_SIGN_FRAME_DURATION, Animation.PlayMode.NORMAL);
     }
 
     public void drawHUD(SpriteBatch batch, ScoreManager scoreManager, Player player, float worldHeight,
@@ -702,11 +712,22 @@ public class UIManager implements Disposable {
         };
     }
 
-    public void drawGameOver(SpriteBatch batch, float worldWidth, float worldHeight) {
+    /** elapsedTime is seconds since gameOver first became true (GameController.getGameOverTimer())
+     *  - drives the GameOverSign reveal, which plays once and then holds on its last frame instead
+     *  of looping (see gameOverSignAnimation's PlayMode.NORMAL). */
+    public void drawGameOver(SpriteBatch batch, float worldWidth, float worldHeight, float elapsedTime) {
+        float aspect = gameOverSignTexture.getWidth() / 4f / (gameOverSignTexture.getHeight() / 3f);
+        float signWidth = 6.5f;
+        float signHeight = signWidth / aspect;
+        float signCenterY = worldHeight * 0.62f;
+        TextureRegion frame = gameOverSignAnimation.getKeyFrame(elapsedTime);
+        batch.draw(frame, (worldWidth - signWidth) / 2f, signCenterY - signHeight / 2f, signWidth, signHeight);
+
         font.setColor(Color.RED);
-        if (inputType == InputType.KEYBOARD) {gameOverLayout.setText(font, "GAME OVER\nPress R to Restart\nPress Q to Quit");}
-        else gameOverLayout.setText(font, "GAME OVER\nPress Start to Restart\nPress Select to Quit");
-        font.draw(batch, gameOverLayout, (worldWidth - gameOverLayout.width) / 2, (worldHeight + gameOverLayout.height) / 2);
+        if (inputType == InputType.KEYBOARD) {gameOverLayout.setText(font, "Press R to Restart\nPress Q to Quit");}
+        else gameOverLayout.setText(font, "Press Start to Restart\nPress Select to Quit");
+        float textCenterY = worldHeight * 0.28f;
+        font.draw(batch, gameOverLayout, (worldWidth - gameOverLayout.width) / 2, textCenterY + gameOverLayout.height / 2);
         font.setColor(Color.WHITE);
     }
 
@@ -913,6 +934,7 @@ public class UIManager implements Disposable {
         font.dispose();
         whitePixel.dispose();
         heartIcon.dispose();
+        gameOverSignTexture.dispose();
         circleMeterEffect.dispose();
         chainFireEffect.dispose();
     }

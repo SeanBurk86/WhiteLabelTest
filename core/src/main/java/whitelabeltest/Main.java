@@ -200,7 +200,7 @@ public class Main extends ApplicationAdapter {
         ui.drawTextCues(spriteBatch, game.getLevelStartTimer(), game.getTextCues());
 
         if (isGameOver) {
-            ui.drawGameOver(spriteBatch, PLAY_AREA_WIDTH, PLAY_AREA_HEIGHT);
+            ui.drawGameOver(spriteBatch, PLAY_AREA_WIDTH, PLAY_AREA_HEIGHT, game.getGameOverTimer());
         } else if (game.isLevelComplete()) {
             ui.drawLevelComplete(spriteBatch, PLAY_AREA_WIDTH, PLAY_AREA_HEIGHT, game.getScore(),
                 game.getLevelCompleteBombBonus(), game.getLevelCompleteLivesMultiplier(),
