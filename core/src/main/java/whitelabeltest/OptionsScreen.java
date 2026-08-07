@@ -2,6 +2,7 @@ package whitelabeltest;
 
 import com.badlogic.gdx.Gdx;
 import com.badlogic.gdx.Input;
+import com.badlogic.gdx.audio.Sound;
 import com.badlogic.gdx.controllers.Controller;
 import com.badlogic.gdx.controllers.Controllers;
 import com.badlogic.gdx.graphics.Color;
@@ -65,6 +66,13 @@ public class OptionsScreen implements Disposable {
     private final BitmapFont font;
     private final Texture pixel;
     private final Skin skin;
+    // Menu SFX: backSound on any back input (Escape, the dedicated gamepad Back/Select button, or
+    // the new gamepad B - see triggerBack()), confirmSound on any confirm input (mouse click or
+    // gamepad A - see onClick()/activateFocused()), selectSound whenever focus actually moves to a
+    // different row/column (see moveRow()/moveCol()).
+    private final Sound backSound;
+    private final Sound confirmSound;
+    private final Sound selectSound;
     private final Map<Action, TextButton> keyButtons = new EnumMap<>(Action.class);
     private final Map<Action, TextButton> gamepadBindingButtons = new EnumMap<>(Action.class);
 
@@ -103,6 +111,10 @@ public class OptionsScreen implements Disposable {
         this.keyBindings = keyBindings;
         this.audioSettings = audioSettings;
         this.stage = new Stage(new ExtendViewport(worldWidth * UI_SCALE, worldHeight * UI_SCALE));
+
+        backSound = Gdx.audio.newSound(Gdx.files.internal("backsoundmenu.mp3"));
+        confirmSound = Gdx.audio.newSound(Gdx.files.internal("confirmsoundmenu.mp3"));
+        selectSound = Gdx.audio.newSound(Gdx.files.internal("selectsoundmenu.mp3"));
 
         FreeTypeFontGenerator generator = new FreeTypeFontGenerator(Gdx.files.internal("VT323-Regular.ttf"));
         FreeTypeFontParameter fontParams = new FreeTypeFontParameter();
@@ -180,7 +192,7 @@ public class OptionsScreen implements Disposable {
         contentStack.add(audioTable);
         root.add(contentStack).expand().fill().row();
 
-        Label backHint = new Label("Esc/Back - Back   D-Pad - Move   A - Select", skin);
+        Label backHint = new Label("Esc/Back - Back   Arrows/D-Pad - Move   Enter/A - Select", skin);
         root.add(backHint).padTop(0.35f * UI_SCALE);
 
         root.addListener(new InputListener() {
@@ -313,6 +325,7 @@ public class OptionsScreen implements Disposable {
         button.addListener(new ChangeListener() {
             @Override
             public void changed(ChangeEvent event, Actor actor) {
+                confirmSound.play();
                 action.run();
             }
         });
@@ -406,19 +419,12 @@ public class OptionsScreen implements Disposable {
 
     private boolean handleKeyDown(int keycode) {
         if (keycode == Input.Keys.ESCAPE) {
-            if (listeningFor != null) {
-                cancelListening();
-            } else if (gamepadListeningFor != null) {
-                cancelGamepadListening();
-            } else if (page == Page.MENU) {
-                backRequested = true;
-            } else {
-                switchPage(Page.MENU);
-            }
+            triggerBack();
             return true;
         }
 
         if (listeningFor != null) {
+            confirmSound.play();
             keyBindings.setKey(listeningFor, keycode);
             applyIdleStyle(listeningButton);
             listeningButton.setText(Input.Keys.toString(keycode));
@@ -431,7 +437,32 @@ public class OptionsScreen implements Disposable {
             return true; // swallow keyboard input while capturing a gamepad button
         }
 
-        return false;
+        // Plain menu navigation - mirrors handleControllerNavigation()'s D-Pad/A handling (moveRow/
+        // moveCol/activateFocused already play selectSound/confirmSound themselves) so keyboard-only
+        // players can actually reach every page/row/column, not just Back.
+        switch (keycode) {
+            case Input.Keys.UP:
+            case Input.Keys.W:
+                moveRow(-1);
+                return true;
+            case Input.Keys.DOWN:
+            case Input.Keys.S:
+                moveRow(1);
+                return true;
+            case Input.Keys.LEFT:
+                moveCol(-1);
+                return true;
+            case Input.Keys.RIGHT:
+                moveCol(1);
+                return true;
+            case Input.Keys.ENTER:
+            case Input.Keys.SPACE:
+            case Input.Keys.Z:
+                activateFocused();
+                return true;
+            default:
+                return false;
+        }
     }
 
     private void applyIdleStyle(TextButton button) {
@@ -467,6 +498,7 @@ public class OptionsScreen implements Disposable {
         if (rows.size == 0) return;
         int newRow = (focusedRow + delta + rows.size) % rows.size;
         int newCol = rows.get(newRow)[focusedCol] == null ? 0 : focusedCol;
+        if (newRow != focusedRow || newCol != focusedCol) selectSound.play();
         setFocus(newRow, newCol);
     }
 
@@ -474,6 +506,7 @@ public class OptionsScreen implements Disposable {
         if (focusedRow < 0) return;
         int newCol = focusedCol + delta;
         if (newCol < 0 || newCol >= rows.get(focusedRow).length || rows.get(focusedRow)[newCol] == null) return;
+        selectSound.play();
         setFocus(focusedRow, newCol);
     }
 
@@ -497,6 +530,7 @@ public class OptionsScreen implements Disposable {
         } else if (gamepadListeningFor != null) {
             for (int i = 0; i < buttons.length; i++) {
                 if (buttons[i] != GamepadButton.BACK && current[i] && !prevGamepadButtonDown[i]) {
+                    confirmSound.play();
                     keyBindings.setGamepadButton(gamepadListeningFor, buttons[i]);
                     applyIdleStyle(gamepadListeningButton);
                     gamepadListeningButton.setText(buttons[i].displayName);
@@ -511,12 +545,16 @@ public class OptionsScreen implements Disposable {
             boolean dpadLeft = current[GamepadButton.DPAD_LEFT.ordinal()];
             boolean dpadRight = current[GamepadButton.DPAD_RIGHT.ordinal()];
             boolean confirm = current[GamepadButton.A.ordinal()];
+            boolean back = current[GamepadButton.B.ordinal()];
 
             if (dpadUp && !prevGamepadButtonDown[GamepadButton.DPAD_UP.ordinal()]) moveRow(-1);
             if (dpadDown && !prevGamepadButtonDown[GamepadButton.DPAD_DOWN.ordinal()]) moveRow(1);
             if (dpadLeft && !prevGamepadButtonDown[GamepadButton.DPAD_LEFT.ordinal()]) moveCol(-1);
             if (dpadRight && !prevGamepadButtonDown[GamepadButton.DPAD_RIGHT.ordinal()]) moveCol(1);
             if (confirm && !prevGamepadButtonDown[GamepadButton.A.ordinal()]) activateFocused();
+            // B doubles as Back alongside the dedicated gamepad Back/Select button Main already
+            // wires to handleControllerBackPressed() - the more familiar of the two on most pads.
+            if (back && !prevGamepadButtonDown[GamepadButton.B.ordinal()]) triggerBack();
         }
 
         System.arraycopy(current, 0, prevGamepadButtonDown, 0, current.length);
@@ -525,7 +563,27 @@ public class OptionsScreen implements Disposable {
     private void activateFocused() {
         if (focusedRow < 0) return;
         Runnable activator = rowActivators.get(focusedRow)[focusedCol];
-        if (activator != null) activator.run();
+        if (activator != null) {
+            confirmSound.play();
+            activator.run();
+        }
+    }
+
+    /** Shared by keyboard Escape, the dedicated gamepad Back/Select button, and the new gamepad B
+     *  (see handleKeyDown()/handleControllerBackPressed()/handleControllerNavigation()): cancels an
+     *  in-progress key/button capture if one is active, steps back up one page level if one is
+     *  open, otherwise requests leaving Options entirely. */
+    private void triggerBack() {
+        backSound.play();
+        if (listeningFor != null) {
+            cancelListening();
+        } else if (gamepadListeningFor != null) {
+            cancelGamepadListening();
+        } else if (page == Page.MENU) {
+            backRequested = true;
+        } else {
+            switchPage(Page.MENU);
+        }
     }
 
     private void resetKeyBindingsToDefaults() {
@@ -563,19 +621,25 @@ public class OptionsScreen implements Disposable {
         return backRequested;
     }
 
-    /** Gamepad equivalent of the Escape-key handling in {@link #handleKeyDown}: cancels an
-     * in-progress key/button capture if one is active, steps back up one page level if one is
-     * open, otherwise requests leaving Options entirely. */
-    public void handleControllerBackPressed() {
-        if (listeningFor != null) {
-            cancelListening();
-        } else if (gamepadListeningFor != null) {
-            cancelGamepadListening();
-        } else if (page == Page.MENU) {
-            backRequested = true;
-        } else {
-            switchPage(Page.MENU);
+    /** Seeds prevGamepadButtonDown from the controller's actual current state - call right before
+     *  handing this screen input focus (see Main.transitionToOptions()). Whatever gamepad button
+     *  just confirmed opening Options (commonly buttonA, which is also this screen's own confirm
+     *  button) is very likely still physically held on the first frame handleControllerNavigation()
+     *  polls, and its edge-detection would otherwise misread that same held press as a fresh
+     *  confirm and instantly activate whatever's focused - same bug/fix as StartScreen.
+     *  enterMenuPhase(). */
+    public void syncGamepadState() {
+        Controller controller = Controllers.getCurrent();
+        GamepadButton[] buttons = GamepadButton.values();
+        for (int i = 0; i < buttons.length; i++) {
+            prevGamepadButtonDown[i] = controller != null && controller.getButton(KeyBindings.rawCode(controller, buttons[i]));
         }
+    }
+
+    /** Gamepad equivalent of the Escape-key handling in {@link #handleKeyDown} - see
+     * triggerBack(). */
+    public void handleControllerBackPressed() {
+        triggerBack();
     }
 
     public void clearBackRequested() {
@@ -591,5 +655,8 @@ public class OptionsScreen implements Disposable {
         skin.dispose();
         font.dispose();
         pixel.dispose();
+        backSound.dispose();
+        confirmSound.dispose();
+        selectSound.dispose();
     }
 }

@@ -5,9 +5,9 @@ package whitelabeltest.player;
  *  ever obtained mid-run from a powerup, never a starting choice. Slot A/B map directly to
  *  Player.setSlotWeapon(0, ...)/setSlotWeapon(1, ...) in Player.reset(WeaponLoadout). */
 public enum WeaponLoadout {
-    BASIC_THUNDERBOLT("Basic & Thunderbolt", "BasicWeapon", "Thunderbolt"),
-    BASIC_ORBIT("Basic & Orbit", "BasicWeapon", "OrbitWeapon"),
-    THUNDERBOLT_ORBIT("Thunderbolt & Orbit", "Thunderbolt", "OrbitWeapon");
+    BASIC_THUNDERBOLT("RAIN.sh & LIGHTNING.bat", "BasicWeapon", "Thunderbolt"),
+    BASIC_ORBIT("RAIN.sh & MOON.cmd", "BasicWeapon", "OrbitWeapon"),
+    THUNDERBOLT_ORBIT("LIGHTNING.bat & MOON.cmd", "Thunderbolt", "OrbitWeapon");
 
     public final String label;
     public final String slotAWeaponId;

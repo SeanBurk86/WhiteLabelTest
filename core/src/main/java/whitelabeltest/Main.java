@@ -2,7 +2,6 @@ package whitelabeltest;
 
 import com.badlogic.gdx.ApplicationAdapter;
 import com.badlogic.gdx.Gdx;
-import com.badlogic.gdx.Input;
 import com.badlogic.gdx.audio.Sound;
 import com.badlogic.gdx.controllers.Controller;
 import com.badlogic.gdx.controllers.Controllers;
@@ -41,6 +40,7 @@ public class Main extends ApplicationAdapter {
     private UIManager ui;
     private GameController game;
     private Sound startScreenConfirmSound;
+    private Sound weaponSelectConfirmSound;
 
     private SpriteBatch spriteBatch;
     private ShapeRenderer shapeRenderer;
@@ -72,7 +72,7 @@ public class Main extends ApplicationAdapter {
             drawStartScreen();
             if (detected != null) {
                 transitionToWeaponSelect(detected);
-            } else if (Gdx.input.isKeyJustPressed(Input.Keys.ESCAPE) || isControllerBackJustPressed()) {
+            } else if (startScreen.consumeOptionsRequested()) {
                 transitionToOptions();
             }
         } else if (state == AppState.WEAPON_SELECT) {
@@ -106,6 +106,7 @@ public class Main extends ApplicationAdapter {
     }
 
     private void transitionToGame(InputType inputType, WeaponLoadout loadout) {
+        weaponSelectConfirmSound = weaponSelectScreen.getConfirmSound();
         weaponSelectScreen.dispose();
         weaponSelectScreen = null;
         game = new GameController(PLAY_AREA_WIDTH, PLAY_AREA_HEIGHT, keyBindings, audioSettings, loadout);
@@ -128,6 +129,7 @@ public class Main extends ApplicationAdapter {
         if (optionsScreen == null) {
             optionsScreen = new OptionsScreen(keyBindings, audioSettings, PLAY_AREA_WIDTH, PLAY_AREA_HEIGHT);
         }
+        optionsScreen.syncGamepadState();
         Gdx.input.setInputProcessor(optionsScreen.getStage());
         state = AppState.OPTIONS;
     }
@@ -335,6 +337,7 @@ public class Main extends ApplicationAdapter {
         if (weaponSelectScreen != null) weaponSelectScreen.dispose();
         if (optionsScreen != null) optionsScreen.dispose();
         if (startScreenConfirmSound != null) startScreenConfirmSound.dispose();
+        if (weaponSelectConfirmSound != null) weaponSelectConfirmSound.dispose();
         if (game != null) game.dispose();
         if (ui != null) ui.dispose();
         if (spriteBatch != null) spriteBatch.dispose();

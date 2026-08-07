@@ -8,23 +8,81 @@ import com.badlogic.gdx.controllers.Controllers;
 import com.badlogic.gdx.graphics.Color;
 import com.badlogic.gdx.graphics.Pixmap;
 import com.badlogic.gdx.graphics.Texture;
+import com.badlogic.gdx.graphics.g2d.Animation;
 import com.badlogic.gdx.graphics.g2d.BitmapFont;
 import com.badlogic.gdx.graphics.g2d.GlyphLayout;
 import com.badlogic.gdx.graphics.g2d.SpriteBatch;
+import com.badlogic.gdx.graphics.g2d.TextureRegion;
 import com.badlogic.gdx.graphics.g2d.freetype.FreeTypeFontGenerator;
 import com.badlogic.gdx.graphics.g2d.freetype.FreeTypeFontGenerator.FreeTypeFontParameter;
 import com.badlogic.gdx.utils.Disposable;
-import com.badlogic.gdx.video.VideoPlayer;
-import com.badlogic.gdx.video.VideoPlayerCreator;
+import whitelabeltest.gamemanagers.AnimationCache;
 import whitelabeltest.gamemanagers.InputType;
 
-import java.io.FileNotFoundException;
-
 public class StartScreen implements Disposable {
-    private enum Phase { SELECTING, FADING, DONE }
+    private enum Phase { SELECTING, MENU, FADING, DONE }
 
     private static final float FADE_DURATION = 0.7f;
-    private static final String CONFIRM_SOUND = "pentest.mp3";
+    // Played the instant ARCADE MODE is confirmed (see updateMenu()) - pentest.mp3, previously
+    // played here at the end of the fade, now plays instead when the weapon loadout is confirmed
+    // on WeaponSelectScreen (see WeaponSelectScreen.CONFIRM_SOUND).
+    private static final String ARCADE_CONFIRM_SOUND = "arcadeselectsoundmenu.mp3";
+    private static final String MENU_SELECT_SOUND = "selectsoundmenu.mp3";
+    // Played when OPTIONS is confirmed instead - the same generic confirm cue OptionsScreen's own
+    // menu uses internally, since ARCADE_CONFIRM_SOUND is specifically an arcade-mode-start cue.
+    private static final String OPTIONS_CONFIRM_SOUND = "confirmsoundmenu.mp3";
+
+    // Shown in place of PressButtonSign once the player presses anything in SELECTING - Up/Down or
+    // the D-Pad move the highlight, Enter/Space/Z or the A button confirms (same scheme as
+    // WeaponSelectScreen, which follows right after this). Index 0 starts the run as before;
+    // index 1 signals Main to open OptionsScreen (see consumeOptionsRequested()) without leaving
+    // this phase, so the menu is still showing when Options closes.
+    private static final String[] MENU_ITEMS = { "ARCADE MODE", "OPTIONS" };
+    private static final int MENU_ARCADE_MODE = 0;
+    private static final int MENU_OPTIONS = 1;
+
+    /** One looping animated sign in the opening screen's stacked composition (reference mockup:
+     *  Screenshot 2026-08-07 145711.png) - replaces the old single openingscreen.webm loop with
+     *  several independently-looping sprite-sheet flicker animations layered over a plain black
+     *  background. width is the sign's on-screen width in world units; its drawn height follows
+     *  from that plus the sheet's own per-frame aspect ratio, so it doesn't need to be measured by
+     *  hand. */
+    private static final class Sign {
+        final String file;
+        final int columns, rows;
+        final float width;
+        Texture texture;
+        Animation<TextureRegion> animation;
+
+        Sign(String file, int columns, int rows, float width) {
+            this.file = file;
+            this.columns = columns;
+            this.rows = rows;
+            this.width = width;
+        }
+
+        void load(float frameDuration) {
+            texture = new Texture(Gdx.files.internal(file));
+            animation = AnimationCache.get(texture, columns, rows, columns * rows, frameDuration, Animation.PlayMode.LOOP);
+        }
+
+        float height() {
+            float frameAspect = (texture.getWidth() / (float) columns) / (texture.getHeight() / (float) rows);
+            return width / frameAspect;
+        }
+    }
+
+    private static final float SIGN_FRAME_DURATION = 0.09f;
+
+    // Order/grid layout from the reference mockup: publisher wordmark, subtitle, revision tag,
+    // then a big gap down to the "press any button" prompt, with the studio credit pinned near
+    // the bottom independent of the rest of the stack.
+    private final Sign penTestSign = new Sign("ThePenTestSign.png", 3, 4, 8.0f);
+    private final Sign scathachSign = new Sign("ScathachSign.png", 2, 6, 6.5f);
+    private final Sign revisionSign = new Sign("1stRevSign.png", 3, 4, 5.0f);
+    private final Sign pressButtonSign = new Sign("PressButtonSign.png", 2, 6, 4.6f);
+    private final Sign swanSoftSign = new Sign("SwanSoftSign.png", 2, 6, 4.2f);
+    private final Sign[] signs = { penTestSign, scathachSign, revisionSign, pressButtonSign, swanSoftSign };
 
     private static final int[] KEYBOARD_DETECT_KEYS = {
         Input.Keys.SPACE, Input.Keys.ENTER, Input.Keys.Z, Input.Keys.X,
@@ -33,7 +91,6 @@ public class StartScreen implements Disposable {
         Input.Keys.SHIFT_LEFT, Input.Keys.CONTROL_LEFT
     };
 
-    private final VideoPlayer videoPlayer;
     private final BitmapFont font;
     private final GlyphLayout layout;
     private final Texture fadePixel;
@@ -42,24 +99,26 @@ public class StartScreen implements Disposable {
     private InputType detectedInput;
     private Phase phase = Phase.SELECTING;
     private float fadeTimer;
+    private float animTime;
     private boolean prevAnyButtonDown;
+
+    private int menuIndex;
+    private boolean optionsRequested;
+    private boolean prevMenuDpadUpDown, prevMenuDpadDownDown, prevMenuConfirmDown;
 
     // Kept alive after this screen is disposed (see getConfirmSound()) so the cue can keep
     // playing while GameController loads; the caller is responsible for disposing it eventually.
     private Sound confirmSound;
+    private final Sound menuSelectSound;
+    private final Sound optionsConfirmSound;
 
     public StartScreen(float worldWidth, float worldHeight) {
         this.worldWidth = worldWidth;
         this.worldHeight = worldHeight;
 
-        videoPlayer = VideoPlayerCreator.createVideoPlayer();
-        videoPlayer.setLooping(true);
-        try {
-            videoPlayer.load(Gdx.files.internal("openingscreen.webm"));
-            videoPlayer.play();
-        } catch (FileNotFoundException e) {
-            Gdx.app.error("StartScreen", "Could not open openingscreen.webm", e);
-        }
+        for (Sign sign : signs) sign.load(SIGN_FRAME_DURATION);
+        menuSelectSound = Gdx.audio.newSound(Gdx.files.internal(MENU_SELECT_SOUND));
+        optionsConfirmSound = Gdx.audio.newSound(Gdx.files.internal(OPTIONS_CONFIRM_SOUND));
 
         FreeTypeFontGenerator generator = new FreeTypeFontGenerator(Gdx.files.internal("VT323-Regular.ttf"));
         FreeTypeFontParameter fontParams = new FreeTypeFontParameter();
@@ -79,27 +138,29 @@ public class StartScreen implements Disposable {
     }
 
     public InputType update(float delta) {
-        videoPlayer.update();
+        animTime += delta;
 
         switch (phase) {
             case SELECTING:
                 if (anyKeyJustPressed()) {
                     detectedInput = InputType.KEYBOARD;
-                    phase = Phase.FADING;
+                    enterMenuPhase();
                 } else {
                     Controller c = Controllers.getCurrent();
                     if (c != null && anyButtonJustPressed(c)) {
                         detectedInput = InputType.GAMEPAD;
-                        phase = Phase.FADING;
+                        enterMenuPhase();
                     }
                 }
+                break;
+
+            case MENU:
+                updateMenu();
                 break;
 
             case FADING:
                 fadeTimer += delta;
                 if (fadeTimer >= FADE_DURATION) {
-                    confirmSound = Gdx.audio.newSound(Gdx.files.internal(CONFIRM_SOUND));
-                    confirmSound.play();
                     phase = Phase.DONE;
                 }
                 break;
@@ -110,22 +171,110 @@ public class StartScreen implements Disposable {
         return null;
     }
 
+    /** Whatever gamepad button just triggered SELECTING -> MENU (commonly buttonA, which is also
+     *  the menu's own confirm button) is very likely still physically held down on the first frame
+     *  MENU runs - seeding prevMenu*Down from the controller's actual current state here (instead
+     *  of leaving them at their false default) stops updateMenu() from misreading that same held
+     *  press as a fresh confirm/nav input and instantly selecting ARCADE MODE. */
+    private void enterMenuPhase() {
+        phase = Phase.MENU;
+        Controller controller = Controllers.getCurrent();
+        prevMenuDpadUpDown = controller != null && controller.getButton(controller.getMapping().buttonDpadUp);
+        prevMenuDpadDownDown = controller != null && controller.getButton(controller.getMapping().buttonDpadDown);
+        prevMenuConfirmDown = controller != null && controller.getButton(controller.getMapping().buttonA);
+    }
+
+    private void updateMenu() {
+        if (Gdx.input.isKeyJustPressed(Input.Keys.UP) || Gdx.input.isKeyJustPressed(Input.Keys.W)) moveMenuSelection(-1);
+        if (Gdx.input.isKeyJustPressed(Input.Keys.DOWN) || Gdx.input.isKeyJustPressed(Input.Keys.S)) moveMenuSelection(1);
+        boolean confirmPressed = Gdx.input.isKeyJustPressed(Input.Keys.ENTER)
+            || Gdx.input.isKeyJustPressed(Input.Keys.SPACE)
+            || Gdx.input.isKeyJustPressed(Input.Keys.Z);
+
+        Controller controller = Controllers.getCurrent();
+        if (controller != null) {
+            boolean dpadUpDown = controller.getButton(controller.getMapping().buttonDpadUp);
+            boolean dpadDownDown = controller.getButton(controller.getMapping().buttonDpadDown);
+            if (dpadUpDown && !prevMenuDpadUpDown) moveMenuSelection(-1);
+            if (dpadDownDown && !prevMenuDpadDownDown) moveMenuSelection(1);
+            prevMenuDpadUpDown = dpadUpDown;
+            prevMenuDpadDownDown = dpadDownDown;
+
+            boolean confirmDown = controller.getButton(controller.getMapping().buttonA);
+            if (confirmDown && !prevMenuConfirmDown) confirmPressed = true;
+            prevMenuConfirmDown = confirmDown;
+        }
+
+        if (!confirmPressed) return;
+
+        if (menuIndex == MENU_ARCADE_MODE) {
+            confirmSound = Gdx.audio.newSound(Gdx.files.internal(ARCADE_CONFIRM_SOUND));
+            confirmSound.play();
+            phase = Phase.FADING;
+        } else if (menuIndex == MENU_OPTIONS) {
+            optionsConfirmSound.play();
+            optionsRequested = true;
+        }
+    }
+
+    private void moveMenuSelection(int delta) {
+        int newIndex = (menuIndex + delta + MENU_ITEMS.length) % MENU_ITEMS.length;
+        if (newIndex != menuIndex) menuSelectSound.play();
+        menuIndex = newIndex;
+    }
+
+    /** Consumed by Main once it opens OptionsScreen in response - this phase (MENU) is left
+     *  untouched either way, so the menu (still on whichever item was highlighted) is what's
+     *  showing again once Options closes, rather than reopening the PressButtonSign prompt. */
+    public boolean consumeOptionsRequested() {
+        boolean requested = optionsRequested;
+        optionsRequested = false;
+        return requested;
+    }
+
     public void draw(SpriteBatch batch) {
-        // Video frame
-        Texture frame = videoPlayer.getTexture();
-        if (frame != null) {
-            batch.setColor(Color.WHITE);
-            batch.draw(frame, 0, 0, worldWidth, worldHeight);
-        }
+        batch.setColor(Color.WHITE);
+
+        float centerX = worldWidth / 2f;
+        float y = worldHeight - 0.8f;
+        y = drawSign(batch, penTestSign, centerX, y) - 0.15f;
+        y = drawSign(batch, scathachSign, centerX, y) - 0.15f;
+        drawSign(batch, revisionSign, centerX, y);
+
         if (phase == Phase.SELECTING) {
-            float cx = worldWidth / 2f;
+            drawSign(batch, pressButtonSign, centerX, worldHeight * 0.42f);
+        } else {
+            drawMenu(batch, centerX);
         }
+        drawSign(batch, swanSoftSign, centerX, swanSoftSign.height() + 0.5f);
+
         if (phase == Phase.FADING || phase == Phase.DONE) {
             float alpha = Math.min(fadeTimer / FADE_DURATION, 1f);
             batch.setColor(0f, 0f, 0f, alpha);
             batch.draw(fadePixel, 0, 0, worldWidth, worldHeight);
             batch.setColor(Color.WHITE);
         }
+    }
+
+    private void drawMenu(SpriteBatch batch, float centerX) {
+        float startY = worldHeight * 0.46f;
+        float rowSpacing = worldHeight * 0.09f;
+        for (int i = 0; i < MENU_ITEMS.length; i++) {
+            boolean selected = i == menuIndex;
+            font.setColor(selected ? Color.YELLOW : Color.WHITE);
+            String text = (selected ? "> " : "  ") + MENU_ITEMS[i];
+            drawCentered(batch, text, centerX, startY - i * rowSpacing);
+        }
+        font.setColor(Color.WHITE);
+    }
+
+    /** Draws sign with its top edge at topY, centered on centerX, and returns its bottom edge so
+     *  callers can chain signs into a top-down stack. */
+    private float drawSign(SpriteBatch batch, Sign sign, float centerX, float topY) {
+        TextureRegion frame = sign.animation.getKeyFrame(animTime);
+        float h = sign.height();
+        batch.draw(frame, centerX - sign.width / 2f, topY - h, sign.width, h);
+        return topY - h;
     }
 
     private void drawCentered(SpriteBatch batch, String text, float cx, float y) {
@@ -163,17 +312,20 @@ public class StartScreen implements Disposable {
         return justPressed;
     }
 
-    /** Returns the fire-and-forget confirm sound so the caller can dispose it once it's safe to
-     * cut off (e.g. at app shutdown). Never disposed here, since this screen is torn down while
-     * the sound is still meant to be playing. May be null if the fade never completed. */
+    /** Returns the fire-and-forget arcade-confirm sound so the caller can dispose it once it's
+     * safe to cut off (e.g. at app shutdown). Never disposed here, since this screen is torn down
+     * while the sound is still meant to be playing. May be null if ARCADE MODE was never
+     * confirmed. */
     public Sound getConfirmSound() {
         return confirmSound;
     }
 
     @Override
     public void dispose() {
-        videoPlayer.dispose();
+        for (Sign sign : signs) sign.texture.dispose();
         font.dispose();
         fadePixel.dispose();
+        menuSelectSound.dispose();
+        optionsConfirmSound.dispose();
     }
 }

@@ -2,6 +2,7 @@ package whitelabeltest;
 
 import com.badlogic.gdx.Gdx;
 import com.badlogic.gdx.Input;
+import com.badlogic.gdx.audio.Sound;
 import com.badlogic.gdx.controllers.Controller;
 import com.badlogic.gdx.controllers.Controllers;
 import com.badlogic.gdx.graphics.Color;
@@ -20,6 +21,7 @@ import whitelabeltest.player.WeaponLoadout;
  *  input-type choice exists yet at this point in Main's state machine. */
 public class WeaponSelectScreen implements Disposable {
     private static final WeaponLoadout[] OPTIONS = WeaponLoadout.values();
+    private static final String CONFIRM_SOUND = "pentest.mp3";
 
     private final BitmapFont font;
     private final BitmapFont titleFont;
@@ -28,6 +30,10 @@ public class WeaponSelectScreen implements Disposable {
 
     private int selectedIndex;
     private boolean prevDpadUpDown, prevDpadDownDown, prevConfirmDown;
+
+    // Kept alive after this screen is disposed (see getConfirmSound()) so the cue can keep playing
+    // while GameController loads; the caller is responsible for disposing it eventually.
+    private Sound confirmSound;
 
     public WeaponSelectScreen(float worldWidth, float worldHeight) {
         this.worldWidth = worldWidth;
@@ -70,7 +76,11 @@ public class WeaponSelectScreen implements Disposable {
             prevConfirmDown = confirmDown;
         }
 
-        return confirmPressed ? OPTIONS[selectedIndex] : null;
+        if (!confirmPressed) return null;
+
+        confirmSound = Gdx.audio.newSound(Gdx.files.internal(CONFIRM_SOUND));
+        confirmSound.play();
+        return OPTIONS[selectedIndex];
     }
 
     private void moveSelection(int delta) {
@@ -100,6 +110,13 @@ public class WeaponSelectScreen implements Disposable {
     private void drawCentered(SpriteBatch batch, BitmapFont f, String text, float cx, float y) {
         layout.setText(f, text);
         f.draw(batch, layout, cx - layout.width / 2f, y);
+    }
+
+    /** Returns the fire-and-forget confirm sound so the caller can dispose it once it's safe to
+     * cut off (e.g. at app shutdown). Never disposed here, since this screen is torn down while
+     * the sound is still meant to be playing. May be null if no loadout was confirmed yet. */
+    public Sound getConfirmSound() {
+        return confirmSound;
     }
 
     @Override

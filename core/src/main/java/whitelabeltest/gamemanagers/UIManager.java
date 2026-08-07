@@ -455,7 +455,7 @@ public class UIManager implements Disposable {
     private static final int DEBUG_ROW_SLOT2 = 2;
     private static final int DEBUG_ROW_LEVELS_START = 3;
     private static final String[] DEBUG_WEAPON_LEVEL_IDS = {"BasicWeapon", "WaveBlastWeapon", "Thunderbolt", "OrbitWeapon"};
-    private static final String[] DEBUG_WEAPON_LEVEL_LABELS = {"Basic Lvl", "Fast Lvl", "Bolt Lvl", "Orbit Lvl"};
+    private static final String[] DEBUG_WEAPON_LEVEL_LABELS = {"RAIN.sh Lvl", "Fast Lvl", "LIGHTNING.bat Lvl", "MOON.cmd Lvl"};
     private static final int DEBUG_ROW_LIVES = DEBUG_ROW_LEVELS_START + DEBUG_WEAPON_LEVEL_IDS.length;
     private static final int DEBUG_ROW_PATTERN_PREVIEW = DEBUG_ROW_LIVES + 1;
     private static final int DEBUG_ROW_BOOKMARKS_START = DEBUG_ROW_PATTERN_PREVIEW + 1;
@@ -704,10 +704,10 @@ public class UIManager implements Disposable {
     private String weaponLabel(String weaponId) {
         if (weaponId == null) return "-";
         return switch (weaponId) {
-            case "BasicWeapon" -> "Basic";
+            case "BasicWeapon" -> "RAIN.sh";
             case "WaveBlastWeapon" -> "Fast";
-            case "OrbitWeapon" -> "Orbit";
-            case "Thunderbolt" -> "Bolt";
+            case "OrbitWeapon" -> "MOON.cmd";
+            case "Thunderbolt" -> "LIGHTNING.bat";
             default -> weaponId;
         };
     }
