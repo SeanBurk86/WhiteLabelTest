@@ -12,11 +12,13 @@ import com.badlogic.gdx.graphics.g2d.BitmapFont;
 import com.badlogic.gdx.graphics.g2d.TextureRegion;
 import com.badlogic.gdx.graphics.g2d.freetype.FreeTypeFontGenerator;
 import com.badlogic.gdx.graphics.g2d.freetype.FreeTypeFontGenerator.FreeTypeFontParameter;
+import com.badlogic.gdx.math.Vector2;
 import com.badlogic.gdx.scenes.scene2d.Actor;
 import com.badlogic.gdx.scenes.scene2d.InputEvent;
 import com.badlogic.gdx.scenes.scene2d.InputListener;
 import com.badlogic.gdx.scenes.scene2d.Stage;
 import com.badlogic.gdx.scenes.scene2d.Touchable;
+import com.badlogic.gdx.scenes.scene2d.ui.Image;
 import com.badlogic.gdx.scenes.scene2d.ui.Label;
 import com.badlogic.gdx.scenes.scene2d.ui.ScrollPane;
 import com.badlogic.gdx.scenes.scene2d.ui.Skin;
@@ -58,6 +60,12 @@ public class OptionsScreen implements Disposable {
     private static final float UI_SCALE = 100f;
     private static final float VOLUME_STEP = 0.1f;
 
+    // Selection-box styling for the focused row - see updateSelectionBox(). Thickness is in the
+    // same UI_SCALE-d stage-unit space as everything else here, chosen to match the other menus'
+    // 0.025-world-unit-thick box once scaled by UI_SCALE.
+    private static final Color SELECTION_BOX_COLOR = new Color(0.35f, 1f, 0.55f, 1f);
+    private static final float SELECTION_BOX_THICKNESS = 0.025f * UI_SCALE;
+
     private enum Page { MENU, KEY_BINDINGS, AUDIO }
 
     private final Stage stage;
@@ -73,6 +81,12 @@ public class OptionsScreen implements Disposable {
     private final Sound backSound;
     private final Sound confirmSound;
     private final Sound selectSound;
+    // The green box "surrounding" the focused row - four thin Images added directly to the stage
+    // (not inside root's Table layout) so they can float over whichever button is focused,
+    // repositioned every frame from that button's live stage coordinates (see updateSelectionBox())
+    // rather than laid out once, since the Key Bindings page's ScrollPane moves its buttons around
+    // as focus scrolls the list.
+    private final Image selectionTop, selectionBottom, selectionLeft, selectionRight;
     private final Map<Action, TextButton> keyButtons = new EnumMap<>(Action.class);
     private final Map<Action, TextButton> gamepadBindingButtons = new EnumMap<>(Action.class);
 
@@ -135,6 +149,18 @@ public class OptionsScreen implements Disposable {
         Table root = buildLayout();
         stage.addActor(root);
         stage.setKeyboardFocus(root);
+
+        TextureRegionDrawable pixelDrawable = new TextureRegionDrawable(new TextureRegion(pixel));
+        selectionTop = new Image(pixelDrawable);
+        selectionBottom = new Image(pixelDrawable);
+        selectionLeft = new Image(pixelDrawable);
+        selectionRight = new Image(pixelDrawable);
+        for (Image box : new Image[] {selectionTop, selectionBottom, selectionLeft, selectionRight}) {
+            box.setColor(SELECTION_BOX_COLOR);
+            box.setTouchable(Touchable.disabled);
+            stage.addActor(box);
+        }
+
         switchPage(Page.MENU);
     }
 
@@ -163,9 +189,11 @@ public class OptionsScreen implements Disposable {
         listeningStyle.fontColor = Color.YELLOW;
         skin.add("listening", listeningStyle);
 
+        // Background stays the same as idle - the green box overlay (see updateSelectionBox()) is
+        // what "surrounds" the focused row now, matching StartScreen's/WeaponSelectScreen's menus;
+        // only the text color still changes, same yellow those two use for their selected row.
         TextButton.TextButtonStyle focusedStyle = new TextButton.TextButtonStyle(buttonStyle);
-        focusedStyle.up = base.tint(new Color(0.2f, 0.32f, 0.5f, 1f));
-        focusedStyle.fontColor = Color.CYAN;
+        focusedStyle.fontColor = Color.YELLOW;
         skin.add("focused", focusedStyle);
 
         return skin;
@@ -605,8 +633,32 @@ public class OptionsScreen implements Disposable {
     public void render(float delta) {
         stage.act(delta);
         handleControllerNavigation();
+        updateSelectionBox();
         stage.getViewport().apply();
         stage.draw();
+    }
+
+    /** Repositions the green selection box around whichever button rows.get(focusedRow)[focusedCol]
+     *  currently points at, using that button's live stage coordinates - recomputed every frame
+     *  (not just on focus change) since the Key Bindings page's ScrollPane moves its buttons
+     *  around as focus scrolls the list into view. Hidden entirely when nothing is focused. */
+    private void updateSelectionBox() {
+        boolean visible = focusedRow >= 0 && focusedRow < rows.size;
+        selectionTop.setVisible(visible);
+        selectionBottom.setVisible(visible);
+        selectionLeft.setVisible(visible);
+        selectionRight.setVisible(visible);
+        if (!visible) return;
+
+        TextButton button = rows.get(focusedRow)[focusedCol];
+        Vector2 pos = button.localToStageCoordinates(new Vector2(0f, 0f));
+        float x = pos.x, y = pos.y, w = button.getWidth(), h = button.getHeight();
+        float t = SELECTION_BOX_THICKNESS;
+
+        selectionBottom.setBounds(x, y, w, t);
+        selectionTop.setBounds(x, y + h - t, w, t);
+        selectionLeft.setBounds(x, y, t, h);
+        selectionRight.setBounds(x + w - t, y, t, h);
     }
 
     public void resize(int width, int height) {

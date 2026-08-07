@@ -40,6 +40,12 @@ public class StartScreen implements Disposable {
     private static final String OPENING_MUSIC = "audio/music/openingmusic.mp3";
     private static final float MUSIC_FADE_IN_DURATION = 2f;
 
+    // Selection-box styling for drawMenu() - see drawSelectionBox().
+    private static final Color SELECTION_BOX_COLOR = new Color(0.35f, 1f, 0.55f, 1f);
+    private static final float SELECTION_BOX_PADDING_X = 0.15f;
+    private static final float SELECTION_BOX_PADDING_Y = 0.08f;
+    private static final float SELECTION_BOX_THICKNESS = 0.025f;
+
     // Shown in place of PressButtonSign once the player presses anything in SELECTING - Up/Down or
     // the D-Pad move the highlight, Enter/Space/Z or the A button confirms (same scheme as
     // WeaponSelectScreen, which follows right after this). Index 0 starts the run as before;
@@ -285,11 +291,35 @@ public class StartScreen implements Disposable {
         float rowSpacing = worldHeight * 0.09f;
         for (int i = 0; i < MENU_ITEMS.length; i++) {
             boolean selected = i == menuIndex;
+            float y = startY - i * rowSpacing;
             font.setColor(selected ? Color.YELLOW : Color.WHITE);
             String text = (selected ? "> " : "  ") + MENU_ITEMS[i];
-            drawCentered(batch, text, centerX, startY - i * rowSpacing);
+            drawCentered(batch, text, centerX, y);
+            if (selected) {
+                layout.setText(font, text);
+                drawSelectionBox(batch, centerX, y, layout.width, layout.height);
+            }
         }
         font.setColor(Color.WHITE);
+    }
+
+    /** Green rectangle drawn around whichever menu row is currently selected - centerX/topY match
+     *  drawCentered()'s own placement of that row's text (font.draw(batch, layout, x, y) treats y
+     *  as the TOP of the rendered text, not its baseline, so the box hangs down from topY by
+     *  textHeight rather than up from it), so the box tracks it exactly regardless of row width. */
+    private void drawSelectionBox(SpriteBatch batch, float centerX, float topY, float textWidth, float textHeight) {
+        float x = centerX - textWidth / 2f - SELECTION_BOX_PADDING_X;
+        float y = topY - textHeight - SELECTION_BOX_PADDING_Y;
+        float width = textWidth + SELECTION_BOX_PADDING_X * 2f;
+        float height = textHeight + SELECTION_BOX_PADDING_Y * 2f;
+        float t = SELECTION_BOX_THICKNESS;
+
+        batch.setColor(SELECTION_BOX_COLOR);
+        batch.draw(fadePixel, x, y, width, t);
+        batch.draw(fadePixel, x, y + height - t, width, t);
+        batch.draw(fadePixel, x, y, t, height);
+        batch.draw(fadePixel, x + width - t, y, t, height);
+        batch.setColor(Color.WHITE);
     }
 
     /** Draws sign with its top edge at topY, centered on centerX, and returns its bottom edge so
