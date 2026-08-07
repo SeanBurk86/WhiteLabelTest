@@ -10,18 +10,33 @@ import com.badlogic.gdx.utils.Pool;
 
 /** A point pickup spawned when an enemy dies (see GameController.destroyEnemy - one per 10 of
  *  the enemy's max health). Pops up in a random mostly-upward direction and falls under gravity;
- *  while the player isn't firing, it homes in on the player's graze hitbox instead of falling.
+ *  the instant the player isn't firing, it homes in on the player's graze hitbox (the "graze
+ *  halo" - see CollisionManager.checkPlayerGemCollisions) instead of falling. Holding the fire
+ *  button keeps it falling, so gems can still be farmed by hosing them down rather than collected
+ *  automatically.
+ *  Homing itself is two-phase: for its first STEERING_SWITCH_DELAY seconds it accelerates its
+ *  existing velocity toward the target (the original organic swoop-in), then hands off to a
+ *  speed-scalar re-aimed fresh every frame - accelerating the same vector indefinitely lets a gem
+ *  that's built up enough momentum swing past the target and settle into an orbit instead of ever
+ *  converging, so the switch guarantees it eventually arrives.
  *  CollisionManager.checkPlayerGemCollisions awards a flat score bonus and removes it on contact. */
 public class PointGem implements Pool.Poolable {
     private static final float SIZE = 0.3f;
     private static final float GRAVITY = -9f;
     private static final float HOMING_ACCEL = 90f;
     private static final float HOMING_MAX_SPEED = 65f;
+    private static final float STEERING_SWITCH_DELAY = 2f;
 
     private final Rectangle rectangle = new Rectangle();
     private Animation<TextureRegion> animation;
     private float stateTime;
     private float vx, vy;
+    // Homing speed scalar - re-applied along the fresh direction-to-player every frame (see
+    // update()) rather than accelerating the existing vx/vy vector. Accelerating the existing
+    // vector let the gem's momentum outrun the steering correction and settle into an orbit around
+    // the player instead of converging on it; re-aiming a speed scalar at the current direction
+    // each frame can't accumulate the leftover perpendicular velocity that causes that.
+    private float homingSpeed;
     private float rotation;
     private float worldWidth, worldHeight;
 
@@ -50,15 +65,29 @@ public class PointGem implements Pool.Poolable {
             float dy = grazeHitbox.y - centerY;
             float dist = (float) Math.sqrt(dx * dx + dy * dy);
             if (dist > 0.0001f) {
-                vx += (dx / dist) * HOMING_ACCEL * delta;
-                vy += (dy / dist) * HOMING_ACCEL * delta;
-                float speed = (float) Math.sqrt(vx * vx + vy * vy);
-                if (speed > HOMING_MAX_SPEED) {
-                    vx = vx / speed * HOMING_MAX_SPEED;
-                    vy = vy / speed * HOMING_MAX_SPEED;
+                if (stateTime < STEERING_SWITCH_DELAY) {
+                    // Original method: accelerate the existing vector toward the target.
+                    vx += (dx / dist) * HOMING_ACCEL * delta;
+                    vy += (dy / dist) * HOMING_ACCEL * delta;
+                    float speed = (float) Math.sqrt(vx * vx + vy * vy);
+                    if (speed > HOMING_MAX_SPEED) {
+                        vx = vx / speed * HOMING_MAX_SPEED;
+                        vy = vy / speed * HOMING_MAX_SPEED;
+                    }
+                } else {
+                    // New method: re-aim a speed scalar at the target fresh every frame instead of
+                    // accelerating the vector above, so no leftover perpendicular velocity can
+                    // build up into an orbit. Seeds from the current speed the first time this
+                    // phase runs (homingSpeed == 0 only ever holds then, since it's otherwise
+                    // monotonically increasing) so the handoff doesn't visibly snap.
+                    if (homingSpeed <= 0f) homingSpeed = (float) Math.sqrt(vx * vx + vy * vy);
+                    homingSpeed = Math.min(homingSpeed + HOMING_ACCEL * delta, HOMING_MAX_SPEED);
+                    vx = (dx / dist) * homingSpeed;
+                    vy = (dy / dist) * homingSpeed;
                 }
             }
         } else {
+            homingSpeed = 0f;
             vy += GRAVITY * delta;
         }
 
@@ -85,6 +114,7 @@ public class PointGem implements Pool.Poolable {
     public void reset() {
         vx = 0f;
         vy = 0f;
+        homingSpeed = 0f;
         rotation = 0f;
         stateTime = 0f;
     }
