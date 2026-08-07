@@ -51,8 +51,14 @@ public class AudioManager implements Disposable {
     private final ObjectMap<Integer, Array<Sound>> explosionSounds;
     private final ObjectMap<Integer, Array<Sound>> basicWeaponSounds;
     private final ObjectMap<Integer, Array<Sound>> waveBlastWeaponSounds;
-    private final ObjectMap<Integer, Array<Sound>> orbitWeaponSounds;
     private final ObjectMap<Integer, Array<Sound>> thunderboltWeaponSounds;
+    // OrbitWeapon's bullet-hits-enemy impact sound (see CollisionManager.checkBulletEnemyCollisions)
+    // - OrbitWeapon's Hyper Attack (shield) sound instead reuses waveBlastWeaponSounds (see
+    // OrbitWeapon.hyperAttack()).
+    private final ObjectMap<Integer, Array<Sound>> orbitGongSounds;
+    // OrbitWeapon's ring-rotation firing sound (see OrbitWeapon.update()) - plays once per ring
+    // member per full lap, so it fires `level` times per rotation (one crack per orbiting blade).
+    private final ObjectMap<Integer, Array<Sound>> orbitWhipSounds;
     // Scripted one-off SFX triggered by SpawnScheduler's SoundCue (see playCueSound()) - keyed by
     // asset path and loaded lazily the first time each is cued, since these are level-specific and
     // not worth preloading into a dedicated field like the sounds above.
@@ -85,18 +91,16 @@ public class AudioManager implements Disposable {
         Json json = new Json();
         basicWeaponSounds = new ObjectMap<>();
         waveBlastWeaponSounds = new ObjectMap<>();
-        orbitWeaponSounds = new ObjectMap<>();
         thunderboltWeaponSounds = new ObjectMap<>();
         explosionSounds = new ObjectMap<>();
         pointGemSounds = new ObjectMap<>();
+        orbitGongSounds = new ObjectMap<>();
+        orbitWhipSounds = new ObjectMap<>();
         @SuppressWarnings("unchecked")
         Array<SoundBank> soundBanks = json.fromJson(Array.class, SoundBank.class, Gdx.files.internal("sounds.json"));
         for(SoundBank sBank : soundBanks) {
             if(sBank.type == SoundType.BasicWeapon) {
                 populateSounds(sBank, basicWeaponSounds);
-            }
-            if(sBank.type == SoundType.OrbitWeapon) {
-                populateSounds(sBank, orbitWeaponSounds);
             }
             if(sBank.type == SoundType.Thunderbolt) {
                 populateSounds(sBank, thunderboltWeaponSounds);
@@ -109,6 +113,12 @@ public class AudioManager implements Disposable {
             }
             if(sBank.type == SoundType.PointGem) {
                 populateSounds(sBank, pointGemSounds);
+            }
+            if(sBank.type == SoundType.OrbitGong) {
+                populateSounds(sBank, orbitGongSounds);
+            }
+            if(sBank.type == SoundType.OrbitWhip) {
+                populateSounds(sBank, orbitWhipSounds);
             }
 
         }
@@ -221,6 +231,12 @@ public class AudioManager implements Disposable {
         if (!muted && explosionSounds != null) explosionSounds.get(1).random().play(settings.getSfxVolume());
     }
 
+    /** OrbitWeapon's bullet-hits-enemy impact sound - see CollisionManager.checkBulletEnemyCollisions,
+     *  which calls this once per orbit-bullet hit alongside its OrbitSparks.png hit effect. */
+    public void playOrbitGong() {
+        if (!muted && orbitGongSounds != null) orbitGongSounds.get(1).random().play(settings.getSfxVolume());
+    }
+
     public void playBasicWeaponSound(int level) {
         if (!muted && basicWeaponSounds != null && basicWeaponSounds.containsKey(level)) basicWeaponSounds.get(level).random().play(settings.getSfxVolume());
     }
@@ -229,8 +245,11 @@ public class AudioManager implements Disposable {
         if (!muted && waveBlastWeaponSounds != null && waveBlastWeaponSounds.containsKey(level)) waveBlastWeaponSounds.get(level).random().play(settings.getSfxVolume());
     }
 
-    public void playOrbitWeaponSound(int level) {
-        if (!muted && orbitWeaponSounds != null && orbitWeaponSounds.containsKey(level)) orbitWeaponSounds.get(level).random().play(settings.getSfxVolume());
+    /** OrbitWeapon's ring-rotation whip crack - see OrbitWeapon.update(), which calls this once per
+     *  ring member each time that member completes a full lap, so it plays `level` times per
+     *  rotation of the ring (one crack per orbiting blade). */
+    public void playOrbitWhip() {
+        if (!muted && orbitWhipSounds != null) orbitWhipSounds.get(1).random().play(settings.getSfxVolume());
     }
 
     public void playThunderboltWeaponSound(int level) {
@@ -281,8 +300,9 @@ public class AudioManager implements Disposable {
         disposeSoundsMap(explosionSounds);
         disposeSoundsMap(basicWeaponSounds);
         disposeSoundsMap(waveBlastWeaponSounds);
-        disposeSoundsMap(orbitWeaponSounds);
         disposeSoundsMap(thunderboltWeaponSounds);
+        disposeSoundsMap(orbitGongSounds);
+        disposeSoundsMap(orbitWhipSounds);
         for (Sound s : cueSounds.values()) s.dispose();
     }
 

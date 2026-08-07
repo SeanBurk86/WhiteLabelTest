@@ -15,6 +15,7 @@ import whitelabeltest.player.Player;
 import whitelabeltest.player.powerups.Powerup;
 import whitelabeltest.player.powerups.WeaponPowerup;
 import whitelabeltest.player.weapons.GreenLightningBurst;
+import whitelabeltest.player.weapons.OrbitWeapon;
 import whitelabeltest.player.weapons.ReflectedBolt;
 import whitelabeltest.player.weapons.Weapon;
 
@@ -201,6 +202,7 @@ public class CollisionManager {
                     }
                     bullet.onHit(enemy, bullets, assets);
                     spawnHitEffect(bullet, entityManager);
+                    if (bullet instanceof OrbitWeapon) audio.playOrbitGong();
                 }
 
                 if (bullet.shouldDestroyOnCollision()) {

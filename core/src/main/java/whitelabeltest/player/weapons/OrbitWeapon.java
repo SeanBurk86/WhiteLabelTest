@@ -27,19 +27,28 @@ public class OrbitWeapon extends BaseWeapon {
     public static final float SHIELD_DURATION = 2f;
     private static final float SHIELD_COOLDOWN = 4f;
     private static final float SHIELD_RADIUS = 1.1f;
+    private static final float TWO_PI = (float) (2 * Math.PI);
 
     private WeaponDefinition def;
     private Player player;
     private float angle;
+    // Set only on ring members (see maintainRing()) - the prototype instance never orbits, so it
+    // never needs this and is left null. Used by update() to crack the whip sound once per lap.
+    private AudioManager audio;
 
     private boolean shieldActive;
     private float shieldTimer;
     private float shieldCooldownTimer;
 
     public void init(WeaponDefinition def, Texture texture, Player player, float initialAngle) {
+        init(def, texture, player, initialAngle, null);
+    }
+
+    public void init(WeaponDefinition def, Texture texture, Player player, float initialAngle, AudioManager audio) {
         this.def = def;
         this.player = player;
         this.angle = initialAngle;
+        this.audio = audio;
 
         animation = AnimationCache.get(texture, def.columns > 0 ? def.columns : def.frameCount, def.rows, def.frameCount, def.frameDuration, Animation.PlayMode.LOOP);
         TextureRegion[] frames = animation.getKeyFrames();
@@ -70,7 +79,14 @@ public class OrbitWeapon extends BaseWeapon {
 
         if (player == null || sprite == null) return;
 
+        float prevAngle = angle;
         angle += def.rotationSpeed * delta;
+        // Crack the whip once per full lap this ring member completes, regardless of its phase
+        // offset - since every member shares the same rotation speed, level members crossing this
+        // grid of 2*PI marks independently adds up to `level` cracks per rotation of the ring.
+        if (audio != null && Math.floor(angle / TWO_PI) != Math.floor(prevAngle / TWO_PI)) {
+            audio.playOrbitWhip();
+        }
         float x = player.getCenterX() + (float) Math.cos(angle) * def.radius;
         float y = player.getCenterY() + (float) Math.sin(angle) * def.radius;
 
@@ -88,7 +104,7 @@ public class OrbitWeapon extends BaseWeapon {
     /** Creates/replaces the ring of orbiting bullets so its size always matches this weapon's
      *  level - called every frame while OrbitWeapon is the actively selected slot, regardless of
      *  firing, so the ring is up whenever this weapon is the one selected. */
-    public void maintainRing(Array<Weapon> bullets, Texture texture, Player player) {
+    public void maintainRing(Array<Weapon> bullets, Texture texture, Player player, AudioManager audio) {
         int currentOrbitWeapons = 0;
         for (Weapon w : bullets) {
             if (w instanceof OrbitWeapon) currentOrbitWeapons++;
@@ -103,7 +119,7 @@ public class OrbitWeapon extends BaseWeapon {
         for (int i = 0; i < numShields; i++) {
             OrbitWeapon w = ObjectPools.orbitWeaponPool.obtain();
             w.setLevel(this.level);
-            w.init(def, texture, player, i * step);
+            w.init(def, texture, player, i * step, audio);
             bullets.add(w);
         }
     }
@@ -132,11 +148,12 @@ public class OrbitWeapon extends BaseWeapon {
     }
 
     /** OrbitWeapon's Hyper Attack: raises the reflect shield, subject to its own active/cooldown
-     *  timers (independent of the normal fire-rate cooldown). */
+     *  timers (independent of the normal fire-rate cooldown). Reuses WaveBlastWeapon's fire
+     *  sounds rather than a dedicated bank of its own. */
     @Override
     public void hyperAttack(Player player, Array<Weapon> activeWeapons, Array<Enemy> enemies, AssetManager assets, AudioManager audio) {
         if (tryActivateShield()) {
-            audio.playOrbitWeaponSound(level);
+            audio.playWaveBlastWeaponSound(level);
         }
     }
 

@@ -40,12 +40,11 @@ public class Player {
     private final Weapon[] weaponSlots = new Weapon[2];
     private int activeSlot;
     private int numBombs;
+    private static final int BASE_MAX_BOMBS = 2;
+    private int maxBombs;
     private int numLives;
     private float grazePoints;
 
-    // The level resetWeaponsOnDeath() just floored both weapons down from, so the restore powerup
-    // GameController.applyPlayerHit() spawns at the death spot can be sized to add it back - see
-    // getDeathRestoreLevel().
     private int deathRestoreLevel;
 
     private final Animation<TextureRegion> animation;
@@ -260,6 +259,7 @@ public class Player {
         weaponSlots[1] = null;
         activeSlot = 0;
         numBombs = 1;
+        maxBombs = BASE_MAX_BOMBS;
         numLives = 6;
         grazePoints = 0;
         isInvincible = false;
@@ -305,7 +305,7 @@ public class Player {
 
         handleMovement(delta, input.getMoveDirection(), input.isShooting());
         handleShooting(delta, input.isShooting(), assets, audio, bullets, enemies);
-        maintainOrbitRing(bullets, assets, input.isShooting());
+        maintainOrbitRing(bullets, assets, audio, input.isShooting());
         handleHyperAttack(input.isHyperAttackJustPressed(), bullets, enemies, assets, audio);
         updateThunderboltCharge(delta, input.isHyperAttackJustReleased(), audio);
         updateThunderboltDetonationAnim(delta, input.isHyperAttackHeld(), audio);
@@ -320,9 +320,9 @@ public class Player {
     // The orbit ring is up only while OrbitWeapon is both the actively selected slot and the fire
     // button is held - see OrbitWeapon's class comment for why the prototype/ring-member split is
     // safe despite sharing a class.
-    private void maintainOrbitRing(Array<Weapon> bullets, AssetManager assets, boolean isShooting) {
+    private void maintainOrbitRing(Array<Weapon> bullets, AssetManager assets, AudioManager audio, boolean isShooting) {
         if (getCurrentWeapon() == orbitWeapon && isShooting) {
-            orbitWeapon.maintainRing(bullets, assets.getTexture(orbitWeaponDef.texture), this);
+            orbitWeapon.maintainRing(bullets, assets.getTexture(orbitWeaponDef.texture), this, audio);
         } else {
             orbitWeapon.clearRing(bullets);
         }
@@ -667,7 +667,7 @@ public class Player {
     private void resolveGrazePoints() {
         if (grazePoints > 100) {
             grazePoints %= 100;
-            numBombs++;
+            numBombs = Math.min(numBombs + 1, maxBombs);
         }
     }
 
@@ -758,6 +758,7 @@ public class Player {
         thunderboltWeapon.resetShootTimer();
         animationTime = 0;
         numBombs = 1;
+        maxBombs = BASE_MAX_BOMBS;
         numLives = 6;
         isInvincible = false;
         isDead = false;
@@ -952,6 +953,7 @@ public class Player {
         disableGrazeHitbox();
         reattachHaloImmediately();
         resetWeaponsOnDeath();
+        maxBombs++;
     }
 
     /** Dying strips both equipped weapons down to level 1 - still equipped, just back to their
@@ -976,9 +978,10 @@ public class Player {
     }
 
     public int getNumBombs() { return numBombs;}
+    public int getMaxBombs() { return maxBombs; }
 
     public void setNumBombs(int numBombs) {
-        this.numBombs = numBombs;
+        this.numBombs = MathUtils.clamp(numBombs, 0, maxBombs);
     }
 
     public int getNumLives() { return numLives; }

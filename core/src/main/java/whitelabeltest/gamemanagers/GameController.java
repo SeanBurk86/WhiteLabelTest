@@ -32,6 +32,12 @@ public class GameController implements Disposable {
     private boolean levelComplete;
     private boolean bossVideoTriggered;
     private boolean musicFadeTriggered;
+    // Counts down from LEVEL_COMPLETE_DELAY once the boss is confirmed killed (see
+    // EntityManager.consumeBossKilled()) - negative means no boss kill is pending. Keeps the level
+    // running (explosion/victory-adjacent gameplay still visible) for a beat before cutting to the
+    // level-complete screen, instead of ending the instant the boss's death animation finishes.
+    private static final float LEVEL_COMPLETE_DELAY = 3f;
+    private float levelCompleteDelayTimer = -1f;
     private boolean debugMode;
     private float levelStartTimer;
     private float bombCooldownTimer;
@@ -179,12 +185,19 @@ public class GameController implements Disposable {
             audio.fadeOutStageMusic();
         }
 
-        if (entities.consumeBossKilled()) {
-            levelComplete = true;
-            background.stop();
-            audio.stopStageMusic();
-            audio.playVictory();
-            applyLevelCompleteBonus();
+        if (levelCompleteDelayTimer < 0f && entities.consumeBossKilled()) {
+            levelCompleteDelayTimer = LEVEL_COMPLETE_DELAY;
+        }
+
+        if (levelCompleteDelayTimer >= 0f) {
+            levelCompleteDelayTimer -= delta;
+            if (levelCompleteDelayTimer <= 0f) {
+                levelComplete = true;
+                background.stop();
+                audio.stopStageMusic();
+                audio.playVictory();
+                applyLevelCompleteBonus();
+            }
             return;
         }
 
@@ -466,6 +479,7 @@ public class GameController implements Disposable {
         levelComplete = false;
         bossVideoTriggered = false;
         musicFadeTriggered = false;
+        levelCompleteDelayTimer = -1f;
         levelStartTimer = 0f;
         bombCooldownTimer = 0f;
         hitGraceTimer = -1f;
