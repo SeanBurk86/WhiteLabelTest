@@ -198,7 +198,7 @@ public class CollisionManager {
                     bullet.markDamaged(enemy);
                     scoreManager.registerWeaponHit(bullet.getFireRate() / 2f, bullet.getChainWindow());
                     if (enemy.takeDamage(bullet.getDamage())) {
-                        scoreManager.addScore(GameController.destroyEnemy(audio, entityManager, assets, worldWidth, worldHeight, enemy), bullet.getChainWindow());
+                        scoreManager.addScore(GameController.destroyEnemy(audio, entityManager, assets, worldWidth, worldHeight, enemy, scoreManager), bullet.getChainWindow());
                     }
                     bullet.onHit(enemy, bullets, assets);
                     spawnHitEffect(bullet, entityManager);
@@ -235,7 +235,7 @@ public class CollisionManager {
             audio.playHaloBash();
             scoreManager.registerWeaponHit(0.1f, 2.0f);
             if (enemy.takeDamage(player.getHaloDashDamage())) {
-                scoreManager.addScore(GameController.destroyEnemy(audio, entityManager, assets, worldWidth, worldHeight, enemy), 2.0f);
+                scoreManager.addScore(GameController.destroyEnemy(audio, entityManager, assets, worldWidth, worldHeight, enemy, scoreManager), 2.0f);
             }
         }
     }
@@ -266,7 +266,7 @@ public class CollisionManager {
 
             scoreManager.registerWeaponHit(0.1f, 2.5f);
             if (enemy.takeDamage(damage)) {
-                scoreManager.addScore(GameController.destroyEnemy(audio, entityManager, assets, worldWidth, worldHeight, enemy), 2.5f);
+                scoreManager.addScore(GameController.destroyEnemy(audio, entityManager, assets, worldWidth, worldHeight, enemy, scoreManager), 2.5f);
             }
         }
 

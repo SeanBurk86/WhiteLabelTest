@@ -32,7 +32,6 @@ public class UIManager implements Disposable {
 
     private final BitmapFont font;
     private final GlyphLayout gameOverLayout;
-    private final GlyphLayout levelCompleteLayout;
     private final GlyphLayout textCueLayout;
     private final GlyphLayout measureLayout;
     private final Texture whitePixel;
@@ -57,7 +56,6 @@ public class UIManager implements Disposable {
         font.setUseIntegerPositions(false);
         font.getData().setScale(0.009375f);
         gameOverLayout = new GlyphLayout();
-        levelCompleteLayout = new GlyphLayout();
         textCueLayout = new GlyphLayout();
         measureLayout = new GlyphLayout();
 
@@ -712,20 +710,150 @@ public class UIManager implements Disposable {
         font.setColor(Color.WHITE);
     }
 
-    public void drawLevelComplete(SpriteBatch batch, float worldWidth, float worldHeight, int score, int bombBonus, int livesMultiplier) {
-        font.setColor(Color.RED);
-        StringBuilder text = new StringBuilder("LEVEL COMPLETE\n");
-        if (bombBonus > 0) text.append("Unused Bomb Bonus: +").append(bombBonus).append("\n");
-        if (livesMultiplier > 0) text.append("Lives Remaining Bonus: x").append(livesMultiplier).append("\n");
-        text.append("Your Score: ").append(score).append("\n");
-        if (inputType == InputType.KEYBOARD) {
-            text.append("Press R to Restart\nPress Q to Quit");
-        } else {
-            text.append("Press Start to Restart\nPress Select to Quit");
+    /** "Cyber terminal" stage-clear screen, restyled to match the same HUD language as
+     *  drawHUD()/drawLeftHudPanel() (reference mockup: Screenshot 2026-08-07 093835.png) instead
+     *  of the old plain centered text block. Shows what's actually tracked: enemies destroyed vs.
+     *  SpawnScheduler's total scripted spawn count (ScoreManager.enemiesDestroyed /
+     *  GameController.getTotalEnemyCount(), shown as "ICE DELETED"), the run's peak chain
+     *  (ScoreManager.maxChainCount), the boss takedown time bonus and the rest of the bonus
+     *  breakdown from GameController.applyLevelCompleteBonus(), and the final score - plus, beside
+     *  that stats panel like the mockup's "TACTICAL RANK" card, the letter grade GameController.
+     *  computeRank() derives from those same stats. */
+    public void drawLevelComplete(SpriteBatch batch, float worldWidth, float worldHeight, int score, int bombBonus, int livesMultiplier,
+                                   int enemiesDestroyed, int totalEnemies, int bossTimeBonus, float bossFightSeconds, int maxChainCount,
+                                   LevelRank rank) {
+        batch.setColor(0f, 0f, 0f, 0.88f);
+        batch.draw(whitePixel, 0, 0, worldWidth, worldHeight);
+        batch.setColor(Color.WHITE);
+
+        float centerX = worldWidth / 2f;
+        float margin = 0.6f;
+        float panelX = margin;
+        float panelWidth = worldWidth - margin * 2f;
+
+        float titleY = worldHeight - 0.9f;
+        drawGlowCentered(batch, "STAGE CLEAR", centerX, titleY, 2.6f, HUD_GREEN_DIM, Color.WHITE);
+
+        float subtitleY = titleY - 0.5f;
+        drawCentered(batch, "-- HOSTILE ARRAY NEUTRALIZED --", centerX, subtitleY, HUD_GREEN);
+
+        // Decorative scan panel standing in for the mockup's radar graphic - a full CircleMeterEffect
+        // ring (fraction 1.0, "scan complete") captioned with the boss kill that always triggers
+        // level completion (see GameController: levelCompleteDelayTimer only starts once
+        // EntityManager.consumeBossKilled() fires).
+        float scanTop = subtitleY - 1.0f;
+        float scanHeight = 2.6f;
+        float scanBottom = scanTop - scanHeight;
+        drawBoxBorder(batch, panelX, scanBottom, panelWidth, scanHeight, HUD_GREEN_DIM);
+
+        float ringSize = 1.5f;
+        float ringCenterY = scanBottom + scanHeight / 2f + 0.2f;
+        circleMeterEffect.render(batch, whitePixel, 1f, HUD_GAUGE_BG, HUD_GREEN,
+            0.34f, 0.5f, centerX - ringSize / 2f, ringCenterY - ringSize / 2f, ringSize);
+        drawScaledCentered(batch, "100%", centerX, ringCenterY - 0.12f, 1.3f, HUD_GREEN);
+
+        drawCentered(batch, "[ BOSS DEFEATED ]", centerX, scanBottom + 0.35f, HUD_AMBER);
+
+        // Bonus breakdown panel, with the rank badge card beside it (mockup layout) rather than
+        // below it - both share the same top/bottom/height so their borders line up.
+        float statsTop = scanBottom - 0.6f;
+        float statsHeight = 4.3f;
+        float statsBottom = statsTop - statsHeight;
+
+        float cardGap = 0.2f;
+        float rankWidth = 2.6f;
+        float statsWidth = panelWidth - rankWidth - cardGap;
+        float statsX = panelX;
+        float rankX = statsX + statsWidth + cardGap;
+
+        drawBoxBorder(batch, statsX, statsBottom, statsWidth, statsHeight, HUD_GREEN_DIM);
+        drawRankCard(batch, rankX, statsBottom, rankWidth, statsHeight, rank);
+
+        float rowX = statsX + 0.25f;
+        float rowRight = statsX + statsWidth - 0.25f;
+        float rowY = statsTop - 0.35f;
+        drawSectionLabel(batch, "MISSION_LOG", rowX, rowY);
+        rowY -= 0.3f;
+        drawDivider(batch, rowX, rowY, rowRight - rowX);
+
+        rowY -= 0.45f;
+        drawStatRow(batch, "ICE DELETED", String.format("%03d / %03d", enemiesDestroyed, totalEnemies), rowX, rowRight, rowY, HUD_GREEN);
+        rowY -= 0.45f;
+        drawStatRow(batch, "PEAK CHAIN", maxChainCount + " HITS", rowX, rowRight, rowY, HUD_GREEN);
+        rowY -= 0.45f;
+        if (bossTimeBonus > 0) {
+            drawStatRow(batch, "BOSS BONUS", String.format("+%d PTS (%.1fs)", bossTimeBonus, bossFightSeconds), rowX, rowRight, rowY, HUD_AMBER);
+            rowY -= 0.45f;
         }
-        levelCompleteLayout.setText(font, text.toString());
-        font.draw(batch, levelCompleteLayout, (worldWidth - levelCompleteLayout.width) / 2, (worldHeight + levelCompleteLayout.height) / 2);
+        if (bombBonus > 0) {
+            drawStatRow(batch, "BOMB BONUS", "+" + bombBonus + " PTS", rowX, rowRight, rowY, HUD_AMBER);
+            rowY -= 0.45f;
+        }
+        if (livesMultiplier > 0) {
+            drawStatRow(batch, "LIVES BONUS", "x" + (livesMultiplier + 1) + " MULTIPLIER", rowX, rowRight, rowY, HUD_GREEN);
+        }
+
+        float totalBoxHeight = 0.55f;
+        float totalBoxY = statsBottom + 0.2f;
+        batch.setColor(0.05f, 0.14f, 0.09f, 1f);
+        batch.draw(whitePixel, rowX, totalBoxY, rowRight - rowX, totalBoxHeight);
+        batch.setColor(Color.WHITE);
+        drawBoxBorder(batch, rowX, totalBoxY, rowRight - rowX, totalBoxHeight, HUD_GREEN);
         font.setColor(Color.WHITE);
+        font.draw(batch, "TOTAL SCORE", rowX + 0.15f, totalBoxY + totalBoxHeight * 0.65f);
+        drawTextRightAligned(batch, String.format("%010d", score), rowRight - 0.15f, totalBoxY + totalBoxHeight * 0.65f, HUD_GREEN);
+
+        String prompt = inputType == InputType.KEYBOARD ? "R = RESTART   Q = QUIT" : "START = RESTART   SELECT = QUIT";
+        drawCentered(batch, prompt, centerX, statsBottom - 0.5f, HUD_LABEL);
+    }
+
+    /** The mockup's side "TACTICAL RANK" card: a bordered box (border tinted by rank) holding a
+     *  full CircleMeterEffect ring around the big letter grade, with "TACTICAL RANK" and the
+     *  rank's flavor subtitle (LevelRank.subtitle) centered below it. */
+    private void drawRankCard(SpriteBatch batch, float x, float y, float width, float height, LevelRank rank) {
+        Color accent = rankColor(rank);
+        drawBoxBorder(batch, x, y, width, height, accent);
+
+        float centerX = x + width / 2f;
+        float contentCenterY = y + height / 2f;
+
+        float ringSize = 1.4f;
+        float ringCenterY = contentCenterY + 0.55f;
+        circleMeterEffect.render(batch, whitePixel, 1f, HUD_GAUGE_BG, accent,
+            0.3f, 0.5f, centerX - ringSize / 2f, ringCenterY - ringSize / 2f, ringSize);
+        drawScaledCentered(batch, rank.name(), centerX, ringCenterY + 0.1f, 2.4f, accent);
+
+        float labelY = ringCenterY - ringSize / 2f - 0.35f;
+        drawCentered(batch, "TACTICAL RANK", centerX, labelY, HUD_LABEL);
+        drawCentered(batch, rank.subtitle, centerX, labelY - 0.35f, accent);
+    }
+
+    private Color rankColor(LevelRank rank) {
+        return switch (rank) {
+            case S -> HUD_AMBER;
+            case A, B -> HUD_GREEN;
+            case C -> HUD_LABEL;
+            case D -> HUD_RED;
+        };
+    }
+
+    private void drawStatRow(SpriteBatch batch, String label, String value, float x, float rightEdge, float y, Color valueColor) {
+        font.setColor(HUD_LABEL);
+        font.draw(batch, label, x, y);
+        font.setColor(Color.WHITE);
+        drawTextRightAligned(batch, value, rightEdge, y, valueColor);
+    }
+
+    // Cheap outline/glow: the base color drawn once, on top of the glow color drawn at four
+    // diagonal offsets - approximates the reference mockup's neon-outlined title without a real
+    // shader pass.
+    private void drawGlowCentered(SpriteBatch batch, String text, float centerX, float y, float scale, Color glowColor, Color color) {
+        float o = 0.035f;
+        drawScaledCentered(batch, text, centerX - o, y - o, scale, glowColor);
+        drawScaledCentered(batch, text, centerX + o, y - o, scale, glowColor);
+        drawScaledCentered(batch, text, centerX - o, y + o, scale, glowColor);
+        drawScaledCentered(batch, text, centerX + o, y + o, scale, glowColor);
+        drawScaledCentered(batch, text, centerX, y, scale, color);
     }
 
     public void drawTextCues(SpriteBatch batch, float elapsedTime, Array<TextCue> cues) {

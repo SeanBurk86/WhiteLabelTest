@@ -42,6 +42,9 @@ public class Player {
     private int numBombs;
     private static final int BASE_MAX_BOMBS = 2;
     private int maxBombs;
+    // Also GameController.computeRank()'s denominator for the level-complete rank's
+    // lives-preserved fraction, since numLives only ever starts here and counts down.
+    public static final int STARTING_LIVES = 6;
     private int numLives;
     private float grazePoints;
 
@@ -260,7 +263,7 @@ public class Player {
         activeSlot = 0;
         numBombs = 1;
         maxBombs = BASE_MAX_BOMBS;
-        numLives = 6;
+        numLives = STARTING_LIVES;
         grazePoints = 0;
         isInvincible = false;
     }
@@ -759,7 +762,7 @@ public class Player {
         animationTime = 0;
         numBombs = 1;
         maxBombs = BASE_MAX_BOMBS;
-        numLives = 6;
+        numLives = STARTING_LIVES;
         isInvincible = false;
         isDead = false;
         deathTimer = 0f;

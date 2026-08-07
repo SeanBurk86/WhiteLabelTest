@@ -4,6 +4,7 @@ import com.badlogic.gdx.Gdx;
 import com.badlogic.gdx.graphics.Texture;
 import com.badlogic.gdx.graphics.g2d.Animation;
 import com.badlogic.gdx.graphics.g2d.TextureRegion;
+import com.badlogic.gdx.math.MathUtils;
 import com.badlogic.gdx.utils.Array;
 import com.badlogic.gdx.utils.Disposable;
 import whitelabeltest.enemy.Enemy;
@@ -69,6 +70,24 @@ public class GameController implements Disposable {
     private static final int BOMB_BONUS_PER_UNUSED = 10000;
     private int levelCompleteBombBonus;
     private int levelCompleteLivesMultiplier;
+
+    // Boss takedown time bonus: rewards beating the boss quickly, measured from its scripted
+    // spawn time (SpawnScheduler.getBossSpawnTime()) to the schedule-clock instant its kill is
+    // confirmed (captured below as bossDefeatedScheduleTime, not the LEVEL_COMPLETE_DELAY-delayed
+    // moment levelComplete actually flips true) - so the celebratory delay doesn't itself cost
+    // points. Linearly scales down to 0 once the fight runs past BOSS_TIME_BONUS_PAR_SECONDS.
+    private static final float BOSS_TIME_BONUS_PAR_SECONDS = 120f;
+    private static final int BOSS_TIME_BONUS_PER_SECOND = 200;
+    private float bossDefeatedScheduleTime = -1f;
+    private float levelCompleteBossFightSeconds = -1f;
+    private int levelCompleteTimeBonus;
+
+    // Level-complete rank (see computeRank()): an unweighted average of five 0..1 fractions -
+    // kill rate, peak chain vs. CHAIN_RANK_TARGET, boss takedown speed, bombs preserved, lives
+    // preserved - bucketed into a letter grade. Purely a display flourish alongside the same
+    // MISSION_LOG rows it's derived from; doesn't feed back into the score.
+    private static final float CHAIN_RANK_TARGET = 40f;
+    private LevelRank levelCompleteRank = LevelRank.D;
 
     private static final float BOMB_SAVE_WINDOW = 0.065f;
     private float hitGraceTimer = -1f;
@@ -187,6 +206,7 @@ public class GameController implements Disposable {
 
         if (levelCompleteDelayTimer < 0f && entities.consumeBossKilled()) {
             levelCompleteDelayTimer = LEVEL_COMPLETE_DELAY;
+            bossDefeatedScheduleTime = spawnScheduler.getTotalTime();
         }
 
         if (levelCompleteDelayTimer >= 0f) {
@@ -320,17 +340,54 @@ public class GameController implements Disposable {
         debugMenuOpen = false;
     }
 
-    /** End-of-level tally: 10000 points per unused bomb, added as a flat bonus, then - only if the
-     *  player still has lives in reserve - the whole score (including that bonus) is multiplied by
-     *  the number of lives remaining. Stored for UIManager.drawLevelComplete to show the breakdown. */
+    /** End-of-level tally: 10000 points per unused bomb plus the boss takedown time bonus, both
+     *  added as flat bonuses, then - only if the player still has lives in reserve - the whole
+     *  score (including those bonuses) is multiplied by the number of lives remaining. Stored for
+     *  UIManager.drawLevelComplete to show the breakdown. */
     private void applyLevelCompleteBonus() {
         Player player = entities.getPlayer();
 
         levelCompleteBombBonus = player.getNumBombs() * BOMB_BONUS_PER_UNUSED;
         if (levelCompleteBombBonus > 0) scoreManager.addBonus(levelCompleteBombBonus);
 
+        float bossSpawnTime = spawnScheduler.getBossSpawnTime();
+        if (bossDefeatedScheduleTime >= 0f && bossSpawnTime >= 0f) {
+            levelCompleteBossFightSeconds = Math.max(0f, bossDefeatedScheduleTime - bossSpawnTime);
+            levelCompleteTimeBonus = Math.max(0,
+                Math.round((BOSS_TIME_BONUS_PAR_SECONDS - levelCompleteBossFightSeconds) * BOSS_TIME_BONUS_PER_SECOND));
+            if (levelCompleteTimeBonus > 0) scoreManager.addBonus(levelCompleteTimeBonus);
+        } else {
+            levelCompleteBossFightSeconds = -1f;
+            levelCompleteTimeBonus = 0;
+        }
+
         levelCompleteLivesMultiplier = player.getNumLives();
         if (levelCompleteLivesMultiplier > 0) scoreManager.multiplyScore(levelCompleteLivesMultiplier + 1);
+
+        levelCompleteRank = computeRank(player);
+    }
+
+    /** Grades the run by averaging five 0..1 fractions - see the field comment on
+     *  levelCompleteRank. Each fraction defensively defaults to a neutral 1f when its underlying
+     *  stat isn't available (e.g. no boss in the schedule) rather than dragging the grade down for
+     *  something the player had no control over. */
+    private LevelRank computeRank(Player player) {
+        int totalEnemies = spawnScheduler.getSchedule().size;
+        float killFraction = totalEnemies > 0 ? scoreManager.getEnemiesDestroyed() / (float) totalEnemies : 1f;
+        float chainFraction = MathUtils.clamp(scoreManager.getMaxChainCount() / CHAIN_RANK_TARGET, 0f, 1f);
+        float bossFraction = levelCompleteBossFightSeconds >= 0f
+            ? MathUtils.clamp((BOSS_TIME_BONUS_PAR_SECONDS - levelCompleteBossFightSeconds) / BOSS_TIME_BONUS_PAR_SECONDS, 0f, 1f)
+            : 1f;
+        float bombFraction = player.getMaxBombs() > 0 ? player.getNumBombs() / (float) player.getMaxBombs() : 1f;
+        float livesFraction = MathUtils.clamp(player.getNumLives() / (float) Player.STARTING_LIVES, 0f, 1f);
+
+        float overall = (killFraction + chainFraction + bossFraction + bombFraction + livesFraction) / 5f;
+
+        if (overall >= 0.95f) return LevelRank.S;
+        if (overall >= 0.85f) return LevelRank.A;
+        if (overall >= 0.65f) return LevelRank.B;
+        if (overall >= 0.45f) return LevelRank.C;
+        return LevelRank.D;
     }
 
     private void handleGameOverInput() {
@@ -387,12 +444,13 @@ public class GameController implements Disposable {
         for (int i = enemies.size - 1; i >= 0; i--) {
             Enemy e = enemies.get(i);
             if (e.takeDamage(damage)) {
-                scoreManager.addScore(destroyEnemy(audio, entities, assets, worldWidth, worldHeight, e));
+                scoreManager.addScore(destroyEnemy(audio, entities, assets, worldWidth, worldHeight, e, scoreManager));
             }
         }
     }
 
-    public static int destroyEnemy(AudioManager audio, EntityManager entityManager, AssetManager assets, float worldWidth, float worldHeight, Enemy enemy) {
+    public static int destroyEnemy(AudioManager audio, EntityManager entityManager, AssetManager assets, float worldWidth, float worldHeight, Enemy enemy, ScoreManager scoreManager) {
+        scoreManager.registerEnemyDestroyed();
         int scoreValue = enemy.getScore();
 
         if (enemy.cancelsBulletsOnDeath()) entityManager.destroyEnemyBullets(enemy, assets);
@@ -485,6 +543,10 @@ public class GameController implements Disposable {
         hitGraceTimer = -1f;
         levelCompleteBombBonus = 0;
         levelCompleteLivesMultiplier = 0;
+        bossDefeatedScheduleTime = -1f;
+        levelCompleteBossFightSeconds = -1f;
+        levelCompleteTimeBonus = 0;
+        levelCompleteRank = LevelRank.D;
         audio.stopVictory();
         audio.playStageMusic();
         patternPreviewer.close(entities);
@@ -516,6 +578,12 @@ public class GameController implements Disposable {
     public boolean isLevelComplete() { return levelComplete; }
     public int getLevelCompleteBombBonus() { return levelCompleteBombBonus; }
     public int getLevelCompleteLivesMultiplier() { return levelCompleteLivesMultiplier; }
+    public int getEnemiesDestroyed() { return scoreManager.getEnemiesDestroyed(); }
+    public int getTotalEnemyCount() { return spawnScheduler.getSchedule().size; }
+    public int getMaxChainCount() { return scoreManager.getMaxChainCount(); }
+    public LevelRank getLevelCompleteRank() { return levelCompleteRank; }
+    public int getLevelCompleteTimeBonus() { return levelCompleteTimeBonus; }
+    public float getLevelCompleteBossFightSeconds() { return levelCompleteBossFightSeconds; }
     public boolean isDebugMode() { return debugMode; }
     public boolean isDebugMenuOpen() { return debugMenuOpen; }
     public int getDebugMenuSelectedIndex() { return debugMenuSelectedIndex; }

@@ -203,7 +203,10 @@ public class Main extends ApplicationAdapter {
             ui.drawGameOver(spriteBatch, PLAY_AREA_WIDTH, PLAY_AREA_HEIGHT);
         } else if (game.isLevelComplete()) {
             ui.drawLevelComplete(spriteBatch, PLAY_AREA_WIDTH, PLAY_AREA_HEIGHT, game.getScore(),
-                game.getLevelCompleteBombBonus(), game.getLevelCompleteLivesMultiplier());
+                game.getLevelCompleteBombBonus(), game.getLevelCompleteLivesMultiplier(),
+                game.getEnemiesDestroyed(), game.getTotalEnemyCount(),
+                game.getLevelCompleteTimeBonus(), game.getLevelCompleteBossFightSeconds(),
+                game.getMaxChainCount(), game.getLevelCompleteRank());
         }
 
         if (game.isDebugMode() && game.isAudioMuted() && !game.isDebugMenuOpen()) {

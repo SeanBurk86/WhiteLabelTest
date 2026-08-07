@@ -160,6 +160,17 @@ public class SpawnScheduler {
 
     public Array<SpawnEvent> getSchedule() { return schedule; }
 
+    /** Scheduled spawn time of the stage's boss (the first SpawnEvent whose EnemyDefinition sets
+     *  isBoss), or -1 if the schedule has no boss - see GameController's boss-takedown time bonus,
+     *  which measures the fight against this rather than the whole stage's elapsed time. */
+    public float getBossSpawnTime() {
+        for (SpawnEvent event : schedule) {
+            EnemyDefinition def = enemyDefinitions.get(event.type);
+            if (def != null && def.isBoss) return event.time;
+        }
+        return -1f;
+    }
+
     /** True once the schedule clock has crossed backgroundVideoTime - a permanent latch (only
      *  cleared by reset()/seekTo()) that GameController edge-detects to trigger the boss video
      *  hand-off exactly once - see GameController.update(). */
