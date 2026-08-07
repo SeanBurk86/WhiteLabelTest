@@ -21,7 +21,7 @@ import whitelabeltest.player.WeaponLoadout;
  *  input-type choice exists yet at this point in Main's state machine. */
 public class WeaponSelectScreen implements Disposable {
     private static final WeaponLoadout[] OPTIONS = WeaponLoadout.values();
-    private static final String CONFIRM_SOUND = "pentest.mp3";
+    private static final String CONFIRM_SOUND = "audio/menu/pentest.mp3";
 
     private final BitmapFont font;
     private final BitmapFont titleFont;
@@ -39,7 +39,7 @@ public class WeaponSelectScreen implements Disposable {
         this.worldWidth = worldWidth;
         this.worldHeight = worldHeight;
 
-        FreeTypeFontGenerator generator = new FreeTypeFontGenerator(Gdx.files.internal("VT323-Regular.ttf"));
+        FreeTypeFontGenerator generator = new FreeTypeFontGenerator(Gdx.files.internal("fonts/VT323-Regular.ttf"));
         FreeTypeFontParameter fontParams = new FreeTypeFontParameter();
         fontParams.size = 32;
         font = generator.generateFont(fontParams);

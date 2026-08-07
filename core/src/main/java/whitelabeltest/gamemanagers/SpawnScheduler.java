@@ -41,8 +41,8 @@ public class SpawnScheduler {
 
     // A scripted one-off sound effect - lets a level trigger SFX (alarms, environmental stingers,
     // dialogue blips, etc.) purely from spawn_schedule.json, the same way SpawnEvent triggers
-    // enemies. "sound" is an asset path (e.g. "alarm.mp3"), lazily loaded and cached the first
-    // time it's played - see AudioManager.playCueSound().
+    // enemies. "sound" is an asset path relative to assets/ (e.g. "audio/sfx/alarm.mp3"), lazily
+    // loaded and cached the first time it's played - see AudioManager.playCueSound().
     public static class SoundCue {
         public float time;
         public String sound;
@@ -114,7 +114,7 @@ public class SpawnScheduler {
     private void loadDefinitions() {
         Json json = new Json();
         @SuppressWarnings("unchecked")
-        Array<EnemyDefinition> defs = json.fromJson(Array.class, EnemyDefinition.class, Gdx.files.internal("enemies.json"));
+        Array<EnemyDefinition> defs = json.fromJson(Array.class, EnemyDefinition.class, Gdx.files.internal("data/enemies.json"));
         for (EnemyDefinition def : defs) {
             enemyDefinitions.put(def.id, def);
         }
@@ -123,7 +123,7 @@ public class SpawnScheduler {
     private void loadSchedule() {
         Json json = new Json();
         try {
-            ScheduleFile file = json.fromJson(ScheduleFile.class, Gdx.files.internal("spawn_schedule.json"));
+            ScheduleFile file = json.fromJson(ScheduleFile.class, Gdx.files.internal("data/spawn_schedule.json"));
             this.schedule = (file != null && file.events != null) ? file.events : new Array<>();
             if (file != null && file.textCues != null) this.textCues = file.textCues;
             if (file != null && file.soundCues != null) this.soundCues = file.soundCues;

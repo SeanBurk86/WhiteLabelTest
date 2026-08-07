@@ -54,7 +54,7 @@ public class UIManager implements Disposable {
         this.chainFireEffect = new ChainFireEffect();
         this.dataStreamEffect = new DataStreamEffect();
 
-        FreeTypeFontGenerator generator = new FreeTypeFontGenerator(Gdx.files.internal("VT323-Regular.ttf"));
+        FreeTypeFontGenerator generator = new FreeTypeFontGenerator(Gdx.files.internal("fonts/VT323-Regular.ttf"));
         FreeTypeFontParameter fontParams = new FreeTypeFontParameter();
         fontParams.size = 32;
         font = generator.generateFont(fontParams);
@@ -82,7 +82,7 @@ public class UIManager implements Disposable {
         heartIcon = new Texture(heartPixmap);
         heartPixmap.dispose();
 
-        gameOverSignTexture = new Texture(Gdx.files.internal("GameOverSign.png"));
+        gameOverSignTexture = new Texture(Gdx.files.internal("images/ui/GameOverSign.png"));
         gameOverSignAnimation = AnimationCache.get(gameOverSignTexture, 4, 3, 12, GAME_OVER_SIGN_FRAME_DURATION, Animation.PlayMode.NORMAL);
     }
 

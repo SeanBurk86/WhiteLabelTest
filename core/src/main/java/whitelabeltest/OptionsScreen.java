@@ -112,11 +112,11 @@ public class OptionsScreen implements Disposable {
         this.audioSettings = audioSettings;
         this.stage = new Stage(new ExtendViewport(worldWidth * UI_SCALE, worldHeight * UI_SCALE));
 
-        backSound = Gdx.audio.newSound(Gdx.files.internal("backsoundmenu.mp3"));
-        confirmSound = Gdx.audio.newSound(Gdx.files.internal("confirmsoundmenu.mp3"));
-        selectSound = Gdx.audio.newSound(Gdx.files.internal("selectsoundmenu.mp3"));
+        backSound = Gdx.audio.newSound(Gdx.files.internal("audio/menu/backsoundmenu.mp3"));
+        confirmSound = Gdx.audio.newSound(Gdx.files.internal("audio/menu/confirmsoundmenu.mp3"));
+        selectSound = Gdx.audio.newSound(Gdx.files.internal("audio/menu/selectsoundmenu.mp3"));
 
-        FreeTypeFontGenerator generator = new FreeTypeFontGenerator(Gdx.files.internal("VT323-Regular.ttf"));
+        FreeTypeFontGenerator generator = new FreeTypeFontGenerator(Gdx.files.internal("fonts/VT323-Regular.ttf"));
         FreeTypeFontParameter fontParams = new FreeTypeFontParameter();
         fontParams.size = 32;
         font = generator.generateFont(fontParams);

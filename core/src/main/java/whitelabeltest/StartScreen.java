@@ -2,6 +2,7 @@ package whitelabeltest;
 
 import com.badlogic.gdx.Gdx;
 import com.badlogic.gdx.Input;
+import com.badlogic.gdx.audio.Music;
 import com.badlogic.gdx.audio.Sound;
 import com.badlogic.gdx.controllers.Controller;
 import com.badlogic.gdx.controllers.Controllers;
@@ -17,6 +18,7 @@ import com.badlogic.gdx.graphics.g2d.freetype.FreeTypeFontGenerator;
 import com.badlogic.gdx.graphics.g2d.freetype.FreeTypeFontGenerator.FreeTypeFontParameter;
 import com.badlogic.gdx.utils.Disposable;
 import whitelabeltest.gamemanagers.AnimationCache;
+import whitelabeltest.gamemanagers.AudioSettings;
 import whitelabeltest.gamemanagers.InputType;
 
 public class StartScreen implements Disposable {
@@ -26,11 +28,17 @@ public class StartScreen implements Disposable {
     // Played the instant ARCADE MODE is confirmed (see updateMenu()) - pentest.mp3, previously
     // played here at the end of the fade, now plays instead when the weapon loadout is confirmed
     // on WeaponSelectScreen (see WeaponSelectScreen.CONFIRM_SOUND).
-    private static final String ARCADE_CONFIRM_SOUND = "arcadeselectsoundmenu.mp3";
-    private static final String MENU_SELECT_SOUND = "selectsoundmenu.mp3";
+    private static final String ARCADE_CONFIRM_SOUND = "audio/menu/arcadeselectsoundmenu.mp3";
+    private static final String MENU_SELECT_SOUND = "audio/menu/selectsoundmenu.mp3";
     // Played when OPTIONS is confirmed instead - the same generic confirm cue OptionsScreen's own
     // menu uses internally, since ARCADE_CONFIRM_SOUND is specifically an arcade-mode-start cue.
-    private static final String OPTIONS_CONFIRM_SOUND = "confirmsoundmenu.mp3";
+    private static final String OPTIONS_CONFIRM_SOUND = "audio/menu/confirmsoundmenu.mp3";
+
+    // Looping background music for this screen, faded in from silence over MUSIC_FADE_IN_DURATION
+    // rather than starting at full volume - see update(). Stopped/disposed alongside the rest of
+    // this screen once a run actually starts (see dispose()).
+    private static final String OPENING_MUSIC = "audio/music/openingmusic.mp3";
+    private static final float MUSIC_FADE_IN_DURATION = 2f;
 
     // Shown in place of PressButtonSign once the player presses anything in SELECTING - Up/Down or
     // the D-Pad move the highlight, Enter/Space/Z or the A button confirms (same scheme as
@@ -77,11 +85,11 @@ public class StartScreen implements Disposable {
     // Order/grid layout from the reference mockup: publisher wordmark, subtitle, revision tag,
     // then a big gap down to the "press any button" prompt, with the studio credit pinned near
     // the bottom independent of the rest of the stack.
-    private final Sign penTestSign = new Sign("ThePenTestSign.png", 3, 4, 8.0f);
-    private final Sign scathachSign = new Sign("ScathachSign.png", 2, 6, 6.5f);
-    private final Sign revisionSign = new Sign("1stRevSign.png", 3, 4, 5.0f);
-    private final Sign pressButtonSign = new Sign("PressButtonSign.png", 2, 6, 4.6f);
-    private final Sign swanSoftSign = new Sign("SwanSoftSign.png", 2, 6, 4.2f);
+    private final Sign penTestSign = new Sign("images/ui/ThePenTestSign.png", 3, 4, 8.0f);
+    private final Sign scathachSign = new Sign("images/ui/ScathachSign.png", 2, 6, 6.5f);
+    private final Sign revisionSign = new Sign("images/ui/1stRevSign.png", 3, 4, 5.0f);
+    private final Sign pressButtonSign = new Sign("images/ui/PressButtonSign.png", 2, 6, 4.6f);
+    private final Sign swanSoftSign = new Sign("images/ui/SwanSoftSign.png", 2, 6, 4.2f);
     private final Sign[] signs = { penTestSign, scathachSign, revisionSign, pressButtonSign, swanSoftSign };
 
     private static final int[] KEYBOARD_DETECT_KEYS = {
@@ -95,6 +103,10 @@ public class StartScreen implements Disposable {
     private final GlyphLayout layout;
     private final Texture fadePixel;
     private final float worldWidth, worldHeight;
+
+    private final AudioSettings audioSettings;
+    private final Music openingMusic;
+    private float musicFadeTimer;
 
     private InputType detectedInput;
     private Phase phase = Phase.SELECTING;
@@ -112,15 +124,21 @@ public class StartScreen implements Disposable {
     private final Sound menuSelectSound;
     private final Sound optionsConfirmSound;
 
-    public StartScreen(float worldWidth, float worldHeight) {
+    public StartScreen(float worldWidth, float worldHeight, AudioSettings audioSettings) {
         this.worldWidth = worldWidth;
         this.worldHeight = worldHeight;
+        this.audioSettings = audioSettings;
 
         for (Sign sign : signs) sign.load(SIGN_FRAME_DURATION);
         menuSelectSound = Gdx.audio.newSound(Gdx.files.internal(MENU_SELECT_SOUND));
         optionsConfirmSound = Gdx.audio.newSound(Gdx.files.internal(OPTIONS_CONFIRM_SOUND));
 
-        FreeTypeFontGenerator generator = new FreeTypeFontGenerator(Gdx.files.internal("VT323-Regular.ttf"));
+        openingMusic = Gdx.audio.newMusic(Gdx.files.internal(OPENING_MUSIC));
+        openingMusic.setLooping(true);
+        openingMusic.setVolume(0f);
+        openingMusic.play();
+
+        FreeTypeFontGenerator generator = new FreeTypeFontGenerator(Gdx.files.internal("fonts/VT323-Regular.ttf"));
         FreeTypeFontParameter fontParams = new FreeTypeFontParameter();
         fontParams.size = 32;
         font = generator.generateFont(fontParams);
@@ -139,6 +157,12 @@ public class StartScreen implements Disposable {
 
     public InputType update(float delta) {
         animTime += delta;
+
+        if (musicFadeTimer < MUSIC_FADE_IN_DURATION) {
+            musicFadeTimer += delta;
+            float fadeFraction = Math.min(musicFadeTimer / MUSIC_FADE_IN_DURATION, 1f);
+            openingMusic.setVolume(fadeFraction * audioSettings.getMusicVolume());
+        }
 
         switch (phase) {
             case SELECTING:
@@ -327,5 +351,6 @@ public class StartScreen implements Disposable {
         fadePixel.dispose();
         menuSelectSound.dispose();
         optionsConfirmSound.dispose();
+        openingMusic.dispose();
     }
 }

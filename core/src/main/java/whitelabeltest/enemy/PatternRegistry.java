@@ -19,22 +19,22 @@ public final class PatternRegistry {
     public static void load(Json json) {
         movementPatterns.clear();
         @SuppressWarnings("unchecked")
-        Array<MovementPatternDef> mDefs = json.fromJson(Array.class, MovementPatternDef.class, Gdx.files.internal("movement_patterns.json"));
+        Array<MovementPatternDef> mDefs = json.fromJson(Array.class, MovementPatternDef.class, Gdx.files.internal("data/movement_patterns.json"));
         for (MovementPatternDef def : mDefs) movementPatterns.put(def.id, def);
 
         bulletDefs.clear();
         @SuppressWarnings("unchecked")
-        Array<BulletDef> bDefs = json.fromJson(Array.class, BulletDef.class, Gdx.files.internal("bullets.json"));
+        Array<BulletDef> bDefs = json.fromJson(Array.class, BulletDef.class, Gdx.files.internal("data/bullets.json"));
         for (BulletDef def : bDefs) bulletDefs.put(def.id, def);
 
         explosionPatterns.clear();
         @SuppressWarnings("unchecked")
-        Array<ExplosionPatternDef> eDefs = json.fromJson(Array.class, ExplosionPatternDef.class, Gdx.files.internal("explosion_patterns.json"));
+        Array<ExplosionPatternDef> eDefs = json.fromJson(Array.class, ExplosionPatternDef.class, Gdx.files.internal("data/explosion_patterns.json"));
         for (ExplosionPatternDef def : eDefs) explosionPatterns.put(def.id, def);
 
         firingPatterns.clear();
         @SuppressWarnings("unchecked")
-        Array<FiringPatternDef> fDefs = json.fromJson(Array.class, FiringPatternDef.class, Gdx.files.internal("firing_patterns.json"));
+        Array<FiringPatternDef> fDefs = json.fromJson(Array.class, FiringPatternDef.class, Gdx.files.internal("data/firing_patterns.json"));
         for (FiringPatternDef def : fDefs) firingPatterns.put(def.id, def);
     }
 

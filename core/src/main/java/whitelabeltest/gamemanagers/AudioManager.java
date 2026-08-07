@@ -66,27 +66,27 @@ public class AudioManager implements Disposable {
 
     public AudioManager(AudioSettings settings) {
         this.settings = settings;
-        playerDeathSound = Gdx.audio.newSound(Gdx.files.internal("playerdeath.mp3"));
-        bombSound = Gdx.audio.newSound(Gdx.files.internal("bombsound.mp3"));
-        gameOverSound = Gdx.audio.newSound(Gdx.files.internal("gameover.mp3"));
-        powerupSound = Gdx.audio.newSound(Gdx.files.internal("powerup.mp3"));
-        gemPickupSound = Gdx.audio.newSound(Gdx.files.internal("pointgem.mp3"));
-        haloDetachSound = Gdx.audio.newSound(Gdx.files.internal("halo_release.mp3"));
-        haloBashSound = Gdx.audio.newSound(Gdx.files.internal("halo_bash.mp3"));
-        haloReturnSound = Gdx.audio.newSound(Gdx.files.internal("halo_return.mp3"));
-        haloLatchSound = Gdx.audio.newSound(Gdx.files.internal("halo_latch.mp3"));
+        playerDeathSound = Gdx.audio.newSound(Gdx.files.internal("audio/sfx/playerdeath.mp3"));
+        bombSound = Gdx.audio.newSound(Gdx.files.internal("audio/sfx/bombsound.mp3"));
+        gameOverSound = Gdx.audio.newSound(Gdx.files.internal("audio/sfx/gameover.mp3"));
+        powerupSound = Gdx.audio.newSound(Gdx.files.internal("audio/sfx/powerup.mp3"));
+        gemPickupSound = Gdx.audio.newSound(Gdx.files.internal("audio/sfx/pointgem.mp3"));
+        haloDetachSound = Gdx.audio.newSound(Gdx.files.internal("audio/sfx/halo_release.mp3"));
+        haloBashSound = Gdx.audio.newSound(Gdx.files.internal("audio/sfx/halo_bash.mp3"));
+        haloReturnSound = Gdx.audio.newSound(Gdx.files.internal("audio/sfx/halo_return.mp3"));
+        haloLatchSound = Gdx.audio.newSound(Gdx.files.internal("audio/sfx/halo_latch.mp3"));
         thunderboltHyperLevelSounds = new Sound[] {
-            Gdx.audio.newSound(Gdx.files.internal("thunderbolthyperlevel.wav")),
-            Gdx.audio.newSound(Gdx.files.internal("thunderbolthyperlevel-001.wav")),
-            Gdx.audio.newSound(Gdx.files.internal("thunderbolthyperlevel-002.wav")),
-            Gdx.audio.newSound(Gdx.files.internal("thunderbolthyperlevel-003.wav"))
+            Gdx.audio.newSound(Gdx.files.internal("audio/sfx/thunderbolthyperlevel.wav")),
+            Gdx.audio.newSound(Gdx.files.internal("audio/sfx/thunderbolthyperlevel-001.wav")),
+            Gdx.audio.newSound(Gdx.files.internal("audio/sfx/thunderbolthyperlevel-002.wav")),
+            Gdx.audio.newSound(Gdx.files.internal("audio/sfx/thunderbolthyperlevel-003.wav"))
         };
-        thunderboltHyperExplosionSound = Gdx.audio.newSound(Gdx.files.internal("thunderbolthyperexplosion.wav"));
-        victoryFanfare = Gdx.audio.newMusic(Gdx.files.internal("victoryfanfare.mp3"));
-        victoryLoop = Gdx.audio.newMusic(Gdx.files.internal("victory.mp3"));
+        thunderboltHyperExplosionSound = Gdx.audio.newSound(Gdx.files.internal("audio/sfx/thunderbolthyperexplosion.wav"));
+        victoryFanfare = Gdx.audio.newMusic(Gdx.files.internal("audio/music/victoryfanfare.mp3"));
+        victoryLoop = Gdx.audio.newMusic(Gdx.files.internal("audio/music/victory.mp3"));
         victoryLoop.setLooping(true);
         victoryFanfare.setOnCompletionListener(music -> victoryLoop.play());
-        stageMusic = Gdx.audio.newMusic(Gdx.files.internal("battleontheedge.mp3"));
+        stageMusic = Gdx.audio.newMusic(Gdx.files.internal("audio/music/battleontheedge.mp3"));
         stageMusic.setLooping(true);
         Json json = new Json();
         basicWeaponSounds = new ObjectMap<>();
@@ -97,7 +97,7 @@ public class AudioManager implements Disposable {
         orbitGongSounds = new ObjectMap<>();
         orbitWhipSounds = new ObjectMap<>();
         @SuppressWarnings("unchecked")
-        Array<SoundBank> soundBanks = json.fromJson(Array.class, SoundBank.class, Gdx.files.internal("sounds.json"));
+        Array<SoundBank> soundBanks = json.fromJson(Array.class, SoundBank.class, Gdx.files.internal("data/sounds.json"));
         for(SoundBank sBank : soundBanks) {
             if(sBank.type == SoundType.BasicWeapon) {
                 populateSounds(sBank, basicWeaponSounds);

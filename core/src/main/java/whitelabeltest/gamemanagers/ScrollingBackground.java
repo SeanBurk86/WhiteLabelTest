@@ -10,7 +10,7 @@ import java.io.FileNotFoundException;
 
 public class ScrollingBackground {
     private static final float SCROLL_SPEED = -1.25f;
-    private static final String BOSS_VIDEO_FILE = "bossbacvk.webm";
+    private static final String BOSS_VIDEO_FILE = "video/bossbacvk.webm";
 
     private final Texture texture;
     private final AudioSettings audioSettings;
@@ -29,7 +29,7 @@ public class ScrollingBackground {
         this.worldWidth = worldWidth;
         this.worldHeight = worldHeight;
         this.audioSettings = audioSettings;
-        this.texture = new Texture(Gdx.files.internal("bg1.png"));
+        this.texture = new Texture(Gdx.files.internal("images/backgrounds/bg1.png"));
         this.texture.setWrap(Texture.TextureWrap.Repeat, Texture.TextureWrap.Repeat);
         // Scale to the world width but keep the texture's native aspect ratio intact rather than stretching it.
         this.drawHeight = worldWidth * ((float) texture.getHeight() / texture.getWidth());

@@ -61,7 +61,7 @@ public class Main extends ApplicationAdapter {
         viewport = new ExtendViewport(PLAY_AREA_WIDTH, PLAY_AREA_HEIGHT);
         keyBindings = new KeyBindings();
         audioSettings = new AudioSettings();
-        startScreen = new StartScreen(PLAY_AREA_WIDTH, PLAY_AREA_HEIGHT);
+        startScreen = new StartScreen(PLAY_AREA_WIDTH, PLAY_AREA_HEIGHT, audioSettings);
     }
 
     @Override

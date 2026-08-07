@@ -347,11 +347,11 @@ public class PatternPreviewer {
         Json json = new Json();
         json.setOutputType(JsonWriter.OutputType.json);
 
-        Gdx.files.local("movement_patterns.json").writeString(
+        Gdx.files.local("data/movement_patterns.json").writeString(
             json.prettyPrint(json.toJson(PatternRegistry.getAllMovementDefsSorted(), Array.class, MovementPatternDef.class)), false);
-        Gdx.files.local("firing_patterns.json").writeString(
+        Gdx.files.local("data/firing_patterns.json").writeString(
             json.prettyPrint(json.toJson(PatternRegistry.getAllFiringDefsSorted(), Array.class, FiringPatternDef.class)), false);
-        Gdx.files.local("enemies.json").writeString(
+        Gdx.files.local("data/enemies.json").writeString(
             json.prettyPrint(json.toJson(assets.getAllEnemyDefinitionsSorted(), Array.class, EnemyDefinition.class)), false);
 
         dirty = false;
@@ -542,13 +542,27 @@ public class PatternPreviewer {
     private Array<String> listTextureFiles() {
         if (textureFilesCache == null) {
             textureFilesCache = new Array<>();
-            FileHandle dir = Gdx.files.local(".");
-            if (dir.exists() && dir.isDirectory()) {
-                for (FileHandle f : dir.list(".png")) textureFilesCache.add(f.name());
-            }
+            collectPngFiles(Gdx.files.local("."), "", textureFilesCache);
             textureFilesCache.sort();
         }
         return textureFilesCache;
+    }
+
+    /** Recurses through assets/ collecting every .png as a path relative to assets/ root (e.g.
+     *  "images/enemies/ICE000.png") - the same relative-path format assets.ensureTexture()/
+     *  Gdx.files.internal() expect elsewhere, since assets/ was reorganized into subfolders
+     *  instead of sitting flat. Skips assets/unused/, which holds art nothing in the game
+     *  references. */
+    private void collectPngFiles(FileHandle dir, String prefix, Array<String> out) {
+        if (!dir.exists() || !dir.isDirectory()) return;
+        for (FileHandle f : dir.list()) {
+            if (f.isDirectory()) {
+                if (f.name().equals("unused")) continue;
+                collectPngFiles(f, prefix + f.name() + "/", out);
+            } else if ("png".equalsIgnoreCase(f.extension())) {
+                out.add(prefix + f.name());
+            }
+        }
     }
 
     // ---- Row tree building ----------------------------------------------------------------------

@@ -33,7 +33,7 @@ public class Lwjgl3Launcher {
 
         //// You can change these files; they are in lwjgl3/src/main/resources/ .
         //// They can also be loaded from the root of assets/ .
-        configuration.setWindowIcon("testskull128.png", "testskull64.png", "testskull32.png", "testskull16.png");
+        configuration.setWindowIcon("icons/testskull128.png", "icons/testskull64.png", "icons/testskull32.png", "icons/testskull16.png");
 
         // Default OpenAL simultaneous-source limit (16) is too low for this game's overlapping
         // sound effects (multi-bullet weapon fire, chained explosions, pickups) - once it's

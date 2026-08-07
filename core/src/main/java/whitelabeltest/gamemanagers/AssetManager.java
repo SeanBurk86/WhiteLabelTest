@@ -45,7 +45,7 @@ public class AssetManager implements Disposable {
 
         // Load Definitions
         @SuppressWarnings("unchecked")
-        Array<WeaponDefinition> wDefs = json.fromJson(Array.class, WeaponDefinition.class, Gdx.files.internal("weapons.json"));
+        Array<WeaponDefinition> wDefs = json.fromJson(Array.class, WeaponDefinition.class, Gdx.files.internal("data/weapons.json"));
         for (WeaponDefinition def : wDefs) {
             weaponDefinitions.put(def.id, def);
             loadTexture(def.texture);
@@ -66,7 +66,7 @@ public class AssetManager implements Disposable {
         }
 
         @SuppressWarnings("unchecked")
-        Array<EnemyDefinition> eDefs = json.fromJson(Array.class, EnemyDefinition.class, Gdx.files.internal("enemies.json"));
+        Array<EnemyDefinition> eDefs = json.fromJson(Array.class, EnemyDefinition.class, Gdx.files.internal("data/enemies.json"));
         for (EnemyDefinition def : eDefs) {
             enemyDefinitions.put(def.id, def);
             loadTexture(def.texture);
@@ -76,7 +76,7 @@ public class AssetManager implements Disposable {
             loadFiringPatternTextures(PatternRegistry.getFiring(def.firingPattern));
         }
 
-        playerDefinition = json.fromJson(PlayerDefinition.class, Gdx.files.internal("player.json"));
+        playerDefinition = json.fromJson(PlayerDefinition.class, Gdx.files.internal("data/player.json"));
 
         // Setup common fixed assets
         playerTexture = new Texture(playerDefinition.player.texture);
@@ -91,21 +91,21 @@ public class AssetManager implements Disposable {
         };
         thunderHaloBombTexture = new Texture(playerDefinition.thunderHaloBomb.texture);
         playerReflectShieldTexture = new Texture(playerDefinition.reflectShield.texture);
-        bombSpriteTexture = new Texture("BombSprite.png");
+        bombSpriteTexture = new Texture("images/effects/BombSprite.png");
         bulletCancelTextures = new Texture[] {
-            new Texture("BulletCancel01.png"),
-            new Texture("BulletCancel02.png"),
-            new Texture("BulletCancel03.png"),
-            new Texture("BulletCancel04.png"),
-            new Texture("BulletCancel05.png"),
+            new Texture("images/effects/BulletCancel01.png"),
+            new Texture("images/effects/BulletCancel02.png"),
+            new Texture("images/effects/BulletCancel03.png"),
+            new Texture("images/effects/BulletCancel04.png"),
+            new Texture("images/effects/BulletCancel05.png"),
         };
 
         powerupTierTextures = new Texture[] {
-            new Texture("PowerUp1.png"),
-            new Texture("PowerUp2.png"),
-            new Texture("PowerUp3.png"),
+            new Texture("images/pickups/PowerUp1.png"),
+            new Texture("images/pickups/PowerUp2.png"),
+            new Texture("images/pickups/PowerUp3.png"),
         };
-        pointGemTexture = new Texture("PointGem.png");
+        pointGemTexture = new Texture("images/pickups/PointGem.png");
 
         Pixmap pixmap = new Pixmap(1, 1, Pixmap.Format.RGBA8888);
         pixmap.setColor(Color.YELLOW);
