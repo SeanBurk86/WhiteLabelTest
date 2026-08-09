@@ -14,6 +14,7 @@ import com.badlogic.gdx.graphics.g2d.SpriteBatch;
 import com.badlogic.gdx.graphics.g2d.freetype.FreeTypeFontGenerator;
 import com.badlogic.gdx.graphics.g2d.freetype.FreeTypeFontGenerator.FreeTypeFontParameter;
 import com.badlogic.gdx.utils.Disposable;
+import whitelabeltest.gamemanagers.AudioSettings;
 import whitelabeltest.player.WeaponLoadout;
 
 /** Shown once, right after StartScreen's "press any key", so the player can pick which two
@@ -36,6 +37,7 @@ public class WeaponSelectScreen implements Disposable {
     private final GlyphLayout layout;
     private final Texture whitePixel;
     private final float worldWidth, worldHeight;
+    private final AudioSettings audioSettings;
 
     private int selectedIndex;
     private boolean prevDpadUpDown, prevDpadDownDown, prevConfirmDown;
@@ -44,9 +46,10 @@ public class WeaponSelectScreen implements Disposable {
     // while GameController loads; the caller is responsible for disposing it eventually.
     private Sound confirmSound;
 
-    public WeaponSelectScreen(float worldWidth, float worldHeight) {
+    public WeaponSelectScreen(float worldWidth, float worldHeight, AudioSettings audioSettings) {
         this.worldWidth = worldWidth;
         this.worldHeight = worldHeight;
+        this.audioSettings = audioSettings;
 
         FreeTypeFontGenerator generator = new FreeTypeFontGenerator(Gdx.files.internal("fonts/VT323-Regular.ttf"));
         FreeTypeFontParameter fontParams = new FreeTypeFontParameter();
@@ -94,7 +97,7 @@ public class WeaponSelectScreen implements Disposable {
         if (!confirmPressed) return null;
 
         confirmSound = Gdx.audio.newSound(Gdx.files.internal(CONFIRM_SOUND));
-        confirmSound.play();
+        confirmSound.play(audioSettings.getEffectiveSfxVolume());
         return OPTIONS[selectedIndex];
     }
 

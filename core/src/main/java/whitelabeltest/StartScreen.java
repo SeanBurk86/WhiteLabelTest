@@ -163,12 +163,8 @@ public class StartScreen implements Disposable {
 
     public InputType update(float delta) {
         animTime += delta;
-
-        if (musicFadeTimer < MUSIC_FADE_IN_DURATION) {
-            musicFadeTimer += delta;
-            float fadeFraction = Math.min(musicFadeTimer / MUSIC_FADE_IN_DURATION, 1f);
-            openingMusic.setVolume(fadeFraction * audioSettings.getMusicVolume());
-        }
+        musicFadeTimer = Math.min(musicFadeTimer + delta, MUSIC_FADE_IN_DURATION);
+        applyMusicVolume();
 
         switch (phase) {
             case SELECTING:
@@ -199,6 +195,16 @@ public class StartScreen implements Disposable {
                 return detectedInput;
         }
         return null;
+    }
+
+    /** Applies the current fade-in progress and audioSettings volume to openingMusic - split out
+     *  of update() so Main can keep calling it every frame while the Options screen has input focus
+     *  (this screen's own update() isn't called then), which is exactly when the player is most
+     *  likely to be dragging the Music/Master sliders and expecting this still-playing background
+     *  track to respond live rather than only catching up once they back out of Options. */
+    public void applyMusicVolume() {
+        float fadeFraction = musicFadeTimer / MUSIC_FADE_IN_DURATION;
+        openingMusic.setVolume(fadeFraction * audioSettings.getEffectiveMusicVolume());
     }
 
     /** Whatever gamepad button just triggered SELECTING -> MENU (commonly buttonA, which is also
@@ -239,17 +245,17 @@ public class StartScreen implements Disposable {
 
         if (menuIndex == MENU_ARCADE_MODE) {
             confirmSound = Gdx.audio.newSound(Gdx.files.internal(ARCADE_CONFIRM_SOUND));
-            confirmSound.play();
+            confirmSound.play(audioSettings.getEffectiveSfxVolume());
             phase = Phase.FADING;
         } else if (menuIndex == MENU_OPTIONS) {
-            optionsConfirmSound.play();
+            optionsConfirmSound.play(audioSettings.getEffectiveSfxVolume());
             optionsRequested = true;
         }
     }
 
     private void moveMenuSelection(int delta) {
         int newIndex = (menuIndex + delta + MENU_ITEMS.length) % MENU_ITEMS.length;
-        if (newIndex != menuIndex) menuSelectSound.play();
+        if (newIndex != menuIndex) menuSelectSound.play(audioSettings.getEffectiveSfxVolume());
         menuIndex = newIndex;
     }
 

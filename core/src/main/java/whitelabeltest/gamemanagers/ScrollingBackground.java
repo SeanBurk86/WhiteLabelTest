@@ -41,7 +41,7 @@ public class ScrollingBackground {
     public void setMuted(boolean muted) {
         this.muted = muted;
         if (bossVideoPlayer != null) {
-            bossVideoPlayer.setVolume(muted ? 0f : audioSettings.getMusicVolume());
+            bossVideoPlayer.setVolume(muted ? 0f : audioSettings.getEffectiveMusicVolume());
         }
     }
 
@@ -83,7 +83,7 @@ public class ScrollingBackground {
         bossVideoPlayer.setLooping(true);
         try {
             bossVideoPlayer.load(Gdx.files.internal(BOSS_VIDEO_FILE));
-            bossVideoPlayer.setVolume(muted ? 0f : audioSettings.getMusicVolume());
+            bossVideoPlayer.setVolume(muted ? 0f : audioSettings.getEffectiveMusicVolume());
             bossVideoPlayer.play();
             bossVideoStarted = true;
         } catch (FileNotFoundException e) {

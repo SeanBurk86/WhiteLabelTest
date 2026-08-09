@@ -83,6 +83,11 @@ public class Main extends ApplicationAdapter {
             }
         } else if (state == AppState.OPTIONS) {
             ScreenUtils.clear(Color.BLACK);
+            // startScreen is still alive (and its music still playing) behind Options whenever
+            // Options was reached from the start menu - see transitionToOptions() - so its volume
+            // needs to keep tracking the sliders live here too, not just once startScreen.update()
+            // resumes after backing out.
+            if (startScreen != null) startScreen.applyMusicVolume();
             optionsScreen.render(delta);
             if (isControllerBackJustPressed()) {
                 optionsScreen.handleControllerBackPressed();
@@ -101,7 +106,7 @@ public class Main extends ApplicationAdapter {
         startScreen.dispose();
         startScreen = null;
         pendingInputType = inputType;
-        weaponSelectScreen = new WeaponSelectScreen(PLAY_AREA_WIDTH, PLAY_AREA_HEIGHT);
+        weaponSelectScreen = new WeaponSelectScreen(PLAY_AREA_WIDTH, PLAY_AREA_HEIGHT, audioSettings);
         state = AppState.WEAPON_SELECT;
     }
 

@@ -134,13 +134,13 @@ public class AudioManager implements Disposable {
 
     public void setMuted(boolean muted) {
         this.muted = muted;
-        stageMusic.setVolume(muted ? 0f : settings.getMusicVolume());
+        stageMusic.setVolume(muted ? 0f : settings.getEffectiveMusicVolume());
     }
     public boolean isMuted() { return muted; }
 
     public void playStageMusic() {
         fadingOutStageMusic = false;
-        stageMusic.setVolume(muted ? 0f : settings.getMusicVolume());
+        stageMusic.setVolume(muted ? 0f : settings.getEffectiveMusicVolume());
         stageMusic.play();
     }
 
@@ -172,31 +172,31 @@ public class AudioManager implements Disposable {
     }
 
     public void playPlayerDeath() {
-        if (!muted) playerDeathSound.play(settings.getSfxVolume());
+        if (!muted) playerDeathSound.play(settings.getEffectiveSfxVolume());
     }
 
     public void playBomb() {
-        if (!muted) bombSound.play(settings.getSfxVolume());
+        if (!muted) bombSound.play(settings.getEffectiveSfxVolume());
     }
 
     public void playGameOver() {
-        if (!muted) gameOverSound.play(settings.getSfxVolume());
+        if (!muted) gameOverSound.play(settings.getEffectiveSfxVolume());
     }
 
     public void playPowerup() {
-        if (!muted) powerupSound.play(settings.getSfxVolume());
+        if (!muted) powerupSound.play(settings.getEffectiveSfxVolume());
     }
 
     public void playHaloDetach() {
-        if (!muted) haloDetachSound.play(settings.getSfxVolume());
+        if (!muted) haloDetachSound.play(settings.getEffectiveSfxVolume());
     }
 
     public void playHaloBash() {
-        if (!muted) haloBashSound.play(settings.getSfxVolume());
+        if (!muted) haloBashSound.play(settings.getEffectiveSfxVolume());
     }
 
     public void playHaloReturn() {
-        if (!muted) haloReturnSoundId = haloReturnSound.play(settings.getSfxVolume());
+        if (!muted) haloReturnSoundId = haloReturnSound.play(settings.getEffectiveSfxVolume());
     }
 
     /** Cuts off halo_return.mp3 if it's still playing from the start of this same return trip -
@@ -207,13 +207,13 @@ public class AudioManager implements Disposable {
             haloReturnSound.stop(haloReturnSoundId);
             haloReturnSoundId = -1;
         }
-        if (!muted) haloLatchSound.play(settings.getSfxVolume());
+        if (!muted) haloLatchSound.play(settings.getEffectiveSfxVolume());
     }
 
     public void playVictory() {
         if (!muted) {
-            victoryFanfare.setVolume(settings.getSfxVolume());
-            victoryLoop.setVolume(settings.getSfxVolume());
+            victoryFanfare.setVolume(settings.getEffectiveSfxVolume());
+            victoryLoop.setVolume(settings.getEffectiveSfxVolume());
             victoryFanfare.play();
         }
     }
@@ -224,47 +224,47 @@ public class AudioManager implements Disposable {
     }
 
     public void playPointGem() {
-        if (!muted && pointGemSounds != null) pointGemSounds.get(1).random().play(settings.getSfxVolume());
+        if (!muted && pointGemSounds != null) pointGemSounds.get(1).random().play(settings.getEffectiveSfxVolume());
     }
 
     public void playExplosion() {
-        if (!muted && explosionSounds != null) explosionSounds.get(1).random().play(settings.getSfxVolume());
+        if (!muted && explosionSounds != null) explosionSounds.get(1).random().play(settings.getEffectiveSfxVolume());
     }
 
     /** OrbitWeapon's bullet-hits-enemy impact sound - see CollisionManager.checkBulletEnemyCollisions,
      *  which calls this once per orbit-bullet hit alongside its OrbitSparks.png hit effect. */
     public void playOrbitGong() {
-        if (!muted && orbitGongSounds != null) orbitGongSounds.get(1).random().play(settings.getSfxVolume());
+        if (!muted && orbitGongSounds != null) orbitGongSounds.get(1).random().play(settings.getEffectiveSfxVolume());
     }
 
     public void playBasicWeaponSound(int level) {
-        if (!muted && basicWeaponSounds != null && basicWeaponSounds.containsKey(level)) basicWeaponSounds.get(level).random().play(settings.getSfxVolume());
+        if (!muted && basicWeaponSounds != null && basicWeaponSounds.containsKey(level)) basicWeaponSounds.get(level).random().play(settings.getEffectiveSfxVolume());
     }
 
     public void playWaveBlastWeaponSound(int level) {
-        if (!muted && waveBlastWeaponSounds != null && waveBlastWeaponSounds.containsKey(level)) waveBlastWeaponSounds.get(level).random().play(settings.getSfxVolume());
+        if (!muted && waveBlastWeaponSounds != null && waveBlastWeaponSounds.containsKey(level)) waveBlastWeaponSounds.get(level).random().play(settings.getEffectiveSfxVolume());
     }
 
     /** OrbitWeapon's ring-rotation whip crack - see OrbitWeapon.update(), which calls this once per
      *  ring member each time that member completes a full lap, so it plays `level` times per
      *  rotation of the ring (one crack per orbiting blade). */
     public void playOrbitWhip() {
-        if (!muted && orbitWhipSounds != null) orbitWhipSounds.get(1).random().play(settings.getSfxVolume());
+        if (!muted && orbitWhipSounds != null) orbitWhipSounds.get(1).random().play(settings.getEffectiveSfxVolume());
     }
 
     public void playThunderboltWeaponSound(int level) {
-        if (!muted && thunderboltWeaponSounds != null && thunderboltWeaponSounds.containsKey(level)) thunderboltWeaponSounds.get(level).random().play(settings.getSfxVolume());
+        if (!muted && thunderboltWeaponSounds != null && thunderboltWeaponSounds.containsKey(level)) thunderboltWeaponSounds.get(level).random().play(settings.getEffectiveSfxVolume());
     }
 
     /** Plays the tier-th (0-based) charge sound for ThunderboltWeapon's Hyper Attack bomb - see
      *  Player.updateThunderboltCharge, which calls this once per tier as the bomb climbs through
      *  THUNDERBOLT_CHARGE_DAMAGE, in order, rather than picking randomly like the sound banks above. */
     public void playThunderboltHyperLevel(int tier) {
-        if (!muted && tier >= 0 && tier < thunderboltHyperLevelSounds.length) thunderboltHyperLevelSounds[tier].play(settings.getSfxVolume());
+        if (!muted && tier >= 0 && tier < thunderboltHyperLevelSounds.length) thunderboltHyperLevelSounds[tier].play(settings.getEffectiveSfxVolume());
     }
 
     public void playThunderboltHyperExplosion() {
-        if (!muted) thunderboltHyperExplosionSound.play(settings.getSfxVolume());
+        if (!muted) thunderboltHyperExplosionSound.play(settings.getEffectiveSfxVolume());
     }
 
     /** Plays a scripted one-off SFX by asset path - see SpawnScheduler.SoundCue. Loads and caches
@@ -277,7 +277,7 @@ public class AudioManager implements Disposable {
             sound = Gdx.audio.newSound(Gdx.files.internal(path));
             cueSounds.put(path, sound);
         }
-        if (!muted) sound.play(settings.getSfxVolume());
+        if (!muted) sound.play(settings.getEffectiveSfxVolume());
     }
 
     @Override

@@ -94,6 +94,7 @@ public class OptionsScreen implements Disposable {
     private Table menuTable;
     private ScrollPane bindingsScroll;
     private Table audioTable;
+    private Label masterValueLabel;
     private Label musicValueLabel;
     private Label sfxValueLabel;
 
@@ -309,9 +310,11 @@ public class OptionsScreen implements Disposable {
     private Table buildAudioTable() {
         Table table = new Table();
 
+        masterValueLabel = new Label(volumeText(audioSettings.getMasterVolume()), skin);
         musicValueLabel = new Label(volumeText(audioSettings.getMusicVolume()), skin);
         sfxValueLabel = new Label(volumeText(audioSettings.getSfxVolume()), skin);
 
+        addVolumeRow(table, "Master Volume", masterValueLabel, audioSettings::getMasterVolume, audioSettings::setMasterVolume);
         addVolumeRow(table, "Music Volume", musicValueLabel, audioSettings::getMusicVolume, audioSettings::setMusicVolume);
         addVolumeRow(table, "Sound Effects", sfxValueLabel, audioSettings::getSfxVolume, audioSettings::setSfxVolume);
 
@@ -353,7 +356,7 @@ public class OptionsScreen implements Disposable {
         button.addListener(new ChangeListener() {
             @Override
             public void changed(ChangeEvent event, Actor actor) {
-                confirmSound.play();
+                confirmSound.play(audioSettings.getEffectiveSfxVolume());
                 action.run();
             }
         });
@@ -452,7 +455,7 @@ public class OptionsScreen implements Disposable {
         }
 
         if (listeningFor != null) {
-            confirmSound.play();
+            confirmSound.play(audioSettings.getEffectiveSfxVolume());
             keyBindings.setKey(listeningFor, keycode);
             applyIdleStyle(listeningButton);
             listeningButton.setText(Input.Keys.toString(keycode));
@@ -526,7 +529,7 @@ public class OptionsScreen implements Disposable {
         if (rows.size == 0) return;
         int newRow = (focusedRow + delta + rows.size) % rows.size;
         int newCol = rows.get(newRow)[focusedCol] == null ? 0 : focusedCol;
-        if (newRow != focusedRow || newCol != focusedCol) selectSound.play();
+        if (newRow != focusedRow || newCol != focusedCol) selectSound.play(audioSettings.getEffectiveSfxVolume());
         setFocus(newRow, newCol);
     }
 
@@ -534,7 +537,7 @@ public class OptionsScreen implements Disposable {
         if (focusedRow < 0) return;
         int newCol = focusedCol + delta;
         if (newCol < 0 || newCol >= rows.get(focusedRow).length || rows.get(focusedRow)[newCol] == null) return;
-        selectSound.play();
+        selectSound.play(audioSettings.getEffectiveSfxVolume());
         setFocus(focusedRow, newCol);
     }
 
@@ -558,7 +561,7 @@ public class OptionsScreen implements Disposable {
         } else if (gamepadListeningFor != null) {
             for (int i = 0; i < buttons.length; i++) {
                 if (buttons[i] != GamepadButton.BACK && current[i] && !prevGamepadButtonDown[i]) {
-                    confirmSound.play();
+                    confirmSound.play(audioSettings.getEffectiveSfxVolume());
                     keyBindings.setGamepadButton(gamepadListeningFor, buttons[i]);
                     applyIdleStyle(gamepadListeningButton);
                     gamepadListeningButton.setText(buttons[i].displayName);
@@ -592,7 +595,7 @@ public class OptionsScreen implements Disposable {
         if (focusedRow < 0) return;
         Runnable activator = rowActivators.get(focusedRow)[focusedCol];
         if (activator != null) {
-            confirmSound.play();
+            confirmSound.play(audioSettings.getEffectiveSfxVolume());
             activator.run();
         }
     }
@@ -602,7 +605,7 @@ public class OptionsScreen implements Disposable {
      *  in-progress key/button capture if one is active, steps back up one page level if one is
      *  open, otherwise requests leaving Options entirely. */
     private void triggerBack() {
-        backSound.play();
+        backSound.play(audioSettings.getEffectiveSfxVolume());
         if (listeningFor != null) {
             cancelListening();
         } else if (gamepadListeningFor != null) {
@@ -626,6 +629,7 @@ public class OptionsScreen implements Disposable {
 
     private void resetAudioToDefaults() {
         audioSettings.resetToDefaults();
+        masterValueLabel.setText(volumeText(audioSettings.getMasterVolume()));
         musicValueLabel.setText(volumeText(audioSettings.getMusicVolume()));
         sfxValueLabel.setText(volumeText(audioSettings.getSfxVolume()));
     }
