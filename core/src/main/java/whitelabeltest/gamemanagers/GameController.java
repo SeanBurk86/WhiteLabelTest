@@ -49,6 +49,7 @@ public class GameController implements Disposable {
     private static final float LEVEL_COMPLETE_DELAY = 3f;
     private float levelCompleteDelayTimer = -1f;
     private boolean debugMode;
+    private boolean debugToolsAvailable;
     private float levelStartTimer;
     private float bombCooldownTimer;
     private final float worldWidth, worldHeight;
@@ -116,6 +117,7 @@ public class GameController implements Disposable {
 
         if (System.getProperty("debug") != null ||
             java.lang.management.ManagementFactory.getRuntimeMXBean().getInputArguments().toString().contains("-agentlib:jdwp")) {
+            this.debugToolsAvailable = true;
             this.debugMode = true;
         }
 
@@ -132,7 +134,7 @@ public class GameController implements Disposable {
         input.update();
         updateFpsMonitor(delta);
 
-        if (input.isDebugToggleJustPressed()) {
+        if (debugToolsAvailable && input.isDebugToggleJustPressed()) {
             debugMode = !debugMode;
         }
 
