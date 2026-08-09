@@ -69,8 +69,9 @@ public class GameController implements Disposable {
     private static final String[] SLOT_WEAPON_OPTIONS = {null, "BasicWeapon", "WaveBlastWeapon", "OrbitWeapon", "Thunderbolt"};
     private static final int MAX_DEBUG_LIVES = 9;
 
-    private static final float BOMB_COOLDOWN = 15f;
-    private static final int BOMB_BONUS_PER_UNUSED = 10000;
+    // Bomb cooldown/damage, end-of-level bonuses, rank thresholds and gem/chain tuning all live in
+    // balance.json (see GameBalance/AssetManager.getGameBalance()) rather than as constants here,
+    // so they can be tuned without a rebuild.
     private int levelCompleteBombBonus;
     private int levelCompleteLivesMultiplier;
 
@@ -78,18 +79,16 @@ public class GameController implements Disposable {
     // spawn time (SpawnScheduler.getBossSpawnTime()) to the schedule-clock instant its kill is
     // confirmed (captured below as bossDefeatedScheduleTime, not the LEVEL_COMPLETE_DELAY-delayed
     // moment levelComplete actually flips true) - so the celebratory delay doesn't itself cost
-    // points. Linearly scales down to 0 once the fight runs past BOSS_TIME_BONUS_PAR_SECONDS.
-    private static final float BOSS_TIME_BONUS_PAR_SECONDS = 120f;
-    private static final int BOSS_TIME_BONUS_PER_SECOND = 200;
+    // points. Linearly scales down to 0 once the fight runs past GameBalance.bossTimeBonusParSeconds.
     private float bossDefeatedScheduleTime = -1f;
     private float levelCompleteBossFightSeconds = -1f;
     private int levelCompleteTimeBonus;
 
     // Level-complete rank (see computeRank()): an unweighted average of five 0..1 fractions -
-    // kill rate, peak chain vs. CHAIN_RANK_TARGET, boss takedown speed, bombs preserved, lives
-    // preserved - bucketed into a letter grade. Purely a display flourish alongside the same
-    // MISSION_LOG rows it's derived from; doesn't feed back into the score.
-    private static final float CHAIN_RANK_TARGET = 40f;
+    // kill rate, peak chain vs. GameBalance.chainRankTarget, boss takedown speed, bombs preserved,
+    // lives preserved - bucketed into a letter grade via GameBalance.rankThresholds. Purely a
+    // display flourish alongside the same MISSION_LOG rows it's derived from; doesn't feed back
+    // into the score.
     private LevelRank levelCompleteRank = LevelRank.D;
 
     private static final float BOMB_SAVE_WINDOW = 0.065f;
@@ -121,7 +120,7 @@ public class GameController implements Disposable {
         this.background = new ScrollingBackground(worldWidth, worldHeight, audioSettings);
         this.input = new InputManager(keyBindings);
 
-        this.scoreManager = new ScoreManager();
+        this.scoreManager = new ScoreManager(assets.getGameBalance().defaultChainWindow);
         this.spawnScheduler = new SpawnScheduler(worldWidth, worldHeight, assets);
         this.debugSaveStateManager = new DebugSaveStateManager();
 
@@ -244,7 +243,7 @@ public class GameController implements Disposable {
         }
 
         collisionManager.checkPlayerPowerupCollisions(entities.getPlayer(), entities.getPowerups(), audio);
-        collisionManager.checkPlayerGemCollisions(entities.getPlayer(), entities.getPointGems(), scoreManager, audio);
+        collisionManager.checkPlayerGemCollisions(entities.getPlayer(), entities.getPointGems(), scoreManager, audio, assets);
 
         collisionManager.checkBulletEnemyCollisions(entities.getBullets(), entities.getEnemies(), audio, entities, assets, worldWidth, worldHeight, scoreManager);
         collisionManager.checkHaloDashCollisions(entities.getPlayer(), entities.getEnemies(), audio, entities, assets, worldWidth, worldHeight, scoreManager);
@@ -350,15 +349,16 @@ public class GameController implements Disposable {
      *  UIManager.drawLevelComplete to show the breakdown. */
     private void applyLevelCompleteBonus() {
         Player player = entities.getPlayer();
+        GameBalance balance = assets.getGameBalance();
 
-        levelCompleteBombBonus = player.getNumBombs() * BOMB_BONUS_PER_UNUSED;
+        levelCompleteBombBonus = player.getNumBombs() * balance.bombBonusPerUnusedBomb;
         if (levelCompleteBombBonus > 0) scoreManager.addBonus(levelCompleteBombBonus);
 
         float bossSpawnTime = spawnScheduler.getBossSpawnTime();
         if (bossDefeatedScheduleTime >= 0f && bossSpawnTime >= 0f) {
             levelCompleteBossFightSeconds = Math.max(0f, bossDefeatedScheduleTime - bossSpawnTime);
             levelCompleteTimeBonus = Math.max(0,
-                Math.round((BOSS_TIME_BONUS_PAR_SECONDS - levelCompleteBossFightSeconds) * BOSS_TIME_BONUS_PER_SECOND));
+                Math.round((balance.bossTimeBonusParSeconds - levelCompleteBossFightSeconds) * balance.bossTimeBonusPerSecond));
             if (levelCompleteTimeBonus > 0) scoreManager.addBonus(levelCompleteTimeBonus);
         } else {
             levelCompleteBossFightSeconds = -1f;
@@ -376,21 +376,23 @@ public class GameController implements Disposable {
      *  stat isn't available (e.g. no boss in the schedule) rather than dragging the grade down for
      *  something the player had no control over. */
     private LevelRank computeRank(Player player) {
+        GameBalance balance = assets.getGameBalance();
         int totalEnemies = spawnScheduler.getSchedule().size;
         float killFraction = totalEnemies > 0 ? scoreManager.getEnemiesDestroyed() / (float) totalEnemies : 1f;
-        float chainFraction = MathUtils.clamp(scoreManager.getMaxChainCount() / CHAIN_RANK_TARGET, 0f, 1f);
+        float chainFraction = MathUtils.clamp(scoreManager.getMaxChainCount() / balance.chainRankTarget, 0f, 1f);
         float bossFraction = levelCompleteBossFightSeconds >= 0f
-            ? MathUtils.clamp((BOSS_TIME_BONUS_PAR_SECONDS - levelCompleteBossFightSeconds) / BOSS_TIME_BONUS_PAR_SECONDS, 0f, 1f)
+            ? MathUtils.clamp((balance.bossTimeBonusParSeconds - levelCompleteBossFightSeconds) / balance.bossTimeBonusParSeconds, 0f, 1f)
             : 1f;
         float bombFraction = player.getMaxBombs() > 0 ? player.getNumBombs() / (float) player.getMaxBombs() : 1f;
-        float livesFraction = MathUtils.clamp(player.getNumLives() / (float) Player.STARTING_LIVES, 0f, 1f);
+        float livesFraction = MathUtils.clamp(player.getNumLives() / (float) player.getStartingLives(), 0f, 1f);
 
         float overall = (killFraction + chainFraction + bossFraction + bombFraction + livesFraction) / 5f;
 
-        if (overall >= 0.95f) return LevelRank.S;
-        if (overall >= 0.85f) return LevelRank.A;
-        if (overall >= 0.65f) return LevelRank.B;
-        if (overall >= 0.45f) return LevelRank.C;
+        GameBalance.RankThresholds thresholds = balance.rankThresholds;
+        if (overall >= thresholds.s) return LevelRank.S;
+        if (overall >= thresholds.a) return LevelRank.A;
+        if (overall >= thresholds.b) return LevelRank.B;
+        if (overall >= thresholds.c) return LevelRank.C;
         return LevelRank.D;
     }
 
@@ -408,12 +410,12 @@ public class GameController implements Disposable {
 
     private boolean tryFireBomb() {
         if (!canFireBomb()) return false;
-        sufferBombDamage(50, entities.getEnemies());
+        sufferBombDamage(assets.getGameBalance().bombDamage, entities.getEnemies());
         entities.destroyAllEnemyBullets(assets);
         entities.getPlayer().setNumBombs(entities.getPlayer().getNumBombs() - 1);
         entities.triggerBombEffect();
         audio.playBomb();
-        bombCooldownTimer = BOMB_COOLDOWN;
+        bombCooldownTimer = assets.getGameBalance().bombCooldown;
         return true;
     }
 
@@ -473,7 +475,7 @@ public class GameController implements Disposable {
             spawnPowerup(entityManager.getPowerups(), assets, enemy.getRectangle().x, enemy.getRectangle().y, worldWidth, worldHeight, guaranteedTier);
         }
 
-        int gemCount = enemy.getMaxHealth() / 10;
+        int gemCount = enemy.getMaxHealth() / assets.getGameBalance().gemsPerEnemyHealth;
         if (gemCount > 0) {
             Animation<TextureRegion> gemAnimation =
                 AnimationCache.get(assets.pointGemTexture, 6, 4, 24, 0.05f, Animation.PlayMode.LOOP);
@@ -600,7 +602,7 @@ public class GameController implements Disposable {
     public float getLevelStartTimer() { return levelStartTimer; }
     public Array<TextCue> getTextCues() { return spawnScheduler.getTextCues(); }
     public float getBombCooldownTimer() { return Math.max(bombCooldownTimer, 0f); }
-    public float getBombCooldownFraction() { return Math.max(bombCooldownTimer, 0f) / BOMB_COOLDOWN; }
+    public float getBombCooldownFraction() { return Math.max(bombCooldownTimer, 0f) / assets.getGameBalance().bombCooldown; }
     public int getCurrentFps() { return currentFps; }
     public int getLowestFps() { return lowestFps == Integer.MAX_VALUE ? currentFps : lowestFps; }
     public int getHighestFps() { return highestFps; }

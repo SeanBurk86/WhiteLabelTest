@@ -17,6 +17,8 @@ import whitelabeltest.enemy.MovementPatternDef;
 import whitelabeltest.enemy.PatternRegistry;
 import whitelabeltest.enemy.bullets.EnemyBullet;
 import whitelabeltest.enemy.firingpatterns.LaserFiring;
+import whitelabeltest.enemy.firingpatterns.OrbitingFiring;
+import whitelabeltest.enemy.firingpatterns.SineWaveFiring;
 import whitelabeltest.enemy.firingpatterns.SweepFiring;
 import whitelabeltest.enemy.movementpatterns.MovementPattern;
 import whitelabeltest.enemy.movementpatterns.MoveToPointMovement;
@@ -466,6 +468,10 @@ public class PatternPreviewer {
             d.sweepDuration = src.sweepDuration;
             d.sweepStartAngle = src.sweepStartAngle;
             d.sweepEndAngle = src.sweepEndAngle;
+            d.amplitude = src.amplitude;
+            d.frequency = src.frequency;
+            d.orbitRadius = src.orbitRadius;
+            d.orbitSpeed = src.orbitSpeed;
             d.patterns = src.patterns;
         } else {
             d.id = fallbackId != null ? fallbackId : "NewFiring";
@@ -521,6 +527,10 @@ public class PatternPreviewer {
         if (d.sweepDuration <= 0) d.sweepDuration = SweepFiring.DEFAULT_SWEEP_DURATION;
         if (Float.isNaN(d.sweepStartAngle)) d.sweepStartAngle = SweepFiring.DEFAULT_START_ANGLE;
         if (Float.isNaN(d.sweepEndAngle)) d.sweepEndAngle = SweepFiring.DEFAULT_END_ANGLE;
+        if (d.amplitude <= 0) d.amplitude = SineWaveFiring.DEFAULT_AMPLITUDE;
+        if (d.frequency <= 0) d.frequency = SineWaveFiring.DEFAULT_FREQUENCY;
+        if (d.orbitRadius <= 0) d.orbitRadius = OrbitingFiring.DEFAULT_ORBIT_RADIUS;
+        if (d.orbitSpeed <= 0) d.orbitSpeed = OrbitingFiring.DEFAULT_ORBIT_SPEED;
         if (d.bulletId == null) {
             Array<String> bulletIds = PatternRegistry.getBulletIds();
             if (bulletIds.size > 0) d.bulletId = bulletIds.first();
@@ -742,9 +752,17 @@ public class PatternPreviewer {
             case "SelfDestruct":
             case "ExplodingAimed":
             case "BurstAimed":
+                appendCommonBulletRows(node, indent);
+                break;
             case "SineWave":
+                appendCommonBulletRows(node, indent);
+                rows.add(numberRow(indent, "Amplitude", () -> node.amplitude, v -> node.amplitude = v, 0.1f, false));
+                rows.add(numberRow(indent, "Frequency", () -> node.frequency, v -> node.frequency = v, 0.25f, false));
+                break;
             case "Orbiting":
                 appendCommonBulletRows(node, indent);
+                rows.add(numberRow(indent, "Orbit Radius", () -> node.orbitRadius, v -> node.orbitRadius = v, 0.05f, false));
+                rows.add(numberRow(indent, "Orbit Speed", () -> node.orbitSpeed, v -> node.orbitSpeed = v, 0.25f, false));
                 break;
             case "Sequence":
             case "Combined": {

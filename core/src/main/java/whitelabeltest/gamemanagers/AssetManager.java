@@ -22,6 +22,7 @@ public class AssetManager implements Disposable {
     private final ObjectMap<String, WeaponDefinition> weaponDefinitions = new ObjectMap<>();
     private final ObjectMap<String, EnemyDefinition> enemyDefinitions = new ObjectMap<>();
     private final PlayerDefinition playerDefinition;
+    private final GameBalance gameBalance;
 
     public final Texture playerTexture;
     public final Texture playerDeathTexture;
@@ -77,6 +78,7 @@ public class AssetManager implements Disposable {
         }
 
         playerDefinition = json.fromJson(PlayerDefinition.class, Gdx.files.internal("data/player.json"));
+        gameBalance = json.fromJson(GameBalance.class, Gdx.files.internal("data/balance.json"));
 
         // Setup common fixed assets
         playerTexture = new Texture(playerDefinition.player.texture);
@@ -197,6 +199,10 @@ public class AssetManager implements Disposable {
 
     public PlayerDefinition getPlayerDefinition() {
         return playerDefinition;
+    }
+
+    public GameBalance getGameBalance() {
+        return gameBalance;
     }
 
     @Override

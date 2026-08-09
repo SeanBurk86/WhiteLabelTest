@@ -25,6 +25,26 @@ public class WeaponDefinition {
     public float radius;
     public float rotationSpeed;
 
+    // BasicWeapon's Hyper Attack (see Player's halo-dash state machine) - the graze halo launches
+    // forward haloDashDistance at haloDashSpeed. Basic's own re-press reattaches at
+    // haloFastReturnSpeed, noticeably snappier than a fizzled recall (switching weapons away
+    // mid-flight) or Thunderbolt's return leg, both of which glide back at haloReturnSpeed instead.
+    public float haloDashDistance;
+    public float haloDashSpeed;
+    public float haloReturnSpeed;
+    public float haloFastReturnSpeed;
+    public int haloDashDamage;
+
+    // Thunderbolt's Hyper Attack (see Player's thunderbolt charge/detonate state machine) - the
+    // halo hovers thunderboltHaloFrontDistance in front of the ship, charging through one damage/
+    // blast-radius tier every thunderboltChargeLevelTime seconds it's held (both arrays indexed by
+    // tier, same length, capped at the last tier once fully charged).
+    public float thunderboltHaloFrontDistance;
+    public float thunderboltHaloMoveSpeed;
+    public float thunderboltChargeLevelTime;
+    public int[] thunderboltChargeDamageByTier;
+    public float[] thunderboltBlastRadiusByTier;
+
     // Impact effect played wherever this weapon's bullet lands a hit - hitTexture null (the
     // default) means no hit effect. See AssetManager, which resolves hitTexture into
     // hitAnimation once at load time (not JSON-backed - never a key in weapons.json - so every

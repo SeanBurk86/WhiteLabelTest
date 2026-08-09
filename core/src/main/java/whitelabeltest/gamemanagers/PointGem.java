@@ -8,8 +8,9 @@ import com.badlogic.gdx.math.MathUtils;
 import com.badlogic.gdx.math.Rectangle;
 import com.badlogic.gdx.utils.Pool;
 
-/** A point pickup spawned when an enemy dies (see GameController.destroyEnemy - one per 10 of
- *  the enemy's max health). Pops up in a random mostly-upward direction and falls under gravity;
+/** A point pickup spawned when an enemy dies (see GameController.destroyEnemy - one per
+ *  GameBalance.gemsPerEnemyHealth of the enemy's max health). Pops up in a random mostly-upward
+ *  direction and falls under gravity;
  *  the instant the player isn't firing, it homes in on the player's graze hitbox (the "graze
  *  halo" - see CollisionManager.checkPlayerGemCollisions) instead of falling. Holding the fire
  *  button keeps it falling, so gems can still be farmed by hosing them down rather than collected

@@ -20,13 +20,15 @@ public class OrbitingFiring implements FiringPattern {
     private float shootTimer;
 
     private static final float DEFAULT_CENTER_SPEED = 4.0f;
-    private static final float ORBIT_RADIUS = 0.4f;
-    private static final float ORBIT_SPEED = 5.0f; // radians per second
+    public static final float DEFAULT_ORBIT_RADIUS = 0.4f;
+    public static final float DEFAULT_ORBIT_SPEED = 5.0f; // radians per second
 
     private final Animation<TextureRegion> spriteOverride;
     private final float offsetX;
     private final float offsetY;
     private final int bulletDamage;
+    private final float orbitRadius;
+    private final float orbitSpeed;
 
     public OrbitingFiring(float fireRate) {
         this(fireRate, 0.5f, DEFAULT_CENTER_SPEED, null);
@@ -51,6 +53,12 @@ public class OrbitingFiring implements FiringPattern {
     }
 
     public OrbitingFiring(float fireRate, float bulletSize, float bulletSpeed, Animation<TextureRegion> spriteOverride, float offsetX, float offsetY, int bulletDamage) {
+        this(fireRate, bulletSize, bulletSpeed, spriteOverride, offsetX, offsetY, bulletDamage, DEFAULT_ORBIT_RADIUS, DEFAULT_ORBIT_SPEED);
+    }
+
+    /** @param orbitRadius, orbitSpeed each bullet's spin around its own drifting center - see
+     *  FiringPatternDef.orbitRadius/orbitSpeed */
+    public OrbitingFiring(float fireRate, float bulletSize, float bulletSpeed, Animation<TextureRegion> spriteOverride, float offsetX, float offsetY, int bulletDamage, float orbitRadius, float orbitSpeed) {
         this.fireRate = fireRate;
         this.bulletSize = bulletSize;
         this.bulletSpeed = bulletSpeed;
@@ -58,6 +66,8 @@ public class OrbitingFiring implements FiringPattern {
         this.offsetX = offsetX;
         this.offsetY = offsetY;
         this.bulletDamage = bulletDamage;
+        this.orbitRadius = orbitRadius;
+        this.orbitSpeed = orbitSpeed;
         this.shootTimer = fireRate; // fire immediately on first update
     }
 
@@ -76,11 +86,11 @@ public class OrbitingFiring implements FiringPattern {
         Vector2 vel = new Vector2(playerX - centerX, playerY - centerY).nor().scl(bulletSpeed);
 
         OrbitingBullet b1 = ObjectPools.orbitingBulletPool.obtain();
-        b1.init(animation, centerX, centerY, vel.x, vel.y, ORBIT_RADIUS, ORBIT_SPEED, 0, bulletSize, bulletDamage, self);
+        b1.init(animation, centerX, centerY, vel.x, vel.y, orbitRadius, orbitSpeed, 0, bulletSize, bulletDamage, self);
         enemyBullets.add(b1);
 
         OrbitingBullet b2 = ObjectPools.orbitingBulletPool.obtain();
-        b2.init(animation, centerX, centerY, vel.x, vel.y, ORBIT_RADIUS, ORBIT_SPEED, MathUtils.PI, bulletSize, bulletDamage, self);
+        b2.init(animation, centerX, centerY, vel.x, vel.y, orbitRadius, orbitSpeed, MathUtils.PI, bulletSize, bulletDamage, self);
         enemyBullets.add(b2);
     }
 

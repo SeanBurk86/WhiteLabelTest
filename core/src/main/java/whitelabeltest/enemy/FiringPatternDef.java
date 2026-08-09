@@ -59,6 +59,13 @@ public class FiringPatternDef implements Json.Serializable {
     public float sweepDuration = -1f;
     public float sweepStartAngle = Float.NaN;
     public float sweepEndAngle = Float.NaN;
+    // SineWave's wave shape - see SineWaveFiring.DEFAULT_AMPLITUDE/DEFAULT_FREQUENCY.
+    public float amplitude = -1f;
+    public float frequency = -1f;
+    // Orbiting's per-bullet spin around its own drifting center - see
+    // OrbitingFiring.DEFAULT_ORBIT_RADIUS/DEFAULT_ORBIT_SPEED (radians/second).
+    public float orbitRadius = -1f;
+    public float orbitSpeed = -1f;
     public Array<FiringPatternDef> patterns;
 
     public FiringPatternDef() {}
@@ -102,6 +109,10 @@ public class FiringPatternDef implements Json.Serializable {
         if (sweepDuration > 0) json.writeValue("sweepDuration", sweepDuration);
         if (!Float.isNaN(sweepStartAngle)) json.writeValue("sweepStartAngle", sweepStartAngle);
         if (!Float.isNaN(sweepEndAngle)) json.writeValue("sweepEndAngle", sweepEndAngle);
+        if (amplitude > 0) json.writeValue("amplitude", amplitude);
+        if (frequency > 0) json.writeValue("frequency", frequency);
+        if (orbitRadius > 0) json.writeValue("orbitRadius", orbitRadius);
+        if (orbitSpeed > 0) json.writeValue("orbitSpeed", orbitSpeed);
         if (patterns != null) json.writeValue("patterns", patterns, Array.class, FiringPatternDef.class);
     }
 
@@ -152,6 +163,10 @@ public class FiringPatternDef implements Json.Serializable {
         sweepDuration = data.getFloat("sweepDuration", -1f);
         sweepStartAngle = data.getFloat("sweepStartAngle", Float.NaN);
         sweepEndAngle = data.getFloat("sweepEndAngle", Float.NaN);
+        amplitude = data.getFloat("amplitude", -1f);
+        frequency = data.getFloat("frequency", -1f);
+        orbitRadius = data.getFloat("orbitRadius", -1f);
+        orbitSpeed = data.getFloat("orbitSpeed", -1f);
         JsonValue patternsData = data.get("patterns");
         if (patternsData != null) {
             patterns = new Array<>();

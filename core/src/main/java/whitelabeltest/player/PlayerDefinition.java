@@ -28,5 +28,9 @@ public class PlayerDefinition {
     public float hitboxSize;
     public float haloHitboxSize;
 
+    public int baseMaxBombs;
+    public int startingLives;
+    public int maxWeaponLevel;
+
     public PlayerDefinition() {}
 }

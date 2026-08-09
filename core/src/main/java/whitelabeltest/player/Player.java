@@ -34,17 +34,18 @@ public class Player {
     private final OrbitWeapon orbitWeapon;
     private final ThunderboltWeapon thunderboltWeapon;
     private final WeaponDefinition orbitWeaponDef;
+    // Basic's/Thunderbolt's own Hyper Attack tuning (halo dash distance/speed, thunderbolt charge/
+    // blast tiers) - see the HALO_ARRIVE_EPSILON comment above and WeaponDefinition's halo*/
+    // thunderbolt* fields (weapons.json's "BasicWeapon"/"Thunderbolt" entries).
+    private final WeaponDefinition basicWeaponDef;
+    private final WeaponDefinition thunderboltWeaponDef;
     private final Animation<TextureRegion> shieldAnimation;
     private final Circle shieldHitbox = new Circle();
 
     private final Weapon[] weaponSlots = new Weapon[2];
     private int activeSlot;
     private int numBombs;
-    private static final int BASE_MAX_BOMBS = 2;
     private int maxBombs;
-    // Also GameController.computeRank()'s denominator for the level-complete rank's
-    // lives-preserved fraction, since numLives only ever starts here and counts down.
-    public static final int STARTING_LIVES = 6;
     private int numLives;
     private float grazePoints;
 
@@ -70,15 +71,11 @@ public class Player {
     // launches forward a short distance, dealing damage to anything it clips along the way, then
     // rests there - detached from the player, firing BasicWeapon's own stream on its own cadence
     // for as long as it's detached - until Hyper Attack is pressed again, at which point it glides
-    // back to wherever the player currently is instead of snapping there.
-    private static final float HALO_DASH_DISTANCE = 4.2f;
-    private static final float HALO_DASH_SPEED = 14f;
-    private static final float HALO_RETURN_SPEED = 6f;
-    // Basic's own re-press reattaches noticeably snappier than a fizzled recall (switching weapons
-    // away mid-flight - see recallHaloOnWeaponSwitch()) or Thunderbolt's return leg glides back at.
-    private static final float HALO_FAST_RETURN_SPEED = 14f;
+    // back to wherever the player currently is instead of snapping there. Tuning values (dash
+    // distance/speed, return speed(s), dash damage) come from basicWeaponDef (weapons.json's
+    // "BasicWeapon" entry - see haloDashDistance/haloDashSpeed/haloReturnSpeed/haloFastReturnSpeed/
+    // haloDashDamage on WeaponDefinition), set below once assets is available.
     private static final float HALO_ARRIVE_EPSILON = 0.05f;
-    private static final int HALO_DASH_DAMAGE = 30;
 
     private boolean haloDetached;
     private boolean haloDashing;
@@ -92,34 +89,28 @@ public class Player {
 
     // ThunderboltWeapon's Hyper Attack (see ThunderboltWeapon.hyperAttack/triggerThunderboltHyperAttack):
     // the halo launches out to hover in front of the ship - tracking it, rather than resting at a
-    // fixed spot like Basic's dash does - where it charges a bomb through four damage tiers (see
-    // THUNDERBOLT_CHARGE_DAMAGE), gaining a tier every THUNDERBOLT_CHARGE_LEVEL_TIME seconds it's
-    // held. Releasing the button detonates it at whatever tier it reached - see
-    // CollisionManager.checkThunderboltDetonation for the actual area damage and green-lightning
-    // visual this only queues up - then sends the halo gliding back to the player the same way
-    // Basic's does (shares haloReturning/haloDetached with it; see updateHaloMovement()).
-    private static final float THUNDERBOLT_HALO_FRONT_DISTANCE = 2.5f;
-    private static final float THUNDERBOLT_HALO_MOVE_SPEED = 10f;
-    private static final float THUNDERBOLT_CHARGE_LEVEL_TIME = 0.5f;
-    private static final int[] THUNDERBOLT_CHARGE_DAMAGE = {32, 64, 128, 256};
-    // Blast radius grows with charge tier, same as damage does - level 4 (index 3) is the full
-    // radius the detonation has always used; levels 1-3 are smaller fractions of it.
-    private static final float THUNDERBOLT_BLAST_RADIUS = 3.5f;
-    private static final float[] THUNDERBOLT_BLAST_RADII = {
-        THUNDERBOLT_BLAST_RADIUS * 0.25f,
-        THUNDERBOLT_BLAST_RADIUS * 0.5f,
-        THUNDERBOLT_BLAST_RADIUS * 0.75f,
-        THUNDERBOLT_BLAST_RADIUS,
-    };
+    // fixed spot like Basic's dash does - where it charges a bomb through this weapon's damage
+    // tiers (see thunderboltChargeDamageByTier below), gaining a tier every
+    // thunderboltChargeLevelTime seconds it's held. Releasing the button detonates it at whatever
+    // tier it reached - see CollisionManager.checkThunderboltDetonation for the actual area damage
+    // and green-lightning visual this only queues up - then sends the halo gliding back to the
+    // player the same way Basic's does (shares haloReturning/haloDetached with it; see
+    // updateHaloMovement()). Tuning values come from thunderboltWeaponDef (weapons.json's
+    // "Thunderbolt" entry - see thunderboltHaloFrontDistance/thunderboltHaloMoveSpeed/
+    // thunderboltChargeLevelTime/thunderboltChargeDamageByTier/thunderboltBlastRadiusByTier on
+    // WeaponDefinition), set below once assets is available. Blast radius grows with charge tier,
+    // same as damage does - the last tier is the full radius the detonation has always used at max
+    // charge; earlier tiers are smaller.
     // One animation per charge tier (ThunderHyperHaloShrink1-4.png, indexed by thunderboltChargeLevel)
     // shown on the halo while it's out charging, plus a one-shot ThunderHaloBomb.png played in place
     // once released - see resolveHaloVisual()/updateThunderboltDetonationAnim().
     private final Animation<TextureRegion>[] thunderShrinkAnimations;
     private final float[] thunderShrinkDrawWidth, thunderShrinkDrawHeight;
     private final Animation<TextureRegion> thunderHaloBombAnimation;
-    // player.json's thunderHaloBomb.size is the sprite's size at the top charge tier (full
-    // THUNDERBOLT_BLAST_RADIUS) - resolveHaloVisual() scales it down by thunderboltDetonationVisualScale
-    // for lower tiers, so the drawn explosion always matches how big the actual blast was.
+    // player.json's thunderHaloBomb.size is the sprite's size at the top charge tier (full blast
+    // radius, the last entry of thunderboltWeaponDef.thunderboltBlastRadiusByTier) -
+    // resolveHaloVisual() scales it down by thunderboltDetonationVisualScale for lower tiers, so
+    // the drawn explosion always matches how big the actual blast was.
     private final float thunderHaloBombDrawWidth, thunderHaloBombDrawHeight;
 
     private boolean thunderboltHaloActive;
@@ -132,9 +123,10 @@ public class Player {
     private float thunderboltDetonationX, thunderboltDetonationY;
     private int thunderboltDetonationDamage;
     private float thunderboltDetonationRadius;
-    // thunderboltDetonationRadius expressed as a fraction of THUNDERBOLT_BLAST_RADIUS - how much to
-    // scale thunderHaloBombDrawWidth/Height down by so the explosion sprite matches this particular
-    // detonation's actual (smaller-if-not-fully-charged) blast size - see resolveHaloVisual().
+    // thunderboltDetonationRadius expressed as a fraction of the full (last-tier) blast radius -
+    // how much to scale thunderHaloBombDrawWidth/Height down by so the explosion sprite matches
+    // this particular detonation's actual (smaller-if-not-fully-charged) blast size - see
+    // resolveHaloVisual().
     private float thunderboltDetonationVisualScale = 1f;
     // True from the moment the charge is released until the ThunderHaloBomb animation finishes
     // playing in place - see updateThunderboltDetonationAnim(). The area damage itself already
@@ -166,7 +158,6 @@ public class Player {
     private float haloBashFlashTimer;
     private static final float HALO_BASH_FLASH_DURATION = 0.15f;
 
-    private static final int MAX_WEAPON_LEVEL = 4;
     private static final float BLINK_INTERVAL = 0.1f;
 
     public Player(AssetManager assets, float worldWidth, float worldHeight) {
@@ -233,6 +224,7 @@ public class Player {
         // Initialize weapons using the new dynamic AssetManager - before the hitboxes below,
         // since updateHitbox() reads orbitWeapon's shield radius.
         WeaponDefinition bDef = assets.getWeaponDefinition("BasicWeapon");
+        basicWeaponDef = bDef;
         basicWeapon = new BasicWeapon();
         basicWeapon.init(bDef, assets.getTexture(bDef.texture), 0, 0, new Vector2(0,1), bDef.getSpeed(1));
 
@@ -250,6 +242,7 @@ public class Player {
             shieldSprite.rows, shieldSprite.frameCount, shieldFrameDuration, Animation.PlayMode.NORMAL);
 
         WeaponDefinition thbDef = assets.getWeaponDefinition("Thunderbolt");
+        thunderboltWeaponDef = thbDef;
         thunderboltWeapon = new ThunderboltWeapon();
         thunderboltWeapon.init(thbDef, assets.pixelTexture, assets.circleTexture, new Vector2(0, 0), new Vector2(0, 1), thbDef.size, worldHeight);
 
@@ -262,8 +255,8 @@ public class Player {
         weaponSlots[1] = null;
         activeSlot = 0;
         numBombs = 1;
-        maxBombs = BASE_MAX_BOMBS;
-        numLives = STARTING_LIVES;
+        maxBombs = playerDef.baseMaxBombs;
+        numLives = playerDef.startingLives;
         grazePoints = 0;
         isInvincible = false;
     }
@@ -386,7 +379,7 @@ public class Player {
             haloFireTimer = 0f;
             haloDetachedX = attachedHaloX();
             haloDetachedY = attachedHaloY();
-            haloDashTargetY = haloDetachedY + HALO_DASH_DISTANCE;
+            haloDashTargetY = haloDetachedY + basicWeaponDef.haloDashDistance;
             audio.playHaloDetach();
         } else if (!haloDashing && !haloReturning) {
             haloReturning = true;
@@ -437,7 +430,7 @@ public class Player {
 
         if (thunderboltCharging) {
             thunderboltChargeTimer += delta;
-            thunderboltChargeLevel = Math.min((int) (thunderboltChargeTimer / THUNDERBOLT_CHARGE_LEVEL_TIME), THUNDERBOLT_CHARGE_DAMAGE.length - 1);
+            thunderboltChargeLevel = Math.min((int) (thunderboltChargeTimer / thunderboltWeaponDef.thunderboltChargeLevelTime), thunderboltWeaponDef.thunderboltChargeDamageByTier.length - 1);
         }
 
         if (thunderboltChargeLevel != thunderboltChargeSoundLevel) {
@@ -449,9 +442,9 @@ public class Player {
             thunderboltDetonationPending = true;
             thunderboltDetonationX = haloCenterX();
             thunderboltDetonationY = haloCenterY();
-            thunderboltDetonationDamage = THUNDERBOLT_CHARGE_DAMAGE[thunderboltChargeLevel];
-            thunderboltDetonationRadius = THUNDERBOLT_BLAST_RADII[thunderboltChargeLevel];
-            thunderboltDetonationVisualScale = thunderboltDetonationRadius / THUNDERBOLT_BLAST_RADIUS;
+            thunderboltDetonationDamage = thunderboltWeaponDef.thunderboltChargeDamageByTier[thunderboltChargeLevel];
+            thunderboltDetonationRadius = thunderboltWeaponDef.thunderboltBlastRadiusByTier[thunderboltChargeLevel];
+            thunderboltDetonationVisualScale = thunderboltDetonationRadius / thunderboltFullBlastRadius();
 
             thunderboltMoving = false;
             thunderboltCharging = false;
@@ -515,7 +508,7 @@ public class Player {
 
         if (haloDashing) {
             float remaining = haloDashTargetY - haloDetachedY;
-            float step = HALO_DASH_SPEED * delta;
+            float step = basicWeaponDef.haloDashSpeed * delta;
             if (Math.abs(remaining) <= step) {
                 haloDetachedY = haloDashTargetY;
                 haloDashing = false;
@@ -528,11 +521,11 @@ public class Player {
             // fixed point - the gap is small and this only runs for the brief trip out, so it
             // converges close enough well before any real drift could accumulate.
             float targetX = attachedHaloX();
-            float targetY = attachedHaloY() + THUNDERBOLT_HALO_FRONT_DISTANCE;
+            float targetY = attachedHaloY() + thunderboltWeaponDef.thunderboltHaloFrontDistance;
             float dx = targetX - haloDetachedX;
             float dy = targetY - haloDetachedY;
             float dist = (float) Math.sqrt(dx * dx + dy * dy);
-            float step = THUNDERBOLT_HALO_MOVE_SPEED * delta;
+            float step = thunderboltWeaponDef.thunderboltHaloMoveSpeed * delta;
             if (dist <= Math.max(step, HALO_ARRIVE_EPSILON)) {
                 haloDetachedX = targetX;
                 haloDetachedY = targetY;
@@ -549,14 +542,14 @@ public class Player {
             // the move-in phase above - the ship's own per-frame movement is already smooth, so
             // snapping here doesn't introduce any visible jitter.
             haloDetachedX = attachedHaloX();
-            haloDetachedY = attachedHaloY() + THUNDERBOLT_HALO_FRONT_DISTANCE;
+            haloDetachedY = attachedHaloY() + thunderboltWeaponDef.thunderboltHaloFrontDistance;
         } else if (haloReturning) {
             float targetX = attachedHaloX();
             float targetY = attachedHaloY();
             float dx = targetX - haloDetachedX;
             float dy = targetY - haloDetachedY;
             float dist = (float) Math.sqrt(dx * dx + dy * dy);
-            float step = (haloFastReturn ? HALO_FAST_RETURN_SPEED : HALO_RETURN_SPEED) * delta;
+            float step = (haloFastReturn ? basicWeaponDef.haloFastReturnSpeed : basicWeaponDef.haloReturnSpeed) * delta;
             if (dist <= Math.max(step, HALO_ARRIVE_EPSILON)) {
                 haloDetached = false;
                 haloReturning = false;
@@ -761,8 +754,8 @@ public class Player {
         thunderboltWeapon.resetShootTimer();
         animationTime = 0;
         numBombs = 1;
-        maxBombs = BASE_MAX_BOMBS;
-        numLives = STARTING_LIVES;
+        maxBombs = playerDef.baseMaxBombs;
+        numLives = playerDef.startingLives;
         isInvincible = false;
         isDead = false;
         deathTimer = 0f;
@@ -804,7 +797,7 @@ public class Player {
     public Circle getHaloHitbox() { return haloHitbox; }
     public boolean hasHaloDamaged(Enemy enemy) { return haloDashHitEnemies.contains(enemy, true); }
     public void markHaloDamaged(Enemy enemy) { haloDashHitEnemies.add(enemy); }
-    public int getHaloDashDamage() { return HALO_DASH_DAMAGE; }
+    public int getHaloDashDamage() { return basicWeaponDef.haloDashDamage; }
     public boolean hasPendingThunderboltDetonation() { return thunderboltDetonationPending; }
     public float getThunderboltDetonationX() { return thunderboltDetonationX; }
     public float getThunderboltDetonationY() { return thunderboltDetonationY; }
@@ -813,10 +806,17 @@ public class Player {
     // above - see CollisionManager.checkThunderboltDetonation.
     public float getThunderboltDetonationRadius() { return thunderboltDetonationRadius; }
     // The radius a release would detonate at *right now*, given the current charge tier - grows
-    // with thunderboltChargeLevel the same way the damage does (see THUNDERBOLT_BLAST_RADII),
-    // reaching THUNDERBOLT_BLAST_RADIUS only at the top tier. Used by the debug hitbox overlay
-    // (Main.drawDebug) to preview where/how big the blast will be.
-    public float getThunderboltBlastRadius() { return THUNDERBOLT_BLAST_RADII[thunderboltChargeLevel]; }
+    // with thunderboltChargeLevel the same way the damage does (see
+    // thunderboltWeaponDef.thunderboltBlastRadiusByTier), reaching the full radius only at the top
+    // tier. Used by the debug hitbox overlay (Main.drawDebug) to preview where/how big the blast
+    // will be.
+    public float getThunderboltBlastRadius() { return thunderboltWeaponDef.thunderboltBlastRadiusByTier[thunderboltChargeLevel]; }
+    // The full (top-tier) blast radius - thunderboltDetonationVisualScale's divisor, and the size
+    // player.json's thunderHaloBomb sprite is authored at (see the field comment above).
+    private float thunderboltFullBlastRadius() {
+        float[] radii = thunderboltWeaponDef.thunderboltBlastRadiusByTier;
+        return radii[radii.length - 1];
+    }
     public void clearPendingThunderboltDetonation() { thunderboltDetonationPending = false; }
     // True from the moment the bomb launches out until it detonates (moving out or holding
     // position and charging) - i.e. for as long as a release would actually detonate it - see
@@ -896,7 +896,7 @@ public class Player {
      *  weapon equipped) is simply skipped rather than being filled. */
     public void levelUpEquippedWeapons(int amount) {
         for (Weapon w : weaponSlots) {
-            if (w != null) w.setLevel(Math.min(w.getLevel() + amount, MAX_WEAPON_LEVEL));
+            if (w != null) w.setLevel(Math.min(w.getLevel() + amount, playerDef.maxWeaponLevel));
         }
     }
 
@@ -919,10 +919,11 @@ public class Player {
     // Debug-only: sets a weapon's level directly (unlike levelUpWeapon, doesn't equip it into a slot).
     public void setWeaponLevel(String weaponId, int level) {
         Weapon target = weaponById(weaponId);
-        if (target != null) target.setLevel(MathUtils.clamp(level, 0, MAX_WEAPON_LEVEL));
+        if (target != null) target.setLevel(MathUtils.clamp(level, 0, playerDef.maxWeaponLevel));
     }
 
-    public int getMaxWeaponLevel() { return MAX_WEAPON_LEVEL; }
+    public int getMaxWeaponLevel() { return playerDef.maxWeaponLevel; }
+    public int getStartingLives() { return playerDef.startingLives; }
 
     public void setSlotWeapon(int slot, String weaponId) {
         Weapon target = weaponById(weaponId);

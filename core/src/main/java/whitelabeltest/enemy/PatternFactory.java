@@ -160,6 +160,24 @@ public class PatternFactory {
                 return new SweepFiring(def.fireRate, resolve(bulletSize(def, bulletDef), 0.25f), resolve(bulletSpeed(def, bulletDef), 5f), spriteOverride, def.offsetX, def.offsetY, sweepDuration, startAngle, endAngle, bulletDamage(def, bulletDef),
                     speedProfile(def, bulletDef), hitboxSpec(def, bulletDef));
             }
+            case "SineWave": {
+                BulletDef bulletDef = PatternRegistry.getBullet(def.bulletId);
+                Animation<TextureRegion> spriteOverride = buildBulletAnimation(enemyDef, def, bulletDef);
+                float amplitude = def.amplitude > 0 ? def.amplitude : SineWaveFiring.DEFAULT_AMPLITUDE;
+                float frequency = def.frequency > 0 ? def.frequency : SineWaveFiring.DEFAULT_FREQUENCY;
+                return new SineWaveFiring(def.fireRate, resolve(bulletSize(def, bulletDef), 0.2f), resolve(bulletSpeed(def, bulletDef), 5f), spriteOverride, def.offsetX, def.offsetY, bulletDamage(def, bulletDef),
+                    speedProfile(def, bulletDef), hitboxSpec(def, bulletDef), amplitude, frequency);
+            }
+            // Orbiting's "speed" bootstraps a constant center-drift vector, not a travel speed
+            // that ramps over time the way the other bullet types here do - acceleration doesn't
+            // apply to it.
+            case "Orbiting": {
+                BulletDef bulletDef = PatternRegistry.getBullet(def.bulletId);
+                Animation<TextureRegion> spriteOverride = buildBulletAnimation(enemyDef, def, bulletDef);
+                float orbitRadius = def.orbitRadius > 0 ? def.orbitRadius : OrbitingFiring.DEFAULT_ORBIT_RADIUS;
+                float orbitSpeed = def.orbitSpeed > 0 ? def.orbitSpeed : OrbitingFiring.DEFAULT_ORBIT_SPEED;
+                return new OrbitingFiring(def.fireRate, resolve(bulletSize(def, bulletDef), 0.5f), resolve(bulletSpeed(def, bulletDef), 4f), spriteOverride, def.offsetX, def.offsetY, bulletDamage(def, bulletDef), orbitRadius, orbitSpeed);
+            }
             default:
                 BulletDef bulletDef = PatternRegistry.getBullet(def.bulletId);
                 Animation<TextureRegion> spriteOverride = buildBulletAnimation(enemyDef, def, bulletDef);

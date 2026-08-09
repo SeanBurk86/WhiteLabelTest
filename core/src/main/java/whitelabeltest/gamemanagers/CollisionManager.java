@@ -170,15 +170,13 @@ public class CollisionManager {
         }
     }
 
-    private static final int GEM_POINTS = 100;
-
     /** Point gems (see PointGem/GameController.destroyEnemy) are only collectible via the wider
      *  graze halo, same as weapon powerups - they home into it once the player stops firing. */
-    public void checkPlayerGemCollisions(Player player, Array<PointGem> gems, ScoreManager scoreManager, AudioManager audio) {
+    public void checkPlayerGemCollisions(Player player, Array<PointGem> gems, ScoreManager scoreManager, AudioManager audio, AssetManager assets) {
         for (int i = gems.size - 1; i >= 0; i--) {
             PointGem gem = gems.get(i);
             if (Intersector.overlaps(player.getGrazeHitbox(), gem.getRectangle())) {
-                scoreManager.addBonus(GEM_POINTS);
+                scoreManager.addBonus(assets.getGameBalance().gemPoints);
                 audio.playPointGem();
                 gems.removeIndex(i);
                 ObjectPools.freePointGem(gem);

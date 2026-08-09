@@ -1,14 +1,16 @@
 package whitelabeltest.gamemanagers;
 
 public class ScoreManager {
-    private static final float DEFAULT_CHAIN_WINDOW = 2.0f;
+    // Fallback chain window used until the first addScore(basePoints, chainWindow)/registerWeaponHit
+    // call establishes a real per-weapon one - see GameBalance.defaultChainWindow (balance.json).
+    private final float defaultChainWindow;
 
     private int score;
     private int highScore;
     private int chainCount;
     private int chainValueSum;
     private float chainTimer;
-    private float currentChainWindow = DEFAULT_CHAIN_WINDOW;
+    private float currentChainWindow;
     // Total enemies killed this run - see GameController.destroyEnemy(), the single choke point
     // every kill (bullet, halo dash, thunderbolt, bomb) passes through. Distinct from enemies that
     // merely fly off-screen alive, so it reflects actual kills for UIManager.drawLevelComplete's
@@ -17,6 +19,11 @@ public class ScoreManager {
     // Highest chainCount reached this run, tracked alongside it in addScore() - see
     // UIManager.drawLevelComplete's "PEAK CHAIN" row.
     private int maxChainCount;
+
+    public ScoreManager(float defaultChainWindow) {
+        this.defaultChainWindow = defaultChainWindow;
+        this.currentChainWindow = defaultChainWindow;
+    }
 
     public void update(float delta) {
         if (chainTimer > 0) {
@@ -74,7 +81,7 @@ public class ScoreManager {
         chainCount = 0;
         chainValueSum = 0;
         chainTimer = 0;
-        currentChainWindow = DEFAULT_CHAIN_WINDOW;
+        currentChainWindow = defaultChainWindow;
         enemiesDestroyed = 0;
         maxChainCount = 0;
     }

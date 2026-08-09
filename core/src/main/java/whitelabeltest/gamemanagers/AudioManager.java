@@ -258,7 +258,8 @@ public class AudioManager implements Disposable {
 
     /** Plays the tier-th (0-based) charge sound for ThunderboltWeapon's Hyper Attack bomb - see
      *  Player.updateThunderboltCharge, which calls this once per tier as the bomb climbs through
-     *  THUNDERBOLT_CHARGE_DAMAGE, in order, rather than picking randomly like the sound banks above. */
+     *  its damage tiers (weapons.json's thunderboltChargeDamageByTier), in order, rather than
+     *  picking randomly like the sound banks above. */
     public void playThunderboltHyperLevel(int tier) {
         if (!muted && tier >= 0 && tier < thunderboltHyperLevelSounds.length) thunderboltHyperLevelSounds[tier].play(settings.getEffectiveSfxVolume());
     }
