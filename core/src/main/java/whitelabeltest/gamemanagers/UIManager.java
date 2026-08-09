@@ -742,7 +742,7 @@ public class UIManager implements Disposable {
      *  computeRank() derives from those same stats. */
     public void drawLevelComplete(SpriteBatch batch, float worldWidth, float worldHeight, int score, int bombBonus, int livesMultiplier,
                                    int enemiesDestroyed, int totalEnemies, int bossTimeBonus, float bossFightSeconds, int maxChainCount,
-                                   LevelRank rank) {
+                                   LevelRank rank, boolean hasNextStage, int stageNumber) {
         batch.setColor(0f, 0f, 0f, 0.88f);
         batch.draw(whitePixel, 0, 0, worldWidth, worldHeight);
         batch.setColor(Color.WHITE);
@@ -752,8 +752,9 @@ public class UIManager implements Disposable {
         float panelX = margin;
         float panelWidth = worldWidth - margin * 2f;
 
+        String title = hasNextStage ? "STAGE " + stageNumber + " CLEAR" : "MISSION COMPLETE";
         float titleY = worldHeight - 0.9f;
-        drawGlowCentered(batch, "STAGE CLEAR", centerX, titleY, 2.6f, HUD_GREEN_DIM, Color.WHITE);
+        drawGlowCentered(batch, title, centerX, titleY, 2.6f, HUD_GREEN_DIM, Color.WHITE);
 
         float subtitleY = titleY - 0.5f;
         drawCentered(batch, "-- HOSTILE ARRAY NEUTRALIZED --", centerX, subtitleY, HUD_GREEN);
@@ -824,7 +825,12 @@ public class UIManager implements Disposable {
         font.draw(batch, "TOTAL SCORE", rowX + 0.15f, totalBoxY + totalBoxHeight * 0.65f);
         drawTextRightAligned(batch, String.format("%010d", score), rowRight - 0.15f, totalBoxY + totalBoxHeight * 0.65f, HUD_GREEN);
 
-        String prompt = inputType == InputType.KEYBOARD ? "R = RESTART   Q = QUIT" : "START = RESTART   SELECT = QUIT";
+        String prompt;
+        if (inputType == InputType.KEYBOARD) {
+            prompt = hasNextStage ? "R = CONTINUE   Q = QUIT" : "R = RESTART   Q = QUIT";
+        } else {
+            prompt = hasNextStage ? "START = CONTINUE   SELECT = QUIT" : "START = RESTART   SELECT = QUIT";
+        }
         drawCentered(batch, prompt, centerX, statsBottom - 0.5f, HUD_LABEL);
     }
 

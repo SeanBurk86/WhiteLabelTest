@@ -46,7 +46,7 @@ public class AudioManager implements Disposable {
     private final Sound thunderboltHyperExplosionSound;
     private final Music victoryFanfare;
     private final Music victoryLoop;
-    private final Music stageMusic;
+    private Music stageMusic;
     private final ObjectMap<Integer, Array<Sound>> pointGemSounds;
     private final ObjectMap<Integer, Array<Sound>> explosionSounds;
     private final ObjectMap<Integer, Array<Sound>> basicWeaponSounds;
@@ -86,8 +86,6 @@ public class AudioManager implements Disposable {
         victoryLoop = Gdx.audio.newMusic(Gdx.files.internal("audio/music/victory.mp3"));
         victoryLoop.setLooping(true);
         victoryFanfare.setOnCompletionListener(music -> victoryLoop.play());
-        stageMusic = Gdx.audio.newMusic(Gdx.files.internal("audio/music/battleontheedge.mp3"));
-        stageMusic.setLooping(true);
         Json json = new Json();
         basicWeaponSounds = new ObjectMap<>();
         waveBlastWeaponSounds = new ObjectMap<>();
@@ -130,6 +128,15 @@ public class AudioManager implements Disposable {
             tempArray.add(Gdx.audio.newSound(Gdx.files.internal(s)));
         }
         soundsArray.put(sBank.level, tempArray);
+    }
+
+    /** Swaps the currently-loaded stage track for the one at path, disposing the old one - called
+     *  once per stage load (see GameController.loadStage()), always before playStageMusic()/
+     *  setMuted() are next used, so those methods can keep assuming stageMusic is non-null. */
+    public void loadStageMusic(String path) {
+        if (stageMusic != null) stageMusic.dispose();
+        stageMusic = Gdx.audio.newMusic(Gdx.files.internal(path));
+        stageMusic.setLooping(true);
     }
 
     public void setMuted(boolean muted) {
@@ -296,7 +303,7 @@ public class AudioManager implements Disposable {
         thunderboltHyperExplosionSound.dispose();
         victoryFanfare.dispose();
         victoryLoop.dispose();
-        stageMusic.dispose();
+        if (stageMusic != null) stageMusic.dispose();
         disposeSoundsMap(pointGemSounds);
         disposeSoundsMap(explosionSounds);
         disposeSoundsMap(basicWeaponSounds);

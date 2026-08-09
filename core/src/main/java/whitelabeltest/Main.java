@@ -120,8 +120,6 @@ public class Main extends ApplicationAdapter {
         state = AppState.PLAYING;
     }
 
-    /** Edge-detects the gamepad Back/Select button so it opens/closes Options the same way
-     * Escape does on keyboard, without a controller-mode InputManager already tracking it. */
     private boolean isControllerBackJustPressed() {
         Controller controller = Controllers.getCurrent();
         boolean down = controller != null && controller.getButton(controller.getMapping().buttonBack);
@@ -213,7 +211,8 @@ public class Main extends ApplicationAdapter {
                 game.getLevelCompleteBombBonus(), game.getLevelCompleteLivesMultiplier(),
                 game.getEnemiesDestroyed(), game.getTotalEnemyCount(),
                 game.getLevelCompleteTimeBonus(), game.getLevelCompleteBossFightSeconds(),
-                game.getMaxChainCount(), game.getLevelCompleteRank());
+                game.getMaxChainCount(), game.getLevelCompleteRank(),
+                game.hasNextStage(), game.getStageNumber());
         }
 
         if (game.isDebugMode() && game.isAudioMuted() && !game.isDebugMenuOpen()) {

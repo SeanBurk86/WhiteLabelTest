@@ -101,14 +101,14 @@ public class SpawnScheduler {
     private final ObjectMap<String, EnemyDefinition> enemyDefinitions;
     private final AssetManager assets;
 
-    public SpawnScheduler(float worldWidth, float worldHeight, AssetManager assets) {
+    public SpawnScheduler(float worldWidth, float worldHeight, AssetManager assets, String scheduleFilePath) {
         this.worldWidth = worldWidth;
         this.worldHeight = worldHeight;
         this.assets = assets;
         this.totalTime = 0;
         this.enemyDefinitions = new ObjectMap<>();
         loadDefinitions();
-        loadSchedule();
+        loadSchedule(scheduleFilePath);
     }
 
     private void loadDefinitions() {
@@ -120,10 +120,10 @@ public class SpawnScheduler {
         }
     }
 
-    private void loadSchedule() {
+    private void loadSchedule(String scheduleFilePath) {
         Json json = new Json();
         try {
-            ScheduleFile file = json.fromJson(ScheduleFile.class, Gdx.files.internal("data/spawn_schedule.json"));
+            ScheduleFile file = json.fromJson(ScheduleFile.class, Gdx.files.internal(scheduleFilePath));
             this.schedule = (file != null && file.events != null) ? file.events : new Array<>();
             if (file != null && file.textCues != null) this.textCues = file.textCues;
             if (file != null && file.soundCues != null) this.soundCues = file.soundCues;
@@ -149,7 +149,7 @@ public class SpawnScheduler {
                 }
             });
         } catch (SerializationException e) {
-            Gdx.app.error("SpawnScheduler", "Error parsing spawn_schedule.json", e);
+            Gdx.app.error("SpawnScheduler", "Error parsing " + scheduleFilePath, e);
             this.schedule = new Array<>();
         }
     }

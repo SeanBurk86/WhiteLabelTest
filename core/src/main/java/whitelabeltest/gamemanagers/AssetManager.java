@@ -23,6 +23,11 @@ public class AssetManager implements Disposable {
     private final ObjectMap<String, EnemyDefinition> enemyDefinitions = new ObjectMap<>();
     private final PlayerDefinition playerDefinition;
     private final GameBalance gameBalance;
+    // Pool of every stage that exists, keyed by id - which of these play, and in what order, for a
+    // given run is a separate concern (see stageSequences/StageSequenceDefinition), so a stage can
+    // be reused across multiple sequences (e.g. a tutorial mode reusing a campaign stage).
+    private final ObjectMap<String, StageDefinition> stages = new ObjectMap<>();
+    private final ObjectMap<String, StageSequenceDefinition> stageSequences = new ObjectMap<>();
 
     public final Texture playerTexture;
     public final Texture playerDeathTexture;
@@ -79,6 +84,14 @@ public class AssetManager implements Disposable {
 
         playerDefinition = json.fromJson(PlayerDefinition.class, Gdx.files.internal("data/player.json"));
         gameBalance = json.fromJson(GameBalance.class, Gdx.files.internal("data/balance.json"));
+
+        @SuppressWarnings("unchecked")
+        Array<StageDefinition> stageDefs = json.fromJson(Array.class, StageDefinition.class, Gdx.files.internal("data/stages.json"));
+        for (StageDefinition def : stageDefs) stages.put(def.id, def);
+
+        @SuppressWarnings("unchecked")
+        Array<StageSequenceDefinition> sequenceDefs = json.fromJson(Array.class, StageSequenceDefinition.class, Gdx.files.internal("data/stage_sequences.json"));
+        for (StageSequenceDefinition def : sequenceDefs) stageSequences.put(def.id, def);
 
         // Setup common fixed assets
         playerTexture = new Texture(playerDefinition.player.texture);
@@ -203,6 +216,14 @@ public class AssetManager implements Disposable {
 
     public GameBalance getGameBalance() {
         return gameBalance;
+    }
+
+    public StageDefinition getStageDefinition(String id) {
+        return stages.get(id);
+    }
+
+    public StageSequenceDefinition getStageSequence(String id) {
+        return stageSequences.get(id);
     }
 
     @Override

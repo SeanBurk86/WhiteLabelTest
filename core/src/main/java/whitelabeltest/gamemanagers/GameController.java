@@ -20,26 +20,32 @@ public class GameController implements Disposable {
     private final AudioManager audio;
     private final EntityManager entities;
     private final CollisionManager collisionManager;
-    private final ScrollingBackground background;
-    private final SpawnScheduler spawnScheduler;
+    private ScrollingBackground background;
+    private SpawnScheduler spawnScheduler;
     private final InputManager input;
-    // The starting weapon-slot pairing chosen on WeaponSelectScreen before this GameController was
-    // created - kept for reset() (debug restart, F9) to reapply on every restart within this run
-    // instead of forcing the player back through weapon selection.
+    private final AudioSettings audioSettings;
+    // Which named ordering of stages (see StageSequenceDefinition/AssetManager.getStageSequence())
+    // this run is playing through - swapping this is how alternate modes (tutorial, practice, a
+    // boss-rush, etc.) reuse the same stage pool in a different order/subset without any other
+    // GameController change.
+    public static final String DEFAULT_STAGE_SEQUENCE_ID = "campaign";
+    private final String stageSequenceId;
+    // The resolved list of stage ids for stageSequenceId, fixed for the lifetime of this
+    // GameController (re-resolved on every reset() in case the underlying JSON changed, e.g. via
+    // the debug enemy/pattern editor's live-reload path).
+    private Array<String> stageSequence;
+    // Explicit index into stageSequence (not raw position in AssetManager's stage pool) of the
+    // currently-loaded stage - see loadStage()/advanceToNextStage().
+    private int stageIndex;
+    private int totalEnemiesAcrossRun;
     private final WeaponLoadout loadout;
 
     private final ScoreManager scoreManager;
     private boolean gameOver;
-    // Seconds since gameOver first became true - drives UIManager.drawGameOver's GameOverSign
-    // reveal animation, reset alongside gameOver itself in reset() and applyPlayerHit().
     private float gameOverTimer;
     private boolean levelComplete;
     private boolean bossVideoTriggered;
     private boolean musicFadeTriggered;
-    // Counts down from LEVEL_COMPLETE_DELAY once the boss is confirmed killed (see
-    // EntityManager.consumeBossKilled()) - negative means no boss kill is pending. Keeps the level
-    // running (explosion/victory-adjacent gameplay still visible) for a beat before cutting to the
-    // level-complete screen, instead of ending the instant the boss's death animation finishes.
     private static final float LEVEL_COMPLETE_DELAY = 3f;
     private float levelCompleteDelayTimer = -1f;
     private boolean debugMode;
@@ -55,9 +61,6 @@ public class GameController implements Disposable {
 
     private static final float DEBUG_MENU_SCRUB_SPEED = 5f;
 
-    // Debug menu row layout: 0 = seek-time editor, 1-2 = weapon slot pickers, 3-6 = weapon
-    // levels, 7 = lives editor, 8 = enemy/pattern editor, 9+ = saved bookmarks. Kept in sync with
-    // UIManager.drawDebugMenu's own row constants.
     private static final int ROW_SEEK = 0;
     private static final int ROW_SLOT1 = 1;
     private static final int ROW_SLOT2 = 2;
@@ -69,59 +72,46 @@ public class GameController implements Disposable {
     private static final String[] SLOT_WEAPON_OPTIONS = {null, "BasicWeapon", "WaveBlastWeapon", "OrbitWeapon", "Thunderbolt"};
     private static final int MAX_DEBUG_LIVES = 9;
 
-    // Bomb cooldown/damage, end-of-level bonuses, rank thresholds and gem/chain tuning all live in
-    // balance.json (see GameBalance/AssetManager.getGameBalance()) rather than as constants here,
-    // so they can be tuned without a rebuild.
     private int levelCompleteBombBonus;
     private int levelCompleteLivesMultiplier;
 
-    // Boss takedown time bonus: rewards beating the boss quickly, measured from its scripted
-    // spawn time (SpawnScheduler.getBossSpawnTime()) to the schedule-clock instant its kill is
-    // confirmed (captured below as bossDefeatedScheduleTime, not the LEVEL_COMPLETE_DELAY-delayed
-    // moment levelComplete actually flips true) - so the celebratory delay doesn't itself cost
-    // points. Linearly scales down to 0 once the fight runs past GameBalance.bossTimeBonusParSeconds.
     private float bossDefeatedScheduleTime = -1f;
     private float levelCompleteBossFightSeconds = -1f;
     private int levelCompleteTimeBonus;
 
-    // Level-complete rank (see computeRank()): an unweighted average of five 0..1 fractions -
-    // kill rate, peak chain vs. GameBalance.chainRankTarget, boss takedown speed, bombs preserved,
-    // lives preserved - bucketed into a letter grade via GameBalance.rankThresholds. Purely a
-    // display flourish alongside the same MISSION_LOG rows it's derived from; doesn't feed back
-    // into the score.
     private LevelRank levelCompleteRank = LevelRank.D;
 
     private static final float BOMB_SAVE_WINDOW = 0.065f;
     private float hitGraceTimer = -1f;
 
-    // Debug-only FPS monitor (see UIManager.drawDebugFpsMonitor) - lowest/highest track the
-    // extremes seen since the last reset() instead of just the instantaneous reading, so a brief
-    // stutter or a load-triggered spike stays visible instead of scrolling by unnoticed.
     private int currentFps;
     private int lowestFps = Integer.MAX_VALUE;
     private int highestFps;
 
-    // Debug-only FPS histogram (see UIManager.drawDebugFpsHistogram): one bucket per second over
-    // the last FPS_HISTORY_SECONDS, oldest at index 0. Sampled at 1s intervals rather than every
-    // frame since Gdx.graphics.getFramesPerSecond() itself only refreshes once a second - sampling
-    // faster would just repeat the same reading.
     private static final int FPS_HISTORY_SECONDS = 12;
     private final int[] fpsHistory = new int[FPS_HISTORY_SECONDS];
     private float fpsHistoryTimer = 0f;
 
     public GameController(float worldWidth, float worldHeight, KeyBindings keyBindings, AudioSettings audioSettings, WeaponLoadout loadout) {
+        this(worldWidth, worldHeight, keyBindings, audioSettings, loadout, DEFAULT_STAGE_SEQUENCE_ID);
+    }
+
+    /** @param stageSequenceId id of the StageSequenceDefinition (assets/data/stage_sequences.json)
+     *  this run plays through - e.g. a future tutorial/practice mode would pass its own sequence id
+     *  here instead of DEFAULT_STAGE_SEQUENCE_ID. */
+    public GameController(float worldWidth, float worldHeight, KeyBindings keyBindings, AudioSettings audioSettings, WeaponLoadout loadout, String stageSequenceId) {
         this.worldWidth = worldWidth;
         this.worldHeight = worldHeight;
         this.loadout = loadout;
+        this.audioSettings = audioSettings;
+        this.stageSequenceId = stageSequenceId;
         this.assets = new AssetManager();
         this.audio = new AudioManager(audioSettings);
         this.entities = new EntityManager(assets, worldWidth, worldHeight);
         this.collisionManager = new CollisionManager();
-        this.background = new ScrollingBackground(worldWidth, worldHeight, audioSettings);
         this.input = new InputManager(keyBindings);
 
         this.scoreManager = new ScoreManager(assets.getGameBalance().defaultChainWindow);
-        this.spawnScheduler = new SpawnScheduler(worldWidth, worldHeight, assets);
         this.debugSaveStateManager = new DebugSaveStateManager();
 
         if (System.getProperty("debug") != null ||
@@ -187,9 +177,13 @@ public class GameController implements Disposable {
             }
         }
 
-        if (gameOver || levelComplete) {
-            if (gameOver) gameOverTimer += delta;
+        if (gameOver) {
+            gameOverTimer += delta;
             handleGameOverInput();
+            return;
+        }
+        if (levelComplete) {
+            handleLevelCompleteInput();
             return;
         }
 
@@ -250,16 +244,12 @@ public class GameController implements Disposable {
         collisionManager.checkThunderboltDetonation(entities.getPlayer(), entities.getEnemies(), audio, entities, assets, worldWidth, worldHeight, scoreManager);
     }
 
-    // libGDX only refreshes getFramesPerSecond() once per second and reports 0 before that first
-    // sample, so 0 is ignored rather than collapsing lowestFps immediately on startup.
     private void updateFpsMonitor(float delta) {
         currentFps = Gdx.graphics.getFramesPerSecond();
         if (currentFps <= 0) return;
         if (currentFps < lowestFps) lowestFps = currentFps;
         if (currentFps > highestFps) highestFps = currentFps;
 
-        // A while loop (not if) so a long stall that eats several seconds in one delta still
-        // advances the history by that many buckets instead of freezing it mid-stall.
         fpsHistoryTimer += delta;
         while (fpsHistoryTimer >= 1f) {
             fpsHistoryTimer -= 1f;
@@ -343,10 +333,6 @@ public class GameController implements Disposable {
         debugMenuOpen = false;
     }
 
-    /** End-of-level tally: 10000 points per unused bomb plus the boss takedown time bonus, both
-     *  added as flat bonuses, then - only if the player still has lives in reserve - the whole
-     *  score (including those bonuses) is multiplied by the number of lives remaining. Stored for
-     *  UIManager.drawLevelComplete to show the breakdown. */
     private void applyLevelCompleteBonus() {
         Player player = entities.getPlayer();
         GameBalance balance = assets.getGameBalance();
@@ -371,13 +357,9 @@ public class GameController implements Disposable {
         levelCompleteRank = computeRank(player);
     }
 
-    /** Grades the run by averaging five 0..1 fractions - see the field comment on
-     *  levelCompleteRank. Each fraction defensively defaults to a neutral 1f when its underlying
-     *  stat isn't available (e.g. no boss in the schedule) rather than dragging the grade down for
-     *  something the player had no control over. */
     private LevelRank computeRank(Player player) {
         GameBalance balance = assets.getGameBalance();
-        int totalEnemies = spawnScheduler.getSchedule().size;
+        int totalEnemies = totalEnemiesAcrossRun;
         float killFraction = totalEnemies > 0 ? scoreManager.getEnemiesDestroyed() / (float) totalEnemies : 1f;
         float chainFraction = MathUtils.clamp(scoreManager.getMaxChainCount() / balance.chainRankTarget, 0f, 1f);
         float bossFraction = levelCompleteBossFightSeconds >= 0f
@@ -404,6 +386,40 @@ public class GameController implements Disposable {
         }
     }
 
+    private void handleLevelCompleteInput() {
+        if (input.isRestartJustPressed()) {
+            if (hasNextStage()) advanceToNextStage(); else reset();
+        } else if (input.isQuitJustPressed()) {
+            Gdx.app.exit();
+        }
+    }
+
+    private void loadStage(int index) {
+        StageDefinition stageDef = assets.getStageDefinition(stageSequence.get(index));
+        if (background != null) background.dispose();
+        background = new ScrollingBackground(worldWidth, worldHeight, audioSettings, assets, stageDef.backgroundLayers, stageDef.bossVideo);
+        background.setMuted(audio.isMuted());
+        spawnScheduler = new SpawnScheduler(worldWidth, worldHeight, assets, stageDef.spawnSchedule);
+        audio.loadStageMusic(stageDef.music);
+        totalEnemiesAcrossRun += spawnScheduler.getSchedule().size;
+        bossVideoTriggered = false;
+        musicFadeTriggered = false;
+        stageIndex = index;
+    }
+
+    private void advanceToNextStage() {
+        loadStage(stageIndex + 1);
+        entities.clearWorld();
+        levelComplete = false;
+        levelCompleteDelayTimer = -1f;
+        bossDefeatedScheduleTime = -1f;
+        audio.stopVictory();
+        audio.playStageMusic();
+    }
+
+    public boolean hasNextStage() { return stageIndex + 1 < stageSequence.size; }
+    public int getStageNumber() { return stageIndex + 1; }
+
     private boolean canFireBomb() {
         return entities.getPlayer().getNumBombs() > 0 && bombCooldownTimer <= 0 && !gameOver;
     }
@@ -419,9 +435,6 @@ public class GameController implements Disposable {
         return true;
     }
 
-    /** Applies a hit's actual consequence (life loss/death, or game over) - called either
-     *  immediately on detection (no bomb available to save it) or after the panic-bomb grace
-     *  window (see hitGraceTimer) expires unused. */
     private void applyPlayerHit() {
         scoreManager.breakChain();
         Player player = entities.getPlayer();
@@ -438,9 +451,6 @@ public class GameController implements Disposable {
             player.startDeath();
             audio.playPlayerDeath();
             entities.destroyAllPlayerBullets();
-            // Dying just dropped both weapons to level 1 (see Player.resetWeaponsOnDeath()) - drop
-            // a powerup right where it happened that hands the lost level straight back, unless
-            // there wasn't one to lose (already at the level-1 floor).
             if (player.getDeathRestoreLevel() > 1) {
                 spawnRestorePowerup(entities.getPowerups(), assets, player, restoreX, restoreY, worldWidth, worldHeight);
             }
@@ -488,9 +498,6 @@ public class GameController implements Disposable {
 
         audio.playExplosion();
 
-        // Every other boss on screen steps to the next stage of its firing sequence whenever any
-        // enemy dies - see Enemy.advanceFiringPattern()/SequencedFiringPattern.advance(). Excludes
-        // the enemy that just died so a boss's own death doesn't also advance itself.
         for (Enemy other : entityManager.getEnemies()) {
             if (other != enemy && other.isBoss()) other.advanceFiringPattern();
         }
@@ -500,18 +507,11 @@ public class GameController implements Disposable {
 
     private static final int POWERUP_TIER_COUNT = 3;
 
-    // tier is 1-based; clamped defensively since a death-restore drop's level (see
-    // spawnRestorePowerup()) can exceed POWERUP_TIER_COUNT - it just reuses the biggest sprite in
-    // that case, there being no dedicated art past tier 3.
     private static Texture powerupTextureForTier(AssetManager assets, int tier) {
         int index = com.badlogic.gdx.math.MathUtils.clamp(tier, 1, POWERUP_TIER_COUNT) - 1;
         return assets.powerupTierTextures[index];
     }
 
-    /** Spawns a normal weapon-level powerup - forcedTier null picks a random tier 1-3, non-null
-     *  forces a specific one (e.g. a guaranteed drop - see Enemy.getGuaranteedPowerup()). Collecting
-     *  it levels up both currently equipped weapons at once by the tier amount - see
-     *  Player.levelUpEquippedWeapons()/WeaponPowerup.apply(). */
     public static void spawnPowerup(Array<Powerup> powerups, AssetManager assets, float x, float y, float worldWidth, float worldHeight, Integer forcedTier) {
         WeaponPowerup wp = ObjectPools.weaponPowerupPool.obtain();
         int tier = forcedTier != null ? com.badlogic.gdx.math.MathUtils.clamp(forcedTier, 1, POWERUP_TIER_COUNT)
@@ -520,12 +520,6 @@ public class GameController implements Disposable {
         powerups.add(wp);
     }
 
-    /** Spawned in place of a normal drop when the player dies (see Player.startDeath()/
-     *  resetWeaponsOnDeath(), which floors both weapons to level 1 and captures the level lost) -
-     *  an ordinary additive level-up sized to add that lost amount back, same as a normal drop -
-     *  see WeaponPowerup.initAsRestore(). Additive (rather than an absolute "set to the old
-     *  level") so it stacks correctly no matter whether the player collects it before or after
-     *  some other pickup in the meantime, instead of one clobbering the other. */
     public static void spawnRestorePowerup(Array<Powerup> powerups, AssetManager assets, Player player, float x, float y, float worldWidth, float worldHeight) {
         WeaponPowerup wp = ObjectPools.weaponPowerupPool.obtain();
         int amount = player.getDeathRestoreLevel() - 1;
@@ -555,13 +549,14 @@ public class GameController implements Disposable {
         levelCompleteBossFightSeconds = -1f;
         levelCompleteTimeBonus = 0;
         levelCompleteRank = LevelRank.D;
+        totalEnemiesAcrossRun = 0;
+        stageSequence = assets.getStageSequence(stageSequenceId).stageIds;
+        loadStage(0);
         audio.stopVictory();
         audio.playStageMusic();
         patternPreviewer.close(entities);
         entities.reset(loadout);
         collisionManager.reset();
-        background.reset();
-        spawnScheduler.reset();
         lowestFps = Integer.MAX_VALUE;
         highestFps = 0;
         java.util.Arrays.fill(fpsHistory, 0);
@@ -588,7 +583,7 @@ public class GameController implements Disposable {
     public int getLevelCompleteBombBonus() { return levelCompleteBombBonus; }
     public int getLevelCompleteLivesMultiplier() { return levelCompleteLivesMultiplier; }
     public int getEnemiesDestroyed() { return scoreManager.getEnemiesDestroyed(); }
-    public int getTotalEnemyCount() { return spawnScheduler.getSchedule().size; }
+    public int getTotalEnemyCount() { return totalEnemiesAcrossRun; }
     public int getMaxChainCount() { return scoreManager.getMaxChainCount(); }
     public LevelRank getLevelCompleteRank() { return levelCompleteRank; }
     public int getLevelCompleteTimeBonus() { return levelCompleteTimeBonus; }
