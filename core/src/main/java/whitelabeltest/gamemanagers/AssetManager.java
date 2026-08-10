@@ -28,6 +28,10 @@ public class AssetManager implements Disposable {
     // be reused across multiple sequences (e.g. a tutorial mode reusing a campaign stage).
     private final ObjectMap<String, StageDefinition> stages = new ObjectMap<>();
     private final ObjectMap<String, StageSequenceDefinition> stageSequences = new ObjectMap<>();
+    // Pool of clips InterstitialPlayer picks randomly from before a stage starts - see
+    // GameController.startInterstitial(). Not per-stage (unlike bossVideo), so it's just a flat
+    // list rather than a field on StageDefinition.
+    private final Array<String> interstitialVideos;
 
     public final Texture playerTexture;
     public final Texture playerDeathTexture;
@@ -92,6 +96,10 @@ public class AssetManager implements Disposable {
         @SuppressWarnings("unchecked")
         Array<StageSequenceDefinition> sequenceDefs = json.fromJson(Array.class, StageSequenceDefinition.class, Gdx.files.internal("data/stage_sequences.json"));
         for (StageSequenceDefinition def : sequenceDefs) stageSequences.put(def.id, def);
+
+        @SuppressWarnings("unchecked")
+        Array<String> interstitials = json.fromJson(Array.class, String.class, Gdx.files.internal("data/interstitials.json"));
+        interstitialVideos = interstitials;
 
         // Setup common fixed assets
         playerTexture = new Texture(playerDefinition.player.texture);
@@ -224,6 +232,10 @@ public class AssetManager implements Disposable {
 
     public StageSequenceDefinition getStageSequence(String id) {
         return stageSequences.get(id);
+    }
+
+    public Array<String> getInterstitialVideos() {
+        return interstitialVideos;
     }
 
     @Override

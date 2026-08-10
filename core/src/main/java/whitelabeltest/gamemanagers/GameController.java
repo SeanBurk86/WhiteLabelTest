@@ -50,6 +50,9 @@ public class GameController implements Disposable {
     private ReplayRecorder recorder;
     private ReplayPlayer replayPlayer;
 
+    // Full-screen "before the stage starts" cinematic - see InterstitialPlayer/startInterstitial().
+    private final InterstitialPlayer interstitialPlayer = new InterstitialPlayer();
+
     private final ScoreManager scoreManager;
     private boolean gameOver;
     private float gameOverTimer;
@@ -139,8 +142,10 @@ public class GameController implements Disposable {
         ReplayFrame frame = null;
         // Mirrors recording's own rule (recorder.record() only runs once past the debugMenuOpen
         // early-return below) - don't consume a replay frame while the menu is open, or reopening
-        // it mid-playback would drop frames the same way starting a replay used to.
-        if (replayPlayer != null && !debugMenuOpen) {
+        // it mid-playback would drop frames the same way starting a replay used to. Same reasoning
+        // for the interstitial: it's a real-time cosmetic moment outside "the run" (see
+        // InterstitialPlayer's class doc), so it must never eat into the frame stream either.
+        if (replayPlayer != null && !debugMenuOpen && !interstitialPlayer.isActive()) {
             if (!replayPlayer.hasNext()) {
                 stopReplay();
                 return;
@@ -153,6 +158,16 @@ public class GameController implements Disposable {
                 return; // instantaneous - consumes no simulated time, resume on the next update() call
             }
             delta = frame.delta;
+        }
+
+        if (interstitialPlayer.isActive()) {
+            // Always live input here, live run or replay watch alike - a skip must never touch the
+            // recorded/replayed frame stream (see InterstitialPlayer's class doc).
+            input.update(null);
+            interstitialPlayer.update(delta);
+            if (input.isRestartJustPressed() || input.isShootJustPressed()) interstitialPlayer.skip();
+            if (!interstitialPlayer.isActive()) audio.playStageMusic();
+            return;
         }
 
         scoreManager.update(delta);
@@ -469,7 +484,22 @@ public class GameController implements Disposable {
         levelCompleteDelayTimer = -1f;
         bossDefeatedScheduleTime = -1f;
         audio.stopVictory();
-        audio.playStageMusic();
+        startInterstitial();
+    }
+
+    /** Kicks off a randomly-chosen interstitial video before a stage's gameplay begins - see
+     *  InterstitialPlayer/update(). Falls straight through to stage music with no video if none are
+     *  configured (empty data/interstitials.json). The pick draws from the same seeded
+     *  MathUtils.random stream as everything else, so which clip plays stays reproducible across a
+     *  replay's record/playback - see InterstitialPlayer's class doc. */
+    private void startInterstitial() {
+        Array<String> videos = assets.getInterstitialVideos();
+        if (videos.size == 0) {
+            audio.playStageMusic();
+            return;
+        }
+        String chosen = videos.get(MathUtils.random(videos.size - 1));
+        interstitialPlayer.play(chosen, audio.isMuted() ? 0f : audioSettings.getEffectiveMusicVolume());
     }
 
     public boolean hasNextStage() { return stageIndex + 1 < stageSequence.size; }
@@ -612,6 +642,7 @@ public class GameController implements Disposable {
     public void draw(com.badlogic.gdx.graphics.g2d.SpriteBatch batch) {
         background.draw(batch);
         entities.draw(batch);
+        interstitialPlayer.draw(batch, worldWidth, worldHeight);
     }
 
     public void reset() {
@@ -643,7 +674,6 @@ public class GameController implements Disposable {
         stageSequence = assets.getStageSequence(stageSequenceId).stageIds;
         loadStage(0);
         audio.stopVictory();
-        audio.playStageMusic();
         patternPreviewer.close(entities);
         entities.reset(loadout);
         collisionManager.reset();
@@ -651,6 +681,7 @@ public class GameController implements Disposable {
         highestFps = 0;
         java.util.Arrays.fill(fpsHistory, 0);
         fpsHistoryTimer = 0f;
+        startInterstitial();
     }
 
     @Override
@@ -663,6 +694,7 @@ public class GameController implements Disposable {
         assets.dispose();
         audio.dispose();
         background.dispose();
+        interstitialPlayer.dispose();
     }
 
     public void setActiveInput(InputType inputType) {

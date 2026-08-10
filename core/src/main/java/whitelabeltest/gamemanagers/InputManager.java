@@ -11,6 +11,7 @@ public class InputManager {
     private final KeyBindings keyBindings;
     private final Vector2 moveDirection = new Vector2();
     private boolean isShooting;
+    private boolean shootJustPressed;
     private boolean bombJustPressed;
     private boolean weaponSwitchJustPressed;
     private boolean hyperAttackJustPressed;
@@ -36,6 +37,7 @@ public class InputManager {
     private boolean prevBombButton;
     private boolean prevWeaponSwitchButton;
     private boolean prevHyperAttackHeld;
+    private boolean prevShootHeld;
 
     public InputManager(KeyBindings keyBindings) {
         this.keyBindings = keyBindings;
@@ -56,6 +58,7 @@ public class InputManager {
     public void update(ReplayFrame frame) {
         moveDirection.set(0, 0);
         isShooting = false;
+        shootJustPressed = false;
         bombJustPressed = false;
         weaponSwitchJustPressed = false;
         hyperAttackJustPressed = false;
@@ -137,6 +140,8 @@ public class InputManager {
         hyperAttackJustPressed = hyperAttackHeld && !prevHyperAttackHeld;
         hyperAttackJustReleased = !hyperAttackHeld && prevHyperAttackHeld;
         prevHyperAttackHeld = hyperAttackHeld;
+        shootJustPressed = isShooting && !prevShootHeld;
+        prevShootHeld = isShooting;
 
         // Debug toggle/restart/menu always available regardless of input mode
         debugToggleJustPressed = Gdx.input.isKeyJustPressed(Input.Keys.F12);
@@ -162,6 +167,7 @@ public class InputManager {
 
     public Vector2 getMoveDirection() { return moveDirection; }
     public boolean isShooting() { return isShooting; }
+    public boolean isShootJustPressed() { return shootJustPressed; }
     public boolean isBombJustPressed() { return bombJustPressed; }
     public boolean isWeaponSwitchJustPressed() { return weaponSwitchJustPressed; }
     public boolean isHyperAttackJustPressed() { return hyperAttackJustPressed; }
