@@ -62,6 +62,8 @@ run {
   //setIgnoreExitValue(true)
   jvmArgs += "--enable-native-access=ALL-UNNAMED"
   if (os.contains('mac')) jvmArgs += "-XstartOnFirstThread"
+  // ./gradlew run -Pdebug turns on GameController's debug tools (F1/F9/F12/M) for this run.
+  if (project.hasProperty('debug')) jvmArgs += "-Ddebug"
 }
 
 jar {

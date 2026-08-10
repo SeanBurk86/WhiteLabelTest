@@ -29,7 +29,9 @@ public class GameController implements Disposable {
     // boss-rush, etc.) reuse the same stage pool in a different order/subset without any other
     // GameController change.
     public static final String DEFAULT_STAGE_SEQUENCE_ID = "campaign";
-    private final String stageSequenceId;
+    // Non-final: startReplay() swaps this to the recorded run's sequence id without needing a new
+    // GameController instance.
+    private String stageSequenceId;
     // The resolved list of stage ids for stageSequenceId, fixed for the lifetime of this
     // GameController (re-resolved on every reset() in case the underlying JSON changed, e.g. via
     // the debug enemy/pattern editor's live-reload path).
@@ -38,7 +40,15 @@ public class GameController implements Disposable {
     // currently-loaded stage - see loadStage()/advanceToNextStage().
     private int stageIndex;
     private int totalEnemiesAcrossRun;
-    private final WeaponLoadout loadout;
+    // Non-final: startReplay() swaps this to the recorded run's loadout without needing a new
+    // GameController instance.
+    private WeaponLoadout loadout;
+
+    // Replay recording/playback - see ReplayRecorder/ReplayPlayer/ReplayBrowser. Mutually
+    // exclusive: recorder is null while a replay is being watched, and vice versa.
+    private final ReplayBrowser replayBrowser = new ReplayBrowser();
+    private ReplayRecorder recorder;
+    private ReplayPlayer replayPlayer;
 
     private final ScoreManager scoreManager;
     private boolean gameOver;
@@ -69,7 +79,8 @@ public class GameController implements Disposable {
     private static final String[] WEAPON_LEVEL_IDS = {"BasicWeapon", "WaveBlastWeapon", "Thunderbolt", "OrbitWeapon"};
     private static final int ROW_LIVES = ROW_LEVELS_START + WEAPON_LEVEL_IDS.length;
     private static final int ROW_PATTERN_PREVIEW = ROW_LIVES + 1;
-    private static final int ROW_BOOKMARKS_START = ROW_PATTERN_PREVIEW + 1;
+    private static final int ROW_REPLAY_BROWSER = ROW_PATTERN_PREVIEW + 1;
+    private static final int ROW_BOOKMARKS_START = ROW_REPLAY_BROWSER + 1;
     private static final String[] SLOT_WEAPON_OPTIONS = {null, "BasicWeapon", "WaveBlastWeapon", "OrbitWeapon", "Thunderbolt"};
     private static final int MAX_DEBUG_LIVES = 9;
 
@@ -125,13 +136,32 @@ public class GameController implements Disposable {
     }
 
     public void update(float delta) {
+        ReplayFrame frame = null;
+        // Mirrors recording's own rule (recorder.record() only runs once past the debugMenuOpen
+        // early-return below) - don't consume a replay frame while the menu is open, or reopening
+        // it mid-playback would drop frames the same way starting a replay used to.
+        if (replayPlayer != null && !debugMenuOpen) {
+            if (!replayPlayer.hasNext()) {
+                stopReplay();
+                return;
+            }
+            frame = replayPlayer.next();
+            if (!Float.isNaN(frame.seekToTime)) {
+                spawnScheduler.seekTo(frame.seekToTime);
+                entities.clearWorld();
+                background.seekTo(frame.seekToTime);
+                return; // instantaneous - consumes no simulated time, resume on the next update() call
+            }
+            delta = frame.delta;
+        }
+
         scoreManager.update(delta);
         audio.update(delta);
         levelStartTimer += delta;
         if (bombCooldownTimer > 0) {
             bombCooldownTimer -= delta;
         }
-        input.update();
+        input.update(frame);
         updateFpsMonitor(delta);
 
         if (debugToolsAvailable && input.isDebugToggleJustPressed()) {
@@ -156,6 +186,7 @@ public class GameController implements Disposable {
                 debugMenuSelectedIndex = 0;
             } else {
                 patternPreviewer.close(entities);
+                replayBrowser.close();
             }
         }
 
@@ -164,6 +195,8 @@ public class GameController implements Disposable {
             patternPreviewer.tick(delta, entities);
             return;
         }
+
+        if (recorder != null && !gameOver) recorder.record(delta, input);
 
         if (input.isBombJustPressed() && !entities.getPlayer().isDead()) {
             if (tryFireBomb() && hitGraceTimer >= 0f) {
@@ -189,7 +222,7 @@ public class GameController implements Disposable {
             return;
         }
 
-        background.update();
+        background.update(delta);
         entities.update(delta, input, assets, audio);
         spawnScheduler.update(delta, entities, audio);
 
@@ -269,6 +302,18 @@ public class GameController implements Disposable {
             return;
         }
 
+        if (replayBrowser.isActive()) {
+            replayBrowser.handleInput(input);
+            ReplayData selected = replayBrowser.consumePendingSelection();
+            if (selected != null) {
+                replayBrowser.close();
+                startReplay(selected);
+            } else if (input.isDebugMenuDeleteJustPressed()) {
+                replayBrowser.close();
+            }
+            return;
+        }
+
         int bookmarkCount = debugSaveStateManager.getSaveStates().size;
         int totalRows = ROW_BOOKMARKS_START + bookmarkCount;
 
@@ -299,6 +344,10 @@ public class GameController implements Disposable {
         } else if (debugMenuSelectedIndex == ROW_PATTERN_PREVIEW) {
             if (input.isDebugMenuConfirmJustPressed()) {
                 patternPreviewer.open(entities, assets, worldWidth, worldHeight);
+            }
+        } else if (debugMenuSelectedIndex == ROW_REPLAY_BROWSER) {
+            if (input.isDebugMenuConfirmJustPressed()) {
+                replayBrowser.open();
             }
         } else if (debugMenuSelectedIndex < ROW_BOOKMARKS_START) {
             String weaponId = WEAPON_LEVEL_IDS[debugMenuSelectedIndex - ROW_LEVELS_START];
@@ -333,6 +382,10 @@ public class GameController implements Disposable {
         entities.clearWorld();
         background.seekTo(targetTime);
         debugMenuOpen = false;
+        // A seek is an instantaneous clock jump outside the normal delta-accumulation model
+        // recorder.record() captures - without this, a replay of this run would have no idea the
+        // jump happened and would desync from whatever the recorded player was actually reacting to.
+        if (recorder != null) recorder.recordSeek(targetTime);
     }
 
     private void applyLevelCompleteBonus() {
@@ -421,6 +474,33 @@ public class GameController implements Disposable {
 
     public boolean hasNextStage() { return stageIndex + 1 < stageSequence.size; }
     public int getStageNumber() { return stageIndex + 1; }
+
+    /** Switches this GameController into replaying a previously-recorded run - see ReplayBrowser/
+     *  ReplayRecorder. Doesn't flush the outgoing recorder itself; reset() (called at the end here)
+     *  already does that at its own top, exactly once, in the right place. */
+    public void startReplay(ReplayData data) {
+        this.stageSequenceId = data.stageSequenceId;
+        try {
+            this.loadout = WeaponLoadout.valueOf(data.weaponLoadout);
+        } catch (IllegalArgumentException e) {
+            Gdx.app.error("GameController", "Unknown weapon loadout in replay: " + data.weaponLoadout, e);
+            return;
+        }
+        this.replayPlayer = new ReplayPlayer(data);
+        // Picking a replay happens *from inside* the debug menu - leaving it open would otherwise
+        // silently drop every frame update() pulls from replayPlayer (consumed at the top of
+        // update(), but discarded by the debugMenuOpen early-return below) until the dev manually
+        // closes it, permanently offsetting the schedule from the input stream from that point on.
+        this.debugMenuOpen = false;
+        reset();
+    }
+
+    /** Hands control back to live play with a fresh recording - called once a replay's frames run
+     *  out (see update()) or manually to abandon a replay early. */
+    public void stopReplay() {
+        this.replayPlayer = null;
+        reset();
+    }
 
     private boolean canFireBomb() {
         return entities.getPlayer().getNumBombs() > 0 && bombCooldownTimer <= 0 && !gameOver;
@@ -535,6 +615,14 @@ public class GameController implements Disposable {
     }
 
     public void reset() {
+        if (recorder != null) {
+            recorder.setSummary(scoreManager.getScore(), stageIndex + 1, gameOver);
+            recorder.saveIfNonTrivial();
+        }
+        long seed = replayPlayer != null ? replayPlayer.getSeed() : System.nanoTime();
+        MathUtils.random.setSeed(seed);
+        recorder = replayPlayer == null ? new ReplayRecorder(stageSequenceId, loadout, seed) : null;
+
         scoreManager.reset();
         gameOver = false;
         gameOverTimer = 0f;
@@ -567,6 +655,11 @@ public class GameController implements Disposable {
 
     @Override
     public void dispose() {
+        if (recorder != null) {
+            recorder.setSummary(scoreManager.getScore(), stageIndex + 1, gameOver);
+            recorder.saveIfNonTrivial();
+            recorder = null;
+        }
         assets.dispose();
         audio.dispose();
         background.dispose();
@@ -609,4 +702,8 @@ public class GameController implements Disposable {
     public PatternPreviewer getPatternPreviewer() { return patternPreviewer; }
     public CollisionManager getCollisionManager() { return collisionManager; }
     public boolean isAudioMuted() { return audio.isMuted(); }
+    public boolean isReplaying() { return replayPlayer != null; }
+    public float getReplayProgress() { return replayPlayer != null ? replayPlayer.getProgress() : 0f; }
+    public boolean isReplayBrowserActive() { return replayBrowser.isActive(); }
+    public ReplayBrowser getReplayBrowser() { return replayBrowser; }
 }

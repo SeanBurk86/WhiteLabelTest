@@ -74,9 +74,8 @@ public class ScrollingBackground {
         }
     }
 
-    public void update() {
+    public void update(float delta) {
         if (!stopped) {
-            float delta = Gdx.graphics.getDeltaTime();
             for (Layer layer : layers) {
                 if (layer.frozen) continue;
                 layer.scrollY += layer.scrollSpeed * delta;

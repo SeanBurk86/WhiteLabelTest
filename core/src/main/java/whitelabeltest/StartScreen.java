@@ -51,9 +51,10 @@ public class StartScreen implements Disposable {
     // WeaponSelectScreen, which follows right after this). Index 0 starts the run as before;
     // index 1 signals Main to open OptionsScreen (see consumeOptionsRequested()) without leaving
     // this phase, so the menu is still showing when Options closes.
-    private static final String[] MENU_ITEMS = { "ARCADE MODE", "OPTIONS" };
+    private static final String[] MENU_ITEMS = { "ARCADE MODE", "REPLAYS", "OPTIONS" };
     private static final int MENU_ARCADE_MODE = 0;
-    private static final int MENU_OPTIONS = 1;
+    private static final int MENU_REPLAYS = 1;
+    private static final int MENU_OPTIONS = 2;
 
     /** One looping animated sign in the opening screen's stacked composition (reference mockup:
      *  Screenshot 2026-08-07 145711.png) - replaces the old single openingscreen.webm loop with
@@ -122,6 +123,7 @@ public class StartScreen implements Disposable {
 
     private int menuIndex;
     private boolean optionsRequested;
+    private boolean replaysRequested;
     private boolean prevMenuDpadUpDown, prevMenuDpadDownDown, prevMenuConfirmDown;
 
     // Kept alive after this screen is disposed (see getConfirmSound()) so the cue can keep
@@ -247,6 +249,9 @@ public class StartScreen implements Disposable {
             confirmSound = Gdx.audio.newSound(Gdx.files.internal(ARCADE_CONFIRM_SOUND));
             confirmSound.play(audioSettings.getEffectiveSfxVolume());
             phase = Phase.FADING;
+        } else if (menuIndex == MENU_REPLAYS) {
+            optionsConfirmSound.play(audioSettings.getEffectiveSfxVolume());
+            replaysRequested = true;
         } else if (menuIndex == MENU_OPTIONS) {
             optionsConfirmSound.play(audioSettings.getEffectiveSfxVolume());
             optionsRequested = true;
@@ -265,6 +270,14 @@ public class StartScreen implements Disposable {
     public boolean consumeOptionsRequested() {
         boolean requested = optionsRequested;
         optionsRequested = false;
+        return requested;
+    }
+
+    /** Consumed by Main once it opens ReplaySelectScreen in response - same pattern as
+     *  consumeOptionsRequested(), this phase (MENU) is left untouched either way. */
+    public boolean consumeReplaysRequested() {
+        boolean requested = replaysRequested;
+        replaysRequested = false;
         return requested;
     }
 

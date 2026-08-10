@@ -2,6 +2,7 @@ package whitelabeltest;
 
 import com.badlogic.gdx.ApplicationAdapter;
 import com.badlogic.gdx.Gdx;
+import com.badlogic.gdx.Input;
 import com.badlogic.gdx.audio.Sound;
 import com.badlogic.gdx.controllers.Controller;
 import com.badlogic.gdx.controllers.Controllers;
@@ -21,6 +22,7 @@ import whitelabeltest.gamemanagers.EntityManager;
 import whitelabeltest.gamemanagers.GameController;
 import whitelabeltest.gamemanagers.InputType;
 import whitelabeltest.gamemanagers.KeyBindings;
+import whitelabeltest.gamemanagers.ReplayData;
 import whitelabeltest.gamemanagers.UIManager;
 import whitelabeltest.player.WeaponLoadout;
 import whitelabeltest.player.powerups.Powerup;
@@ -28,19 +30,26 @@ import whitelabeltest.player.weapons.ThunderboltWeapon;
 import whitelabeltest.player.weapons.Weapon;
 
 public class Main extends ApplicationAdapter {
-    private enum AppState { START, WEAPON_SELECT, OPTIONS, PLAYING }
+    private enum AppState { START, WEAPON_SELECT, OPTIONS, REPLAY_SELECT, PLAYING }
 
     private AppState state = AppState.START;
     private StartScreen startScreen;
     private WeaponSelectScreen weaponSelectScreen;
     private InputType pendingInputType;
     private OptionsScreen optionsScreen;
+    private ReplaySelectScreen replaySelectScreen;
+    // True only when the current PLAYING session was launched by picking a replay from the start
+    // menu (as opposed to an ordinary ARCADE MODE run) - see transitionToReplayWatch(). Drives
+    // whether finishing/backing out of watching returns to the start screen instead of leaving the
+    // player in a live run they never asked to start - see render()'s PLAYING branch.
+    private boolean replayFromMenu;
     private KeyBindings keyBindings;
     private AudioSettings audioSettings;
     private UIManager ui;
     private GameController game;
     private Sound startScreenConfirmSound;
     private Sound weaponSelectConfirmSound;
+    private Sound replaySelectConfirmSound;
 
     private SpriteBatch spriteBatch;
     private ShapeRenderer shapeRenderer;
@@ -74,6 +83,8 @@ public class Main extends ApplicationAdapter {
                 transitionToWeaponSelect(detected);
             } else if (startScreen.consumeOptionsRequested()) {
                 transitionToOptions();
+            } else if (startScreen.consumeReplaysRequested()) {
+                transitionToReplaySelect();
             }
         } else if (state == AppState.WEAPON_SELECT) {
             WeaponLoadout chosen = weaponSelectScreen.update(delta);
@@ -95,9 +106,28 @@ public class Main extends ApplicationAdapter {
             if (optionsScreen.isBackRequested()) {
                 transitionToStartFromOptions();
             }
+        } else if (state == AppState.REPLAY_SELECT) {
+            // startScreen is still alive behind this screen (see transitionToReplaySelect()), same
+            // reasoning as the OPTIONS branch above.
+            if (startScreen != null) startScreen.applyMusicVolume();
+            ReplayData picked = replaySelectScreen.update(delta);
+            drawReplaySelectScreen();
+            if (picked != null) {
+                transitionToReplayWatch(picked);
+            } else if (replaySelectScreen.isBackRequested()) {
+                transitionToStartFromReplaySelect();
+            }
         } else {
             game.update(delta);
             drawGame();
+            if (replayFromMenu) {
+                boolean backPressed = Gdx.input.isKeyJustPressed(Input.Keys.ESCAPE) || isControllerBackJustPressed();
+                // !isReplaying() covers the replay finishing on its own (GameController auto-stops
+                // once frames run out); backPressed covers the player bailing out early.
+                if (!game.isReplaying() || backPressed) {
+                    transitionToStartFromReplayWatch();
+                }
+            }
         }
     }
 
@@ -143,6 +173,57 @@ public class Main extends ApplicationAdapter {
         state = AppState.START;
     }
 
+    private void transitionToReplaySelect() {
+        // startScreen is deliberately left alive (not disposed) here, same as transitionToOptions()
+        // - so backing out via transitionToStartFromReplaySelect() resumes it exactly where it was
+        // instead of needing to rebuild it from scratch.
+        replaySelectScreen = new ReplaySelectScreen(PLAY_AREA_WIDTH, PLAY_AREA_HEIGHT, audioSettings);
+        state = AppState.REPLAY_SELECT;
+    }
+
+    private void transitionToStartFromReplaySelect() {
+        replaySelectScreen.dispose();
+        replaySelectScreen = null;
+        state = AppState.START;
+    }
+
+    private void transitionToReplayWatch(ReplayData data) {
+        replaySelectConfirmSound = replaySelectScreen.getConfirmSound();
+        replaySelectScreen.dispose();
+        replaySelectScreen = null;
+        // Only now leave the start-menu flow for good - startScreen was kept alive through OPTIONS
+        // and REPLAY_SELECT (see transitionToReplaySelect()), same as WeaponSelectScreen's own
+        // disposal in transitionToWeaponSelect().
+        if (startScreen != null) {
+            startScreen.dispose();
+            startScreen = null;
+        }
+        replayFromMenu = true;
+        // The loadout/stage sequence passed here are placeholders - GameController.startReplay()
+        // overwrites both from the recorded data before anything simulates.
+        game = new GameController(PLAY_AREA_WIDTH, PLAY_AREA_HEIGHT, keyBindings, audioSettings, WeaponLoadout.BASIC_THUNDERBOLT);
+        game.setActiveInput(InputType.KEYBOARD);
+        game.startReplay(data);
+        ui = new UIManager(InputType.KEYBOARD);
+        state = AppState.PLAYING;
+    }
+
+    /** Returns to the start screen after a menu-launched replay finishes or the player backs out
+     *  early (see render()'s PLAYING branch) - rebuilds StartScreen from scratch since it was
+     *  disposed back in transitionToReplayWatch(). No equivalent path exists for an ordinary ARCADE
+     *  MODE run - restarting/quitting are handled entirely inside GameController for that case. */
+    private void transitionToStartFromReplayWatch() {
+        replayFromMenu = false;
+        game.dispose();
+        game = null;
+        if (ui != null) {
+            ui.dispose();
+            ui = null;
+        }
+        startScreen = new StartScreen(PLAY_AREA_WIDTH, PLAY_AREA_HEIGHT, audioSettings);
+        state = AppState.START;
+    }
+
     private void drawStartScreen() {
         ScreenUtils.clear(Color.BLACK);
         viewport.apply();
@@ -158,6 +239,15 @@ public class Main extends ApplicationAdapter {
         spriteBatch.setProjectionMatrix(viewport.getCamera().combined);
         spriteBatch.begin();
         weaponSelectScreen.draw(spriteBatch);
+        spriteBatch.end();
+    }
+
+    private void drawReplaySelectScreen() {
+        ScreenUtils.clear(Color.BLACK);
+        viewport.apply();
+        spriteBatch.setProjectionMatrix(viewport.getCamera().combined);
+        spriteBatch.begin();
+        replaySelectScreen.draw(spriteBatch);
         spriteBatch.end();
     }
 
@@ -227,6 +317,8 @@ public class Main extends ApplicationAdapter {
         if (game.isDebugMode() && game.isDebugMenuOpen()) {
             if (game.isPatternPreviewActive()) {
                 ui.drawPatternPreview(spriteBatch, PLAY_AREA_WIDTH, PLAY_AREA_HEIGHT, game.getPatternPreviewer());
+            } else if (game.isReplayBrowserActive()) {
+                ui.drawReplayBrowser(spriteBatch, PLAY_AREA_WIDTH, PLAY_AREA_HEIGHT, game.getReplayBrowser());
             } else {
                 ui.drawDebugMenu(spriteBatch, PLAY_AREA_WIDTH, PLAY_AREA_HEIGHT, game.getSpawnScheduleTotalTime(),
                     game.getDebugMenuSeekTime(), game.getDebugMenuSelectedIndex(), game.getDebugSaveStates(),
@@ -340,8 +432,10 @@ public class Main extends ApplicationAdapter {
         if (startScreen != null) startScreen.dispose();
         if (weaponSelectScreen != null) weaponSelectScreen.dispose();
         if (optionsScreen != null) optionsScreen.dispose();
+        if (replaySelectScreen != null) replaySelectScreen.dispose();
         if (startScreenConfirmSound != null) startScreenConfirmSound.dispose();
         if (weaponSelectConfirmSound != null) weaponSelectConfirmSound.dispose();
+        if (replaySelectConfirmSound != null) replaySelectConfirmSound.dispose();
         if (game != null) game.dispose();
         if (ui != null) ui.dispose();
         if (spriteBatch != null) spriteBatch.dispose();

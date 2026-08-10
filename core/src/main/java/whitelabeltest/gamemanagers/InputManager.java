@@ -46,6 +46,14 @@ public class InputManager {
     }
 
     public void update() {
+        update(null);
+    }
+
+    /** frame != null replays a previously-recorded ReplayFrame instead of polling live
+     *  keyboard/gamepad state - see ReplayRecorder/ReplayPlayer. Debug hotkeys are always polled
+     *  live regardless (see the bottom of this method), so debug tooling stays reachable while
+     *  watching a replay. */
+    public void update(ReplayFrame frame) {
         moveDirection.set(0, 0);
         isShooting = false;
         bombJustPressed = false;
@@ -69,48 +77,57 @@ public class InputManager {
         debugMenuNewBookmarkJustPressed = false;
         debugMuteJustPressed = false;
 
-        if (activeInput == InputType.KEYBOARD) {
-            if (Gdx.input.isKeyPressed(keyBindings.getKey(Action.MOVE_LEFT))) moveDirection.x -= 1;
-            if (Gdx.input.isKeyPressed(keyBindings.getKey(Action.MOVE_RIGHT))) moveDirection.x += 1;
-            if (Gdx.input.isKeyPressed(keyBindings.getKey(Action.MOVE_UP))) moveDirection.y += 1;
-            if (Gdx.input.isKeyPressed(keyBindings.getKey(Action.MOVE_DOWN))) moveDirection.y -= 1;
+        if (frame != null) {
+            moveDirection.set(frame.moveX, frame.moveY);
+            isShooting = frame.shooting;
+            bombJustPressed = frame.bombJustPressed;
+            weaponSwitchJustPressed = frame.weaponSwitchJustPressed;
+            hyperAttackHeld = frame.hyperAttackHeld;
+            restartJustPressed = frame.confirmJustPressed;
+        } else {
+            if (activeInput == InputType.KEYBOARD) {
+                if (Gdx.input.isKeyPressed(keyBindings.getKey(Action.MOVE_LEFT))) moveDirection.x -= 1;
+                if (Gdx.input.isKeyPressed(keyBindings.getKey(Action.MOVE_RIGHT))) moveDirection.x += 1;
+                if (Gdx.input.isKeyPressed(keyBindings.getKey(Action.MOVE_UP))) moveDirection.y += 1;
+                if (Gdx.input.isKeyPressed(keyBindings.getKey(Action.MOVE_DOWN))) moveDirection.y -= 1;
 
-            isShooting = Gdx.input.isKeyPressed(keyBindings.getKey(Action.SHOOT));
-            bombJustPressed = Gdx.input.isKeyJustPressed(keyBindings.getKey(Action.BOMB));
-            weaponSwitchJustPressed = Gdx.input.isKeyJustPressed(keyBindings.getKey(Action.WEAPON_SWITCH));
-            hyperAttackHeld = Gdx.input.isKeyPressed(keyBindings.getKey(Action.HYPER_ATTACK));
-            restartJustPressed = Gdx.input.isKeyJustPressed(keyBindings.getKey(Action.RESTART));
-            quitJustPressed = Gdx.input.isKeyJustPressed(keyBindings.getKey(Action.QUIT));
-        }
+                isShooting = Gdx.input.isKeyPressed(keyBindings.getKey(Action.SHOOT));
+                bombJustPressed = Gdx.input.isKeyJustPressed(keyBindings.getKey(Action.BOMB));
+                weaponSwitchJustPressed = Gdx.input.isKeyJustPressed(keyBindings.getKey(Action.WEAPON_SWITCH));
+                hyperAttackHeld = Gdx.input.isKeyPressed(keyBindings.getKey(Action.HYPER_ATTACK));
+                restartJustPressed = Gdx.input.isKeyJustPressed(keyBindings.getKey(Action.RESTART));
+                quitJustPressed = Gdx.input.isKeyJustPressed(keyBindings.getKey(Action.QUIT));
+            }
 
-        if (activeInput == InputType.GAMEPAD) {
-            Controller controller = Controllers.getCurrent();
-            if (controller != null) {
-                float axisX = controller.getAxis(controller.getMapping().axisLeftX);
-                float axisY = controller.getAxis(controller.getMapping().axisLeftY);
+            if (activeInput == InputType.GAMEPAD) {
+                Controller controller = Controllers.getCurrent();
+                if (controller != null) {
+                    float axisX = controller.getAxis(controller.getMapping().axisLeftX);
+                    float axisY = controller.getAxis(controller.getMapping().axisLeftY);
 
-                if (Math.abs(axisX) > 0.2f) moveDirection.x += axisX;
-                if (Math.abs(axisY) > 0.2f) moveDirection.y -= axisY;
+                    if (Math.abs(axisX) > 0.2f) moveDirection.x += axisX;
+                    if (Math.abs(axisY) > 0.2f) moveDirection.y -= axisY;
 
-                if (controller.getButton(controller.getMapping().buttonDpadLeft)) moveDirection.x -= 1;
-                if (controller.getButton(controller.getMapping().buttonDpadRight)) moveDirection.x += 1;
-                if (controller.getButton(controller.getMapping().buttonDpadUp)) moveDirection.y += 1;
-                if (controller.getButton(controller.getMapping().buttonDpadDown)) moveDirection.y -= 1;
+                    if (controller.getButton(controller.getMapping().buttonDpadLeft)) moveDirection.x -= 1;
+                    if (controller.getButton(controller.getMapping().buttonDpadRight)) moveDirection.x += 1;
+                    if (controller.getButton(controller.getMapping().buttonDpadUp)) moveDirection.y += 1;
+                    if (controller.getButton(controller.getMapping().buttonDpadDown)) moveDirection.y -= 1;
 
-                isShooting |= controller.getButton(KeyBindings.rawCode(controller, keyBindings.getGamepadButton(Action.SHOOT)));
+                    isShooting |= controller.getButton(KeyBindings.rawCode(controller, keyBindings.getGamepadButton(Action.SHOOT)));
 
-                boolean bombButton = controller.getButton(KeyBindings.rawCode(controller, keyBindings.getGamepadButton(Action.BOMB)));
-                if (bombButton && !prevBombButton) bombJustPressed = true;
-                prevBombButton = bombButton;
+                    boolean bombButton = controller.getButton(KeyBindings.rawCode(controller, keyBindings.getGamepadButton(Action.BOMB)));
+                    if (bombButton && !prevBombButton) bombJustPressed = true;
+                    prevBombButton = bombButton;
 
-                boolean weaponSwitchButton = controller.getButton(KeyBindings.rawCode(controller, keyBindings.getGamepadButton(Action.WEAPON_SWITCH)));
-                if (weaponSwitchButton && !prevWeaponSwitchButton) weaponSwitchJustPressed = true;
-                prevWeaponSwitchButton = weaponSwitchButton;
+                    boolean weaponSwitchButton = controller.getButton(KeyBindings.rawCode(controller, keyBindings.getGamepadButton(Action.WEAPON_SWITCH)));
+                    if (weaponSwitchButton && !prevWeaponSwitchButton) weaponSwitchJustPressed = true;
+                    prevWeaponSwitchButton = weaponSwitchButton;
 
-                hyperAttackHeld |= controller.getButton(KeyBindings.rawCode(controller, keyBindings.getGamepadButton(Action.HYPER_ATTACK)));
+                    hyperAttackHeld |= controller.getButton(KeyBindings.rawCode(controller, keyBindings.getGamepadButton(Action.HYPER_ATTACK)));
 
-                if (controller.getButton(KeyBindings.rawCode(controller, keyBindings.getGamepadButton(Action.RESTART)))) restartJustPressed = true;
-                if (controller.getButton(KeyBindings.rawCode(controller, keyBindings.getGamepadButton(Action.QUIT)))) quitJustPressed = true;
+                    if (controller.getButton(KeyBindings.rawCode(controller, keyBindings.getGamepadButton(Action.RESTART)))) restartJustPressed = true;
+                    if (controller.getButton(KeyBindings.rawCode(controller, keyBindings.getGamepadButton(Action.QUIT)))) quitJustPressed = true;
+                }
             }
         }
 
@@ -136,7 +153,9 @@ public class InputManager {
         debugMenuNewBookmarkJustPressed = Gdx.input.isKeyJustPressed(Input.Keys.N);
         debugMuteJustPressed = Gdx.input.isKeyJustPressed(Input.Keys.M);
 
-        if (moveDirection.len() > 1.0f) {
+        // A replayed frame's moveX/moveY is already final (e.g. a partial analog-stick tilt of
+        // length 0.3) - only live-polled input needs renormalizing after combining axes/keys.
+        if (frame == null && moveDirection.len() > 1.0f) {
             moveDirection.nor();
         }
     }

@@ -458,7 +458,8 @@ public class UIManager implements Disposable {
     private static final String[] DEBUG_WEAPON_LEVEL_LABELS = {"RAIN.sh Lvl", "Fast Lvl", "LIGHTNING.bat Lvl", "MOON.cmd Lvl"};
     private static final int DEBUG_ROW_LIVES = DEBUG_ROW_LEVELS_START + DEBUG_WEAPON_LEVEL_IDS.length;
     private static final int DEBUG_ROW_PATTERN_PREVIEW = DEBUG_ROW_LIVES + 1;
-    private static final int DEBUG_ROW_BOOKMARKS_START = DEBUG_ROW_PATTERN_PREVIEW + 1;
+    private static final int DEBUG_ROW_REPLAY_BROWSER = DEBUG_ROW_PATTERN_PREVIEW + 1;
+    private static final int DEBUG_ROW_BOOKMARKS_START = DEBUG_ROW_REPLAY_BROWSER + 1;
 
     // Debug-only: shows a "MUTED" badge in the left panel when audio is silenced.
     public void drawDebugMuteIndicator(SpriteBatch batch, float leftPanelX, float worldHeight) {
@@ -593,6 +594,14 @@ public class UIManager implements Disposable {
         font.draw(batch, "  Enter = create/edit enemies and patterns live", x, y);
         y -= lineHeight * 1.5f;
 
+        boolean replayBrowserSelected = selectedIndex == DEBUG_ROW_REPLAY_BROWSER;
+        font.setColor(replayBrowserSelected ? Color.YELLOW : Color.WHITE);
+        font.draw(batch, (replayBrowserSelected ? "> " : "  ") + "Replay Browser", x, y);
+        y -= lineHeight;
+        font.setColor(Color.GRAY);
+        font.draw(batch, "  Enter = browse recorded replays", x, y);
+        y -= lineHeight * 1.5f;
+
         font.setColor(Color.WHITE);
         font.draw(batch, "Bookmarks:", x, y);
         y -= lineHeight;
@@ -614,6 +623,49 @@ public class UIManager implements Disposable {
         font.setColor(Color.GRAY);
         font.draw(batch, "  Enter = jump   Del = remove", x, y);
 
+        font.setColor(Color.WHITE);
+    }
+
+    // Debug-only: file picker for recorded replays, opened from the "Replay Browser" row of the
+    // main debug menu - see ReplayBrowser/GameController.startReplay().
+    public void drawReplayBrowser(SpriteBatch batch, float worldWidth, float worldHeight, ReplayBrowser browser) {
+        batch.setColor(0f, 0f, 0f, 0.75f);
+        batch.draw(whitePixel, 0, 0, worldWidth, worldHeight);
+        batch.setColor(Color.WHITE);
+
+        float x = 0.4f;
+        float y = worldHeight - 0.5f;
+        float lineHeight = 0.4f;
+
+        font.setColor(Color.YELLOW);
+        font.draw(batch, "REPLAY BROWSER (Enter = watch, Del = back, </> = page)", x, y);
+        y -= lineHeight * 1.5f;
+
+        Array<String> names = browser.getDisplayNames();
+        if (names.size == 0) {
+            font.setColor(Color.GRAY);
+            font.draw(batch, "(no replays recorded yet)", x, y);
+            y -= lineHeight;
+            font.draw(batch, "Folder: " + browser.getFolderPath(), x, y);
+        } else {
+            if (browser.getPageCount() > 1) {
+                font.setColor(Color.GRAY);
+                font.draw(batch, "Page " + (browser.getCurrentPage() + 1) + "/" + browser.getPageCount(), x, y);
+                y -= lineHeight;
+            }
+            for (int i = 0; i < names.size; i++) {
+                boolean selected = i == browser.getSelectedIndexInPage();
+                font.setColor(selected ? Color.YELLOW : Color.WHITE);
+                font.draw(batch, (selected ? "> " : "  ") + names.get(i), x, y);
+                y -= lineHeight;
+            }
+        }
+
+        if (browser.getStatusMessage() != null) {
+            y -= lineHeight * 0.5f;
+            font.setColor(Color.ORANGE);
+            font.draw(batch, browser.getStatusMessage(), x, y);
+        }
         font.setColor(Color.WHITE);
     }
 
