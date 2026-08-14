@@ -4,6 +4,7 @@ import com.badlogic.gdx.graphics.Texture;
 import com.badlogic.gdx.graphics.g2d.Animation;
 import com.badlogic.gdx.graphics.g2d.TextureRegion;
 import com.badlogic.gdx.utils.Array;
+import whitelabeltest.enemy.movementpatterns.BounceMovement;
 import whitelabeltest.enemy.movementpatterns.StraightMovement;
 import whitelabeltest.enemy.movementpatterns.MovementPattern;
 import whitelabeltest.enemy.movementpatterns.MoveToPointMovement;
@@ -64,6 +65,7 @@ public class PatternFactory {
 
         switch (def.type) {
             case "ZigZag": return new ZigZagMovement(speed * 1.5f, speed, angle);
+            case "Bounce": return new BounceMovement(speed, angle);
             case "Seeking": {
                 float stopDistance = def.stopDistance > 0 ? def.stopDistance : SeekingMovement.DEFAULT_STOP_DISTANCE;
                 return new SeekingMovement(speed, stopDistance, angle);
@@ -99,6 +101,13 @@ public class PatternFactory {
     }
 
     public static FiringPattern createFiring(EnemyDefinition enemyDef, FiringPatternDef def) {
+        return createFiring(enemyDef, def, Float.NaN, Float.NaN);
+    }
+
+    /** @param worldWidth, worldHeight only consulted by "Wall" (see WallFiring) and "RadialNearMiss"
+     *  (see RadialNearMissFiring) respectively - every other pattern fires relative to the enemy's
+     *  own position and doesn't need either. NaN is fine for those. */
+    public static FiringPattern createFiring(EnemyDefinition enemyDef, FiringPatternDef def, float worldWidth, float worldHeight) {
         if (def == null) return new NoFiring();
 
         switch (def.type) {
@@ -108,7 +117,7 @@ public class PatternFactory {
                 float[] durations = new float[def.patterns.size];
                 for (int i = 0; i < def.patterns.size; i++) {
                     FiringPatternDef sub = def.patterns.get(i);
-                    fps.add(createFiring(enemyDef, sub));
+                    fps.add(createFiring(enemyDef, sub, worldWidth, worldHeight));
                     durations[i] = sub.duration > 0 ? sub.duration : 3.0f;
                 }
                 return new SequencedFiringPattern(fps, durations);
@@ -117,7 +126,7 @@ public class PatternFactory {
                 if (def.patterns == null || def.patterns.size == 0) return new NoFiring();
                 Array<FiringPattern> fps = new Array<>();
                 for (FiringPatternDef sub : def.patterns) {
-                    fps.add(createFiring(enemyDef, sub));
+                    fps.add(createFiring(enemyDef, sub, worldWidth, worldHeight));
                 }
                 return new CombinedFiringPattern(fps);
             }
@@ -129,12 +138,21 @@ public class PatternFactory {
                 return new AimedFiring(def.fireRate, resolve(bulletSize(def, bulletDef), 0.25f), resolve(bulletSpeed(def, bulletDef), 5f), spriteOverride, def.offsetX, def.offsetY, bulletDamage(def, bulletDef), def.targetOffsetX, def.targetOffsetY,
                     speedProfile(def, bulletDef), hitboxSpec(def, bulletDef));
             }
+            // Pulled out of the generic small-helper dispatch (see the other createFiring overload
+            // above) so def.phaseOffset can reach BurstAimedFiring - see its javadoc for why two
+            // side-by-side BurstAimed emitters use this to land in opposite phase.
+            case "BurstAimed": {
+                BulletDef bulletDef = PatternRegistry.getBullet(def.bulletId);
+                Animation<TextureRegion> spriteOverride = buildBulletAnimation(enemyDef, def, bulletDef);
+                return new BurstAimedFiring(def.fireRate, resolve(bulletSize(def, bulletDef), 0.25f), resolve(bulletSpeed(def, bulletDef), 5f), spriteOverride, def.offsetX, def.offsetY, bulletDamage(def, bulletDef),
+                    speedProfile(def, bulletDef), hitboxSpec(def, bulletDef), def.phaseOffset, resolve(def.burstInterval, 0.15f));
+            }
             case "QuarterCircle": {
                 BulletDef bulletDef = PatternRegistry.getBullet(def.bulletId);
                 Animation<TextureRegion> spriteOverride = buildBulletAnimation(enemyDef, def, bulletDef);
                 return new QuarterCircleFiring(def.fireRate, resolve(bulletSize(def, bulletDef), 0.25f), resolve(bulletSpeed(def, bulletDef), 5f), spriteOverride,
                     resolve(def.spreadDegrees, 90f), resolve(def.numBullets, 9), def.offsetX, def.offsetY, bulletDamage(def, bulletDef), def.targetOffsetX, def.targetOffsetY,
-                    speedProfile(def, bulletDef), hitboxSpec(def, bulletDef));
+                    speedProfile(def, bulletDef), hitboxSpec(def, bulletDef), def.quarterCircleFixedAngle);
             }
             case "AimedAtPoint": {
                 BulletDef bulletDef = PatternRegistry.getBullet(def.bulletId);
@@ -177,6 +195,36 @@ public class PatternFactory {
                 float orbitRadius = def.orbitRadius > 0 ? def.orbitRadius : OrbitingFiring.DEFAULT_ORBIT_RADIUS;
                 float orbitSpeed = def.orbitSpeed > 0 ? def.orbitSpeed : OrbitingFiring.DEFAULT_ORBIT_SPEED;
                 return new OrbitingFiring(def.fireRate, resolve(bulletSize(def, bulletDef), 0.5f), resolve(bulletSpeed(def, bulletDef), 4f), spriteOverride, def.offsetX, def.offsetY, bulletDamage(def, bulletDef), orbitRadius, orbitSpeed);
+            }
+            case "Wall": {
+                BulletDef bulletDef = PatternRegistry.getBullet(def.bulletId);
+                Animation<TextureRegion> spriteOverride = buildBulletAnimation(enemyDef, def, bulletDef);
+                float marginX = def.wallMarginX > 0 ? def.wallMarginX : 0.25f;
+                float spacing = def.wallSpacing > 0 ? def.wallSpacing : 0.4f;
+                int gapLaneStart = def.gapLaneStart >= 0 ? def.gapLaneStart : 0;
+                int gapLaneCount = def.gapLaneCount >= 0 ? def.gapLaneCount : 1;
+                float wallFireRate = def.fireRate > 0 ? def.fireRate : 0.3f;
+                return new WallFiring(resolve(bulletSize(def, bulletDef), 0.25f), resolve(bulletSpeed(def, bulletDef), 5f), bulletDamage(def, bulletDef), spriteOverride,
+                    speedProfile(def, bulletDef), hitboxSpec(def, bulletDef), worldWidth, marginX, spacing, gapLaneStart, gapLaneCount, def.gapLaneSequence, wallFireRate);
+            }
+            case "PolkaDot": {
+                BulletDef bulletDef = PatternRegistry.getBullet(def.bulletId);
+                Animation<TextureRegion> spriteOverride = buildBulletAnimation(enemyDef, def, bulletDef);
+                float marginX = def.wallMarginX > 0 ? def.wallMarginX : 0.25f;
+                float spacing = def.wallSpacing > 0 ? def.wallSpacing : 0.4f;
+                float rowFireRate = def.fireRate > 0 ? def.fireRate : 0.3f;
+                return new PolkaDotFiring(resolve(bulletSize(def, bulletDef), 0.25f), resolve(bulletSpeed(def, bulletDef), 5f), bulletDamage(def, bulletDef), spriteOverride,
+                    speedProfile(def, bulletDef), hitboxSpec(def, bulletDef), worldWidth, marginX, spacing, rowFireRate);
+            }
+            case "RadialNearMiss": {
+                BulletDef bulletDef = PatternRegistry.getBullet(def.bulletId);
+                Animation<TextureRegion> spriteOverride = buildBulletAnimation(enemyDef, def, bulletDef);
+                int numBullets = resolve(def.numBullets, 16);
+                float missDistance = def.nearMissDistance > 0 ? def.nearMissDistance : 0.35f;
+                float fireRate = def.fireRate > 0 ? def.fireRate : 1.5f;
+                int volleyCount = def.volleyCount >= 0 ? def.volleyCount : 3;
+                return new RadialNearMissFiring(resolve(bulletSize(def, bulletDef), 0.3f), resolve(bulletSpeed(def, bulletDef), 4f), bulletDamage(def, bulletDef), spriteOverride,
+                    speedProfile(def, bulletDef), hitboxSpec(def, bulletDef), worldWidth, worldHeight, numBullets, missDistance, fireRate, volleyCount);
             }
             default:
                 BulletDef bulletDef = PatternRegistry.getBullet(def.bulletId);

@@ -17,6 +17,11 @@ public class StageDefinition {
     public String music;
     public Array<BackgroundLayerDef> backgroundLayers;
     public String bossVideo;
+    // Stage-long looping video used as the background from the moment the stage loads - see
+    // ScrollingBackground.backgroundVideoFile. Unlike bossVideo (which cuts in later on a
+    // spawn-schedule cue), this plays immediately, so a stage using it typically leaves
+    // backgroundLayers empty (or minimal) rather than layering it under a parallax image.
+    public String backgroundVideo;
 
     public StageDefinition() {}
 }

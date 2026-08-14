@@ -40,6 +40,17 @@ public class GenericEnemy extends BaseEnemy {
                                     Texture spawnTexture, Texture deathTexture,
                                     float worldWidth, float worldHeight, float startX, float startY,
                                     float formationOffsetX, float formationOffsetY, String movementPatternId) {
+        initWithDefinition(def, texture, bulletTexture, spawnTexture, deathTexture, worldWidth, worldHeight, startX, startY, formationOffsetX, formationOffsetY, movementPatternId, null);
+    }
+
+    /** @param firingPatternId overrides def.firingPattern when non-null - same reasoning as
+     *  movementPatternId above, lets several spawn events share one enemy definition while each
+     *  firing something different (e.g. WallFiring's per-wave gapCenterX) instead of needing a
+     *  near-duplicate enemy definition that differs only in firingPattern. */
+    public void initWithDefinition(EnemyDefinition def, Texture texture, Texture bulletTexture,
+                                    Texture spawnTexture, Texture deathTexture,
+                                    float worldWidth, float worldHeight, float startX, float startY,
+                                    float formationOffsetX, float formationOffsetY, String movementPatternId, String firingPatternId) {
         this.def = def;
         this.worldWidth = worldWidth;
         this.worldHeight = worldHeight;
@@ -82,11 +93,13 @@ public class GenericEnemy extends BaseEnemy {
 
         this.health = def.health;
         this.maxHealth = def.health;
+        this.healthRegenPerSecond = def.healthRegenPerSecond;
         this.animationTime = 0;
 
         String resolvedMovementPattern = movementPatternId != null ? movementPatternId : def.movementPattern;
         this.movement = PatternFactory.createMovement(PatternRegistry.getMovement(resolvedMovementPattern), worldHeight, sprite.getX() + sprite.getWidth() / 2f, formationOffsetX, formationOffsetY);
-        this.firing = PatternFactory.createFiring(def, PatternRegistry.getFiring(def.firingPattern));
+        String resolvedFiringPattern = firingPatternId != null ? firingPatternId : def.firingPattern;
+        this.firing = PatternFactory.createFiring(def, PatternRegistry.getFiring(resolvedFiringPattern), worldWidth, worldHeight);
 
         this.spawnDuration = def.spawnDuration;
         this.spawnAnimation = (spawnTexture != null && def.spawnFrameCount > 0)
@@ -137,6 +150,21 @@ public class GenericEnemy extends BaseEnemy {
 
     @Override
     public boolean isDefiant() { return def != null && def.defiant; }
+
+    @Override
+    public boolean isDamageableByEnemyBullets() { return def != null && def.damageableByEnemyBullets; }
+
+    @Override
+    public boolean showsHealthBar() { return def != null && def.showHealthBar; }
+
+    @Override
+    public boolean isTargetableByHoming() { return def == null || def.targetableByHoming; }
+
+    @Override
+    public String getPairId() { return def != null ? def.pairId : null; }
+
+    @Override
+    public String getDefinitionId() { return def != null ? def.id : null; }
 
     @Override
     public boolean cancelsBulletsOnDeath() { return def != null && def.bulletCancel; }

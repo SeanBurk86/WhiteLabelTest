@@ -11,6 +11,9 @@ import com.badlogic.gdx.utils.Array;
 public class StageSequenceDefinition {
     public String id;
     public Array<String> stageIds;
+    // See StartingLoadoutDefinition - null (the default) means this sequence uses whatever loadout
+    // the player picked on WeaponSelectScreen, same as "campaign" always has.
+    public StartingLoadoutDefinition startingLoadout;
 
     public StageSequenceDefinition() {}
 }

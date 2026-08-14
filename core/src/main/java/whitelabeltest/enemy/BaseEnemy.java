@@ -21,6 +21,10 @@ public abstract class BaseEnemy implements Enemy {
     protected Rectangle rectangle;
     protected int health;
     protected int maxHealth;
+    // See EnemyDefinition.healthRegenPerSecond - fractional regen accumulates here until it's
+    // worth a whole point of health (health is an int), same idea as SpeedRamp's own accumulation.
+    protected float healthRegenPerSecond = 0f;
+    private float healthRegenAccumulator = 0f;
     protected Integer guaranteedPowerup;
     protected float worldWidth, worldHeight;
     protected boolean invertMovement; // Added field to store inversion state
@@ -48,6 +52,11 @@ public abstract class BaseEnemy implements Enemy {
     // detected generically (any firing pattern growing enemyBullets) rather than each
     // FiringPattern reporting it, so this works unmodified for every existing/future pattern.
     private boolean hasFiredOnce = false;
+
+    // See Enemy.isPairResolved()/markPairResolved().
+    private boolean pairResolved = false;
+    // See Enemy.getPairGraceTimer()/setPairGraceTimer().
+    private float pairGraceTimer = -1f;
 
     protected Animation<TextureRegion> spawnAnimation;
     protected float spawnDuration = 0.4f;
@@ -95,12 +104,21 @@ public abstract class BaseEnemy implements Enemy {
     public void update(float delta, Array<EnemyBullet> enemyBullets, Circle playerHitbox, Circle grazeHitbox, boolean firingPaused) {
         if (sprite == null) return;
 
-        lifecycleTime += delta;
-
         if (lifecycleState == LifecycleState.DYING) {
+            // A paired enemy (see getPairId()) that hasn't been confirmed dead yet - it crossed
+            // zero, but CollisionManager.resolvePairedEnemyDeaths() is still giving its partner a
+            // window to follow it down - holds here at the exact moment of the hit: lifecycleTime
+            // stays frozen so the death animation doesn't play (and isDeathAnimationFinished()
+            // can't fire early and get it removed from the world) before the pair is actually
+            // resolved one way or the other. Once markPairResolved() confirms the kill (or
+            // reviveFully() reverses it), this falls through to the normal flow below.
+            if (getPairId() != null && !isPairResolved()) return;
+            lifecycleTime += delta;
             updateDeathAnimation();
             return;
         }
+
+        lifecycleTime += delta;
 
         if (lifecycleState == LifecycleState.ENTERING) {
             updateSpawnAnimation();
@@ -133,6 +151,15 @@ public abstract class BaseEnemy implements Enemy {
             if (!rotateWithMovement) sprite.setRotation(0);
         }
 
+        if (healthRegenPerSecond > 0f && health < maxHealth) {
+            healthRegenAccumulator += healthRegenPerSecond * delta;
+            int wholePoints = (int) healthRegenAccumulator;
+            if (wholePoints > 0) {
+                health = Math.min(maxHealth, health + wholePoints);
+                healthRegenAccumulator -= wholePoints;
+            }
+        }
+
         // Skipped (not just no-op fired) while paused, in the ceasefire zone, or "sealed" by the
         // graze halo overlapping this enemy's hitbox (see Enemy.isSealable()/EnemyDefinition.
         // sealable) - in every case so a firing pattern's internal cooldown timer stays frozen at
@@ -144,6 +171,11 @@ public abstract class BaseEnemy implements Enemy {
             firing.update(delta, this, sprite, rectangle, enemyBullets, bulletAnimation, playerHitbox);
             if (!hasFiredOnce && enemyBullets.size > bulletsBefore) hasFiredOnce = true;
         }
+    }
+
+    @Override
+    public void silenceFiring() {
+        firing = null;
     }
 
     private void updateSpawnAnimation() {
@@ -271,6 +303,31 @@ public abstract class BaseEnemy implements Enemy {
         if (firing != null) firing.advance();
     }
 
+    // See Enemy.reviveFully()/isPairResolved()/markPairResolved().
+    @Override
+    public void reviveFully() {
+        health = maxHealth;
+        healthRegenAccumulator = 0f;
+        lifecycleState = LifecycleState.ACTIVE;
+        lifecycleTime = 0f;
+        damageFlashTimer = 0f;
+        pairResolved = false;
+        pairGraceTimer = -1f;
+        if (sprite != null) sprite.setColor(1, 1, 1, 1);
+    }
+
+    @Override
+    public boolean isPairResolved() { return pairResolved; }
+
+    @Override
+    public void markPairResolved() { pairResolved = true; }
+
+    @Override
+    public float getPairGraceTimer() { return pairGraceTimer; }
+
+    @Override
+    public void setPairGraceTimer(float secondsRemaining) { pairGraceTimer = secondsRemaining; }
+
     @Override
     public void setGuaranteedPowerup(Integer tier) {
         this.guaranteedPowerup = tier;
@@ -294,6 +351,9 @@ public abstract class BaseEnemy implements Enemy {
         invertMovement = false; // Reset on pool
         rotateWithMovement = true;
         hasFiredOnce = false;
+        pairResolved = false;
+        pairGraceTimer = -1f;
+        healthRegenAccumulator = 0f;
         lifecycleState = LifecycleState.ACTIVE;
         lifecycleTime = 0f;
         if (sprite != null) {

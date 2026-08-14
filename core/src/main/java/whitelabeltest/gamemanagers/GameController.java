@@ -7,6 +7,7 @@ import com.badlogic.gdx.graphics.g2d.TextureRegion;
 import com.badlogic.gdx.math.MathUtils;
 import com.badlogic.gdx.utils.Array;
 import com.badlogic.gdx.utils.Disposable;
+import com.badlogic.gdx.utils.ObjectMap;
 import whitelabeltest.enemy.Enemy;
 import whitelabeltest.enemy.ExplosionPatternDef;
 import whitelabeltest.enemy.PatternRegistry;
@@ -29,6 +30,9 @@ public class GameController implements Disposable {
     // boss-rush, etc.) reuse the same stage pool in a different order/subset without any other
     // GameController change.
     public static final String DEFAULT_STAGE_SEQUENCE_ID = "campaign";
+    // TUTORIAL on the start menu skips WeaponSelectScreen entirely and jumps straight here - see
+    // Main.transitionToTutorial() and this sequence's startingLoadout in stage_sequences.json.
+    public static final String TUTORIAL_STAGE_SEQUENCE_ID = "tutorial";
     // Non-final: startReplay() swaps this to the recorded run's sequence id without needing a new
     // GameController instance.
     private String stageSequenceId;
@@ -96,7 +100,7 @@ public class GameController implements Disposable {
 
     private LevelRank levelCompleteRank = LevelRank.D;
 
-    private static final float BOMB_SAVE_WINDOW = 0.065f;
+    private static final float BOMB_SAVE_WINDOW = 0.0325f;
     private float hitGraceTimer = -1f;
 
     private int currentFps;
@@ -152,7 +156,7 @@ public class GameController implements Disposable {
             }
             frame = replayPlayer.next();
             if (!Float.isNaN(frame.seekToTime)) {
-                spawnScheduler.seekTo(frame.seekToTime);
+                spawnScheduler.seekTo(frame.seekToTime, audio);
                 entities.clearWorld();
                 background.seekTo(frame.seekToTime);
                 return; // instantaneous - consumes no simulated time, resume on the next update() call
@@ -213,7 +217,17 @@ public class GameController implements Disposable {
 
         if (recorder != null && !gameOver) recorder.record(delta, input);
 
-        if (input.isBombJustPressed() && !entities.getPlayer().isDead()) {
+        // See SpawnScheduler.isWeaponsDisabled() - a scripted "you haven't been taught this yet"
+        // window (e.g. the tutorial, before its weapons section) that withholds both firing and
+        // bombing, not just one.
+        boolean weaponsDisabled = spawnScheduler.isWeaponsDisabled(spawnScheduler.getTotalTime());
+        // See SpawnScheduler.isHyperAttackDisabled()/isBombDisabled() - separate "not taught yet"
+        // windows from weaponsDisabled, since a tutorial teaches normal fire, Hyper Attack, and
+        // bombing at three different points rather than all at once.
+        boolean hyperAttackDisabled = spawnScheduler.isHyperAttackDisabled(spawnScheduler.getTotalTime());
+        boolean bombDisabled = spawnScheduler.isBombDisabled(spawnScheduler.getTotalTime());
+
+        if (!weaponsDisabled && !bombDisabled && input.isBombJustPressed() && !entities.getPlayer().isDead()) {
             if (tryFireBomb() && hitGraceTimer >= 0f) {
                 hitGraceTimer = -1f; // panic bomb: fired in time, so the pending hit doesn't count
             }
@@ -238,8 +252,9 @@ public class GameController implements Disposable {
         }
 
         background.update(delta);
-        entities.update(delta, input, assets, audio);
-        spawnScheduler.update(delta, entities, audio);
+        entities.update(delta, input, assets, audio, weaponsDisabled, hyperAttackDisabled);
+        spawnScheduler.update(delta, entities, audio, input,
+            scoreManager.getEnemiesDestroyed(), scoreManager.getGemsCollected(), entities.getPlayer().getGrazePoints());
 
         if (!bossVideoTriggered && spawnScheduler.isBackgroundVideoTriggered()) {
             bossVideoTriggered = true;
@@ -290,8 +305,12 @@ public class GameController implements Disposable {
         collisionManager.checkPlayerGemCollisions(entities.getPlayer(), entities.getPointGems(), scoreManager, audio, assets);
 
         collisionManager.checkBulletEnemyCollisions(entities.getBullets(), entities.getEnemies(), audio, entities, assets, worldWidth, worldHeight, scoreManager);
+        collisionManager.checkEnemyBulletEnemyCollisions(entities.getEnemyBullets(), entities.getEnemies(), audio, entities, assets, worldWidth, worldHeight, scoreManager);
         collisionManager.checkHaloDashCollisions(entities.getPlayer(), entities.getEnemies(), audio, entities, assets, worldWidth, worldHeight, scoreManager);
         collisionManager.checkThunderboltDetonation(entities.getPlayer(), entities.getEnemies(), audio, entities, assets, worldWidth, worldHeight, scoreManager);
+        // Must run after every check above - see its javadoc for why paired-enemy deaths are
+        // deferred instead of resolved inline in each of those.
+        collisionManager.resolvePairedEnemyDeaths(entities.getEnemies(), audio, entities, assets, worldWidth, worldHeight, scoreManager, delta);
     }
 
     private void updateFpsMonitor(float delta) {
@@ -393,7 +412,7 @@ public class GameController implements Disposable {
     }
 
     private void seekToTime(float targetTime) {
-        spawnScheduler.seekTo(targetTime);
+        spawnScheduler.seekTo(targetTime, audio);
         entities.clearWorld();
         background.seekTo(targetTime);
         debugMenuOpen = false;
@@ -467,7 +486,7 @@ public class GameController implements Disposable {
     private void loadStage(int index) {
         StageDefinition stageDef = assets.getStageDefinition(stageSequence.get(index));
         if (background != null) background.dispose();
-        background = new ScrollingBackground(worldWidth, worldHeight, audioSettings, assets, stageDef.backgroundLayers, stageDef.bossVideo);
+        background = new ScrollingBackground(worldWidth, worldHeight, audioSettings, assets, stageDef.backgroundLayers, stageDef.bossVideo, stageDef.backgroundVideo);
         background.setMuted(audio.isMuted());
         spawnScheduler = new SpawnScheduler(worldWidth, worldHeight, assets, stageDef.spawnSchedule);
         audio.loadStageMusic(stageDef.music);
@@ -504,6 +523,24 @@ public class GameController implements Disposable {
 
     public boolean hasNextStage() { return stageIndex + 1 < stageSequence.size; }
     public int getStageNumber() { return stageIndex + 1; }
+
+    /** Overrides entities.reset(loadout)'s ordinary WeaponSelectScreen-driven loadout with a stage
+     *  sequence's fixed StartingLoadoutDefinition (e.g. "tutorial"'s) - see reset(). Runs right
+     *  after entities.reset(loadout), which has already zeroed every weapon's level and cleared
+     *  both slots, so this only needs to set what the config actually specifies. */
+    private void applyStartingLoadout(StartingLoadoutDefinition config) {
+        Player player = entities.getPlayer();
+        if (config.weaponLevels != null) {
+            for (ObjectMap.Entry<String, Integer> entry : config.weaponLevels) {
+                player.setWeaponLevel(entry.key, entry.value);
+            }
+        }
+        player.setSlotWeapon(0, config.slotAWeaponId);
+        player.setSlotWeapon(1, config.slotBWeaponId);
+        if (config.maxBombs > 0) player.setMaxBombs(config.maxBombs);
+        player.setNumBombs(config.numBombs);
+        player.setNumLives(config.numLives);
+    }
 
     /** Switches this GameController into replaying a previously-recorded run - see ReplayBrowser/
      *  ReplayRecorder. Doesn't flush the outgoing recorder itself; reset() (called at the end here)
@@ -548,8 +585,16 @@ public class GameController implements Disposable {
     }
 
     private void applyPlayerHit() {
+        // Scripted "safely stand in this fire" window (see SpawnScheduler.isPlayerInvincible) -
+        // completely consequence-free, not even a chain break, unlike every other branch below.
+        if (spawnScheduler.isPlayerInvincible(spawnScheduler.getTotalTime())) return;
+
         scoreManager.breakChain();
         Player player = entities.getPlayer();
+        if (spawnScheduler.isInPracticeSection(spawnScheduler.getTotalTime())) {
+            restartPracticeSection();
+            return;
+        }
         if (player.getNumLives() <= 0) {
             gameOver = true;
             gameOverTimer = 0f;
@@ -569,10 +614,32 @@ public class GameController implements Disposable {
         }
     }
 
+    /** A hit during SpawnScheduler.isInPracticeSection() - e.g. a tutorial dodge drill - takes this
+     *  path instead of applyPlayerHit()'s normal life-loss/game-over branch: costs no life, plays a
+     *  hit sound for feedback, then rewinds the schedule back to the section's start and wipes
+     *  whatever hit the player so it replays from scratch - same seekTo()+clearWorld() pairing the
+     *  debug menu's seek uses. Deliberately does NOT call player.startDeath() the way a real hit
+     *  does - that sets isDead for DEATH_WAIT (2s) and then isInvincible for another
+     *  invincibleFrameTime (2s), during which EntityManager holds firingPaused true for every
+     *  enemy (see its firingPaused computation). The schedule doesn't pause for that: with waves
+     *  spawning every ~1.2s here, a 4-second firing freeze let 2+ waves stack up fully spawned but
+     *  unfired, so they all fired together the instant firingPaused cleared - each wave's bullets
+     *  covering the lane the OTHER wave left open, unioning into a solid, gap-free wall. Skipping
+     *  startDeath() avoids that stall entirely; clearWorld() already wipes every bullet on screen,
+     *  so there's nothing left that could hit the player again this instant anyway. */
+    private void restartPracticeSection() {
+        audio.playPlayerDeath();
+        entities.destroyAllPlayerBullets();
+        spawnScheduler.seekTo(spawnScheduler.getPracticeCheckpointStart(spawnScheduler.getTotalTime()), audio);
+        entities.clearWorld();
+    }
+
     private void sufferBombDamage(int damage, Array<Enemy> enemies) {
         for (int i = enemies.size - 1; i >= 0; i--) {
             Enemy e = enemies.get(i);
-            if (e.takeDamage(damage)) {
+            // See CollisionManager.resolvePairedEnemyDeaths(), called later this same update() -
+            // a paired enemy's death is deferred there instead of scored/destroyed immediately.
+            if (e.takeDamage(damage) && e.getPairId() == null) {
                 scoreManager.addScore(destroyEnemy(audio, entities, assets, worldWidth, worldHeight, e, scoreManager));
             }
         }
@@ -652,7 +719,11 @@ public class GameController implements Disposable {
         }
         long seed = replayPlayer != null ? replayPlayer.getSeed() : System.nanoTime();
         MathUtils.random.setSeed(seed);
-        recorder = replayPlayer == null ? new ReplayRecorder(stageSequenceId, loadout, seed) : null;
+        // Tutorial runs are scripted practice, not "a run" worth sharing/replaying - see
+        // ReplayRecorder.record()/dispose(), which only ever fire when recorder is non-null, so
+        // leaving it null here is enough to suppress recording entirely for this mode.
+        boolean recordingEnabled = replayPlayer == null && !stageSequenceId.equals(TUTORIAL_STAGE_SEQUENCE_ID);
+        recorder = recordingEnabled ? new ReplayRecorder(stageSequenceId, loadout, seed) : null;
 
         scoreManager.reset();
         gameOver = false;
@@ -671,11 +742,13 @@ public class GameController implements Disposable {
         levelCompleteTimeBonus = 0;
         levelCompleteRank = LevelRank.D;
         totalEnemiesAcrossRun = 0;
-        stageSequence = assets.getStageSequence(stageSequenceId).stageIds;
+        StageSequenceDefinition sequenceDef = assets.getStageSequence(stageSequenceId);
+        stageSequence = sequenceDef.stageIds;
         loadStage(0);
         audio.stopVictory();
         patternPreviewer.close(entities);
         entities.reset(loadout);
+        if (sequenceDef.startingLoadout != null) applyStartingLoadout(sequenceDef.startingLoadout);
         collisionManager.reset();
         lowestFps = Integer.MAX_VALUE;
         highestFps = 0;
@@ -720,6 +793,10 @@ public class GameController implements Disposable {
     public int getDebugMenuSelectedIndex() { return debugMenuSelectedIndex; }
     public float getDebugMenuSeekTime() { return debugMenuSeekTime; }
     public float getSpawnScheduleTotalTime() { return spawnScheduler.getTotalTime(); }
+    public float getSpawnScheduleRealTime() { return spawnScheduler.getRealTime(); }
+    // See SpawnScheduler.isScheduleEndTriggered() - always false for an ordinary arcade stage
+    // (only a schedule that explicitly sets scheduleEndTime, e.g. the tutorial, ever latches this).
+    public boolean isScheduleEndTriggered() { return spawnScheduler.isScheduleEndTriggered(); }
     public Array<DebugSaveState> getDebugSaveStates() { return debugSaveStateManager.getSaveStates(); }
     public float getLevelStartTimer() { return levelStartTimer; }
     public Array<TextCue> getTextCues() { return spawnScheduler.getTextCues(); }

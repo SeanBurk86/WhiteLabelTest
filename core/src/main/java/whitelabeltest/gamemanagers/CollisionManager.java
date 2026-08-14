@@ -177,6 +177,7 @@ public class CollisionManager {
             PointGem gem = gems.get(i);
             if (Intersector.overlaps(player.getGrazeHitbox(), gem.getRectangle())) {
                 scoreManager.addBonus(assets.getGameBalance().gemPoints);
+                scoreManager.registerGemCollected();
                 audio.playPointGem();
                 gems.removeIndex(i);
                 ObjectPools.freePointGem(gem);
@@ -195,7 +196,12 @@ public class CollisionManager {
                 if (!bullet.hasDamaged(enemy)) {
                     bullet.markDamaged(enemy);
                     scoreManager.registerWeaponHit(bullet.getFireRate() / 2f, bullet.getChainWindow());
-                    if (enemy.takeDamage(bullet.getDamage())) {
+                    // A paired enemy's death is deferred to resolvePairedEnemyDeaths() - see
+                    // Enemy.getPairId() - instead of scored/destroyed immediately here, since
+                    // whether it actually dies depends on whether its partner also crossed zero
+                    // this same frame, which isn't known until every enemy's damage for the frame
+                    // has been applied.
+                    if (enemy.takeDamage(bullet.getDamage()) && enemy.getPairId() == null) {
                         scoreManager.addScore(GameController.destroyEnemy(audio, entityManager, assets, worldWidth, worldHeight, enemy, scoreManager), bullet.getChainWindow());
                     }
                     bullet.onHit(enemy, bullets, assets);
@@ -209,6 +215,40 @@ public class CollisionManager {
                 }
 
                 if (bullet.shouldDestroyOnCollision() || !enemy.isActive()) break;
+            }
+        }
+    }
+
+    /** Lets an enemy bullet damage another (non-source) enemy on contact, but only one that opts in
+     *  via Enemy.isDamageableByEnemyBullets() - the tutorial's bullet-streaming drill (see
+     *  SpawnScheduler.InvincibilityWindow) relies on it: the player kites the streaming emitter's
+     *  continuous aimed fire across a set of slow PowerCarrier targets, which take damage from it
+     *  exactly like they would from the player's own weapon. Everything else defaults to false so
+     *  a bullet passing near an unrelated enemy - e.g. several stationary tutorial emitters sharing
+     *  one spawn point - doesn't get silently eaten by it. A bullet never damages the enemy that
+     *  fired it (EnemyBullet.getSourceEnemy()), and is consumed on its first hit against a
+     *  damageable enemy - unlike player bullets there's no piercing flag to check, since every
+     *  enemy bullet type in this codebase is single-use against the player too. */
+    public void checkEnemyBulletEnemyCollisions(Array<EnemyBullet> enemyBullets, Array<Enemy> enemies, AudioManager audio, EntityManager entityManager, AssetManager assets, float worldWidth, float worldHeight, ScoreManager scoreManager) {
+        for (int i = enemyBullets.size - 1; i >= 0; i--) {
+            EnemyBullet bullet = enemyBullets.get(i);
+            Enemy source = bullet.getSourceEnemy();
+            boolean consumed = false;
+            for (int j = enemies.size - 1; j >= 0; j--) {
+                Enemy enemy = enemies.get(j);
+                if (!enemy.isActive() || enemy == source || !enemy.isDamageableByEnemyBullets()) continue;
+                if (!overlaps(enemy.getRectangle(), bullet)) continue;
+
+                if (enemy.takeDamage(bullet.getDamage()) && enemy.getPairId() == null) {
+                    scoreManager.addScore(GameController.destroyEnemy(audio, entityManager, assets, worldWidth, worldHeight, enemy, scoreManager), 1f);
+                }
+                consumed = true;
+                break;
+            }
+
+            if (consumed) {
+                enemyBullets.removeIndex(i);
+                ObjectPools.freeEnemyBullet(bullet);
             }
         }
     }
@@ -232,7 +272,7 @@ public class CollisionManager {
             player.triggerHaloBashFlash();
             audio.playHaloBash();
             scoreManager.registerWeaponHit(0.1f, 2.0f);
-            if (enemy.takeDamage(player.getHaloDashDamage())) {
+            if (enemy.takeDamage(player.getHaloDashDamage()) && enemy.getPairId() == null) {
                 scoreManager.addScore(GameController.destroyEnemy(audio, entityManager, assets, worldWidth, worldHeight, enemy, scoreManager), 2.0f);
             }
         }
@@ -263,7 +303,7 @@ public class CollisionManager {
             hitPoints.add(new Vector2(rect.x + rect.width / 2f, rect.y + rect.height / 2f));
 
             scoreManager.registerWeaponHit(0.1f, 2.5f);
-            if (enemy.takeDamage(damage)) {
+            if (enemy.takeDamage(damage) && enemy.getPairId() == null) {
                 scoreManager.addScore(GameController.destroyEnemy(audio, entityManager, assets, worldWidth, worldHeight, enemy, scoreManager), 2.5f);
             }
         }
@@ -275,6 +315,59 @@ public class CollisionManager {
         }
 
         audio.playThunderboltHyperExplosion();
+    }
+
+    // How long (seconds) a paired enemy that's crossed zero first keeps waiting, mid-death, for
+    // its partner to also cross zero - see resolvePairedEnemyDeaths().
+    private static final float PAIR_GRACE_WINDOW = 0.35f;
+
+    /** Finalizes or reverses every paired enemy's death - see EnemyDefinition.pairId. Must run
+     *  once per update(), after every other collision check above has applied this frame's damage
+     *  to every enemy (checkBulletEnemyCollisions and the rest all defer a paired enemy's
+     *  destroyEnemy() call rather than firing it inline, precisely so this can see the whole
+     *  frame's damage before deciding). For each paired enemy that's crossed zero (isDying(), not
+     *  yet isPairResolved()): if its partner has also crossed zero, both are genuine kills -
+     *  finalize them with the normal destroyEnemy() score/explosion/drop path, exactly once each
+     *  (markPairResolved() stops a later frame, while the death animation is still playing out,
+     *  from re-triggering this). Otherwise the first one to die holds in place - still isDying(),
+     *  not yet revived - for up to PAIR_GRACE_WINDOW seconds, giving the partner a real window to
+     *  follow it down rather than requiring a single-frame-perfect hit; only once that window
+     *  elapses without the partner also dying are both revived to full health, so a
+     *  half-simultaneous attempt can't chip away one side of the pair while leaving the other
+     *  untouched. */
+    public void resolvePairedEnemyDeaths(Array<Enemy> enemies, AudioManager audio, EntityManager entityManager, AssetManager assets, float worldWidth, float worldHeight, ScoreManager scoreManager, float delta) {
+        for (int i = 0; i < enemies.size; i++) {
+            Enemy enemy = enemies.get(i);
+            String pairId = enemy.getPairId();
+            if (pairId == null || !enemy.isDying() || enemy.isPairResolved()) continue;
+
+            Enemy partner = findPairPartner(enemies, enemy, pairId);
+            if (partner != null && partner.isDying()) {
+                enemy.markPairResolved();
+                partner.markPairResolved();
+                scoreManager.addScore(GameController.destroyEnemy(audio, entityManager, assets, worldWidth, worldHeight, enemy, scoreManager), 1f);
+                scoreManager.addScore(GameController.destroyEnemy(audio, entityManager, assets, worldWidth, worldHeight, partner, scoreManager), 1f);
+                continue;
+            }
+
+            float graceRemaining = enemy.getPairGraceTimer();
+            if (graceRemaining < 0f) {
+                enemy.setPairGraceTimer(PAIR_GRACE_WINDOW);
+            } else if (graceRemaining - delta <= 0f) {
+                enemy.reviveFully();
+                if (partner != null) partner.reviveFully();
+            } else {
+                enemy.setPairGraceTimer(graceRemaining - delta);
+            }
+        }
+    }
+
+    private static Enemy findPairPartner(Array<Enemy> enemies, Enemy self, String pairId) {
+        for (int i = 0; i < enemies.size; i++) {
+            Enemy other = enemies.get(i);
+            if (other != self && pairId.equals(other.getPairId())) return other;
+        }
+        return null;
     }
 
     /** Spawns this bullet's impact animation (see WeaponDefinition.hitTexture) at the bullet's
@@ -293,6 +386,47 @@ public class CollisionManager {
         float rotation = bullet.getRotation();
         if (rotation == 0f) return aabb.overlaps(bullet.getRectangle());
         return overlapsRotated(aabb, bullet.getRectangle(), bullet.getRotationPivotX(), bullet.getRotationPivotY(), rotation);
+    }
+
+    /** Same hitbox math as overlaps(Circle, EnemyBullet) above (scale/offset/hitRadius/rotation),
+     *  just tested against an axis-aligned enemy rectangle instead of the player's circular one. */
+    private boolean overlaps(Rectangle aabb, EnemyBullet bullet) {
+        Rectangle rect = bullet.getRectangle();
+        float rotation = bullet.getRotation();
+
+        float offsetX = bullet.getHitboxOffsetX();
+        float offsetY = bullet.getHitboxOffsetY();
+        float cosR = MathUtils.cosDeg(rotation);
+        float sinR = MathUtils.sinDeg(rotation);
+        float worldOffsetX = offsetX * cosR - offsetY * sinR;
+        float worldOffsetY = offsetX * sinR + offsetY * cosR;
+
+        float scale = bullet.getHitboxScale();
+        float effWidth = rect.width * scale;
+        float effHeight = rect.height * scale;
+        float effX = rect.x + (rect.width - effWidth) / 2f + worldOffsetX;
+        float effY = rect.y + (rect.height - effHeight) / 2f + worldOffsetY;
+
+        float hitRadius = bullet.getHitRadius();
+        if (hitRadius >= 0f) {
+            float cx = effX + effWidth / 2f;
+            float cy = effY + effHeight / 2f;
+            float closestX = MathUtils.clamp(cx, aabb.x, aabb.x + aabb.width);
+            float closestY = MathUtils.clamp(cy, aabb.y, aabb.y + aabb.height);
+            float dx = cx - closestX;
+            float dy = cy - closestY;
+            float r = hitRadius * scale;
+            return dx * dx + dy * dy <= r * r;
+        }
+
+        if (rotation == 0f) {
+            scratchHitbox.set(effX, effY, effWidth, effHeight);
+            return aabb.overlaps(scratchHitbox);
+        }
+
+        float pivotX = bullet.getRotationPivotX() + worldOffsetX;
+        float pivotY = bullet.getRotationPivotY() + worldOffsetY;
+        return overlapsRotated(aabb, new Rectangle(effX, effY, effWidth, effHeight), pivotX, pivotY, rotation);
     }
 
     private static boolean overlapsRotated(Rectangle aabb, Rectangle local, float pivotX, float pivotY, float rotationDeg) {

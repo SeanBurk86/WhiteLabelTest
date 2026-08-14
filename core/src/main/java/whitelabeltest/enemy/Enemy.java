@@ -24,6 +24,44 @@ public interface Enemy extends Pool.Poolable {
     // Defiant enemies take no damage until they've fired at least once - see
     // BaseEnemy.takeDamage()/hasFiredOnce.
     default boolean isDefiant() { return false; }
+    // Whether another enemy's bullets can damage (and be consumed by) this enemy - see
+    // CollisionManager.checkEnemyBulletEnemyCollisions. False by default so stray enemy bullets
+    // passing near an unrelated enemy (e.g. several stationary tutorial emitters sharing one spawn
+    // point) don't get silently eaten; only enemies meant to be a bullet-streaming drill's target
+    // (e.g. PowerCarrier) opt in.
+    default boolean isDamageableByEnemyBullets() { return false; }
+    // Whether UIManager.drawEnemyHealthBars() draws a health meter above this enemy during normal
+    // play (not the debug-only drawEnemyHealthDebug, which shows every enemy regardless of this
+    // flag) - e.g. the tutorial's bullet-streaming targets, whose regenerating health needs to be
+    // visible so the player can tell their stream is actually landing.
+    default boolean showsHealthBar() { return false; }
+    // Whether a screen-wide homing scan (see ThunderboltWeapon.spawn's nearest-enemy selection)
+    // is allowed to pick this enemy as a target. True by default; a purely decorative/utility
+    // enemy that's only ever a bullet source (e.g. the tutorial's stationary wall/stream
+    // emitters) opts out so it can sit active on screen without stealing a homing bolt meant for
+    // a real target.
+    default boolean isTargetableByHoming() { return true; }
+    // See EnemyDefinition.pairId/CollisionManager.resolvePairedEnemyDeaths() - null (the default)
+    // means this enemy dies normally, independent of any other enemy. Two active enemies sharing
+    // the same non-null pairId must both cross zero health within PAIR_GRACE_WINDOW of each other
+    // to actually die; whichever does so without its partner following in time regenerates instead
+    // - see reviveFully()/getPairGraceTimer().
+    default String getPairId() { return null; }
+    // Reverses a just-started death for a paired enemy whose partner didn't also cross zero within
+    // the grace window - restores full health and returns to ACTIVE as if it had never taken the
+    // lethal hit. No-op for a non-paired enemy (the default death flow never calls this on one).
+    default void reviveFully() {}
+    // Guards CollisionManager.resolvePairedEnemyDeaths() against reprocessing a paired enemy on a
+    // later frame while it's still playing out an already-finalized death (its death animation
+    // takes a few frames, during which it's still isDying()==true and would otherwise look like a
+    // fresh, unresolved pair death again). Reset on pool reuse.
+    default boolean isPairResolved() { return false; }
+    default void markPairResolved() {}
+    // How much longer (seconds) a paired enemy that's crossed zero keeps waiting, mid-death, for
+    // its partner to also cross zero - see CollisionManager.resolvePairedEnemyDeaths(). Negative
+    // means it isn't currently in that wait. Reset on pool reuse/revive.
+    default float getPairGraceTimer() { return -1f; }
+    default void setPairGraceTimer(float secondsRemaining) {}
     // See EnemyDefinition.bulletCancel - GameController.destroyEnemy checks this to decide
     // whether to also clear out this enemy's in-flight bullets when it dies.
     default boolean cancelsBulletsOnDeath() { return false; }
@@ -35,6 +73,17 @@ public interface Enemy extends Pool.Poolable {
     // and FiringPattern.advance()/SequencedFiringPattern.advance() for the actual step logic. A
     // no-op default since only BaseEnemy (with a FiringPattern to forward to) does anything with it.
     default void advanceFiringPattern() {}
+
+    // Permanently stops this enemy from firing (it stays alive/on-screen otherwise) - see
+    // SpawnScheduler.SpawnEvent.silence, which uses this to shut off a scripted enemy the instant
+    // its drill actually finishes (e.g. the tutorial's bullet-streaming emitter, whose firing
+    // pattern has no fixed duration of its own - see TutorialStreamShot - so it must be told to
+    // stop rather than just running out a timer).
+    default void silenceFiring() {}
+    // This enemy's EnemyDefinition id (e.g. "TutorialStreamEmitter"), or null if it wasn't built
+    // from one - see SpawnScheduler.SpawnEvent.silence, which matches on this to find which live
+    // enemy/enemies a silence event applies to.
+    default String getDefinitionId() { return null; }
 
 
     default int getHealth() { return 0; }

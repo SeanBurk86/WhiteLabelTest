@@ -52,6 +52,14 @@ public class FiringPatternDef implements Json.Serializable {
     public float length = -1f;
     public float angularSpeed = 0f;
     public float fireAngle = Float.NaN;
+    // QuarterCircle's optional fixed aim override - see QuarterCircleFiring.fixedAimAngleDeg. A
+    // separate field from fireAngle (Laser's own fixed angle) rather than reusing it: this data
+    // file is machine-exported by an editor that dumps every field on every pattern regardless of
+    // whether that pattern type reads it, so countless existing QuarterCircle entries already carry
+    // a harmless-until-now "fireAngle": 0 left over from that dump - wiring QuarterCircle to read
+    // fireAngle would have silently switched every one of them from tracking the player to firing
+    // fixed at 0 degrees.
+    public float quarterCircleFixedAngle = Float.NaN;
     public float targetX = Float.NaN;
     public float targetY = Float.NaN;
     public float targetOffsetX = 0f;
@@ -66,6 +74,36 @@ public class FiringPatternDef implements Json.Serializable {
     // OrbitingFiring.DEFAULT_ORBIT_RADIUS/DEFAULT_ORBIT_SPEED (radians/second).
     public float orbitRadius = -1f;
     public float orbitSpeed = -1f;
+    // Wall's full-width bullet curtain - see WallFiring. wallMarginX/wallSpacing lay bullets out in
+    // world-space X (not relative to the firing enemy); gapLaneStart/gapLaneCount carve the hole
+    // out of that curtain by lane INDEX rather than a raw X-distance window, so the gap is always
+    // exactly gapLaneCount lanes wide no matter what gapLaneStart is set to.
+    public float wallMarginX = -1f;
+    public float wallSpacing = -1f;
+    public int gapLaneStart = -1;
+    public int gapLaneCount = -1;
+    // Optional - one Wall volley per entry, fireRate seconds apart, each entry becoming that
+    // volley's gapLaneStart. Null/absent keeps Wall's original single-volley behavior. See
+    // WallFiring's class doc for why this is how a smoothly weaving, vertically dense column of
+    // walls is built instead of authoring several near-duplicate patterns/spawn events.
+    public int[] gapLaneSequence;
+    // RadialNearMiss's "surround but don't touch" volleys - see RadialNearMissFiring. numBullets is
+    // per volley, fireRate is seconds between volleys, volleyCount caps how many volleys fire
+    // before the pattern goes idle. Each bullet spawns projected onto the play area's edge (using
+    // the worldWidth/worldHeight PatternFactory.createFiring is called with, not a config field
+    // here) so it never spawns already past AimedEnemyBullet's own off-screen cull bounds.
+    // nearMissDistance is how far each bullet's straight path passes from the player's hitbox -
+    // larger than the hitbox radius but small enough to still read as "just barely missed" against
+    // the player's much bigger sprite.
+    public float nearMissDistance = -1f;
+    public int volleyCount = -1;
+    // BurstAimed's idle-vs-burst phase - see BurstAimedFiring's phaseOffset constructor param. 0
+    // (the default) is the original single-emitter behavior; two BurstAimed patterns fired from
+    // side-by-side emitters can set this to land in opposite phase instead of bursting in lockstep.
+    public float phaseOffset = 0f;
+    // BurstAimed's seconds-between-shots-within-a-burst - see BurstAimedFiring's burstInterval
+    // constructor param. -1 (the default) falls back to BurstAimedFiring's own 0.15s default.
+    public float burstInterval = -1f;
     public Array<FiringPatternDef> patterns;
 
     public FiringPatternDef() {}
@@ -102,6 +140,7 @@ public class FiringPatternDef implements Json.Serializable {
         if (length > 0) json.writeValue("length", length);
         if (angularSpeed != 0f) json.writeValue("angularSpeed", angularSpeed);
         if (!Float.isNaN(fireAngle)) json.writeValue("fireAngle", fireAngle);
+        if (!Float.isNaN(quarterCircleFixedAngle)) json.writeValue("quarterCircleFixedAngle", quarterCircleFixedAngle);
         if (!Float.isNaN(targetX)) json.writeValue("targetX", targetX);
         if (!Float.isNaN(targetY)) json.writeValue("targetY", targetY);
         if (targetOffsetX != 0f) json.writeValue("targetOffsetX", targetOffsetX);
@@ -113,6 +152,15 @@ public class FiringPatternDef implements Json.Serializable {
         if (frequency > 0) json.writeValue("frequency", frequency);
         if (orbitRadius > 0) json.writeValue("orbitRadius", orbitRadius);
         if (orbitSpeed > 0) json.writeValue("orbitSpeed", orbitSpeed);
+        if (wallMarginX > 0) json.writeValue("wallMarginX", wallMarginX);
+        if (wallSpacing > 0) json.writeValue("wallSpacing", wallSpacing);
+        if (gapLaneStart >= 0) json.writeValue("gapLaneStart", gapLaneStart);
+        if (gapLaneCount >= 0) json.writeValue("gapLaneCount", gapLaneCount);
+        if (gapLaneSequence != null && gapLaneSequence.length > 0) json.writeValue("gapLaneSequence", gapLaneSequence);
+        if (nearMissDistance > 0) json.writeValue("nearMissDistance", nearMissDistance);
+        if (volleyCount >= 0) json.writeValue("volleyCount", volleyCount);
+        if (phaseOffset != 0f) json.writeValue("phaseOffset", phaseOffset);
+        if (burstInterval > 0) json.writeValue("burstInterval", burstInterval);
         if (patterns != null) json.writeValue("patterns", patterns, Array.class, FiringPatternDef.class);
     }
 
@@ -156,6 +204,7 @@ public class FiringPatternDef implements Json.Serializable {
         length = data.getFloat("length", -1f);
         angularSpeed = data.getFloat("angularSpeed", 0f);
         fireAngle = data.getFloat("fireAngle", Float.NaN);
+        quarterCircleFixedAngle = data.getFloat("quarterCircleFixedAngle", Float.NaN);
         targetX = data.getFloat("targetX", Float.NaN);
         targetY = data.getFloat("targetY", Float.NaN);
         targetOffsetX = data.getFloat("targetOffsetX", 0f);
@@ -167,6 +216,24 @@ public class FiringPatternDef implements Json.Serializable {
         frequency = data.getFloat("frequency", -1f);
         orbitRadius = data.getFloat("orbitRadius", -1f);
         orbitSpeed = data.getFloat("orbitSpeed", -1f);
+        wallMarginX = data.getFloat("wallMarginX", -1f);
+        wallSpacing = data.getFloat("wallSpacing", -1f);
+        gapLaneStart = data.getInt("gapLaneStart", -1);
+        gapLaneCount = data.getInt("gapLaneCount", -1);
+        JsonValue gapSequenceData = data.get("gapLaneSequence");
+        if (gapSequenceData != null) {
+            gapLaneSequence = new int[gapSequenceData.size];
+            int idx = 0;
+            for (JsonValue child = gapSequenceData.child; child != null; child = child.next) {
+                gapLaneSequence[idx++] = child.asInt();
+            }
+        } else {
+            gapLaneSequence = null;
+        }
+        nearMissDistance = data.getFloat("nearMissDistance", -1f);
+        volleyCount = data.getInt("volleyCount", -1);
+        phaseOffset = data.getFloat("phaseOffset", 0f);
+        burstInterval = data.getFloat("burstInterval", -1f);
         JsonValue patternsData = data.get("patterns");
         if (patternsData != null) {
             patterns = new Array<>();

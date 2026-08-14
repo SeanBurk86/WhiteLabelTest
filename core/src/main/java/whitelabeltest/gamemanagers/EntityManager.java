@@ -96,12 +96,12 @@ public class EntityManager {
         scheduledSprites.add(effect);
     }
 
-    public void update(float delta, InputManager input, AssetManager assets, AudioManager audio) {
+    public void update(float delta, InputManager input, AssetManager assets, AudioManager audio, boolean weaponsDisabled, boolean hyperAttackDisabled) {
         if (bombActive) {
             bombAnimationTime += delta;
             if (bombAnimation.isAnimationFinished(bombAnimationTime)) bombActive = false;
         }
-        player.update(delta, input, assets, audio, bullets, enemies);
+        player.update(delta, input, assets, audio, bullets, enemies, weaponsDisabled, hyperAttackDisabled);
         updateTrail(delta, input);
 
         updateCollections(delta, assets, input);

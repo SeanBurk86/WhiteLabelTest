@@ -37,23 +37,33 @@ public class ScrollingBackground {
     private final float worldWidth;
     private final float worldHeight;
     private final String bossVideoFile;
+    // A stage-long looping video used AS the background from the moment the stage loads (unlike
+    // bossVideoFile, which only cuts in later, on a spawn-schedule cue - see triggerBossVideo()) -
+    // see StageDefinition.backgroundVideo/GameController.loadStage(). Stages that use this
+    // typically have no (or few) backgroundLayers, since the video fully covers the screen.
+    private final String backgroundVideoFile;
     private boolean stopped;
     private boolean muted;
 
     private VideoPlayer bossVideoPlayer;
     private boolean bossVideoStarted;
+    private VideoPlayer backgroundVideoPlayer;
+    private boolean backgroundVideoStarted;
 
     public ScrollingBackground(float worldWidth, float worldHeight, AudioSettings audioSettings, AssetManager assets,
-                                Array<StageDefinition.BackgroundLayerDef> layerDefs, String bossVideoFile) {
+                                Array<StageDefinition.BackgroundLayerDef> layerDefs, String bossVideoFile, String backgroundVideoFile) {
         this.worldWidth = worldWidth;
         this.worldHeight = worldHeight;
         this.audioSettings = audioSettings;
         this.bossVideoFile = bossVideoFile;
+        this.backgroundVideoFile = backgroundVideoFile;
         for (StageDefinition.BackgroundLayerDef layerDef : layerDefs) {
             Texture texture = assets.ensureTexture(layerDef.texture);
             float scrollSpeed = Float.isNaN(layerDef.scrollSpeed) ? DEFAULT_SCROLL_SPEED : layerDef.scrollSpeed;
             layers.add(new Layer(texture, worldWidth, worldHeight, scrollSpeed));
         }
+        backgroundVideoPlayer = startVideo(backgroundVideoFile);
+        backgroundVideoStarted = backgroundVideoPlayer != null;
     }
 
     public void setMuted(boolean muted) {
@@ -61,11 +71,16 @@ public class ScrollingBackground {
         if (bossVideoPlayer != null) {
             bossVideoPlayer.setVolume(muted ? 0f : audioSettings.getEffectiveMusicVolume());
         }
+        if (backgroundVideoPlayer != null) {
+            backgroundVideoPlayer.setVolume(muted ? 0f : audioSettings.getEffectiveMusicVolume());
+        }
     }
 
     /** Stops the background scroll (e.g. on game over) until reset() restarts it. Also cuts the
      *  boss video's own audio if it was playing, so nothing competes with the victory/game-over
-     *  theme that plays next - see AudioManager.playVictory()/playGameOver(). */
+     *  theme that plays next - see AudioManager.playVictory()/playGameOver(). Deliberately leaves
+     *  backgroundVideoFile's video alone - it's the stage's background, not a temporary crossfade,
+     *  so (like a static Layer) it just keeps looping quietly underneath the game-over overlay. */
     public void stop() {
         stopped = true;
         if (bossVideoStarted) {
@@ -85,6 +100,9 @@ public class ScrollingBackground {
         if (bossVideoStarted) {
             bossVideoPlayer.update();
         }
+        if (backgroundVideoStarted) {
+            backgroundVideoPlayer.update();
+        }
     }
 
     /** Freezes a layer's scrollY once its top edge reaches the top of the viewport, instead of scrolling past it. */
@@ -100,35 +118,51 @@ public class ScrollingBackground {
      *  this stage has no boss video. Ignored if the video is already playing. */
     public void triggerBossVideo() {
         if (bossVideoStarted || bossVideoFile == null) return;
-        bossVideoPlayer = VideoPlayerCreator.createVideoPlayer();
-        bossVideoPlayer.setLooping(true);
+        bossVideoPlayer = startVideo(bossVideoFile);
+        bossVideoStarted = bossVideoPlayer != null;
+    }
+
+    /** Loads and starts file looping (with this instance's current mute state), or returns null
+     *  (logging the failure) if it can't be opened - shared by both bossVideoFile (triggered later,
+     *  on a schedule cue) and backgroundVideoFile (started immediately, in the constructor). null
+     *  file is a plain no-op, no error logged: most stages have neither. */
+    private VideoPlayer startVideo(String file) {
+        if (file == null) return null;
+        VideoPlayer player = VideoPlayerCreator.createVideoPlayer();
+        player.setLooping(true);
         try {
-            bossVideoPlayer.load(Gdx.files.internal(bossVideoFile));
-            bossVideoPlayer.setVolume(muted ? 0f : audioSettings.getEffectiveMusicVolume());
-            bossVideoPlayer.play();
-            bossVideoStarted = true;
+            player.load(Gdx.files.internal(file));
+            player.setVolume(muted ? 0f : audioSettings.getEffectiveMusicVolume());
+            player.play();
+            return player;
         } catch (FileNotFoundException e) {
-            Gdx.app.error("ScrollingBackground", "Could not open " + bossVideoFile, e);
+            Gdx.app.error("ScrollingBackground", "Could not open " + file, e);
+            player.dispose();
+            return null;
         }
     }
 
     public void draw(SpriteBatch batch) {
-        if (bossVideoStarted) {
-            Texture frame = bossVideoPlayer.getTexture();
-            if (frame != null) {
-                // gdx-video pads its decode buffer to the right (frame.getWidth() can exceed the
-                // real video width), so drawing the whole texture stretches that padding across
-                // the screen too, squeezing the actual picture a couple pixels narrower than it
-                // should be. Only the real video region maps onto the full screen quad.
-                batch.draw(frame, 0, 0, worldWidth, worldHeight,
-                    0, 0, bossVideoPlayer.getVideoWidth(), bossVideoPlayer.getVideoHeight(), false, false);
-                return;
-            }
-        }
+        if (bossVideoStarted && drawVideoFrame(batch, bossVideoPlayer)) return;
+        if (backgroundVideoStarted && drawVideoFrame(batch, backgroundVideoPlayer)) return;
         // Back-to-front: declaration order in the stage's backgroundLayers is far-to-near.
         for (Layer layer : layers) {
             batch.draw(layer.texture, 0, layer.scrollY, worldWidth, layer.drawHeight);
         }
+    }
+
+    /** Draws player's current decoded frame full-screen and returns true, or returns false (drawing
+     *  nothing) if no frame has been decoded yet - callers fall through to whatever's behind the
+     *  video (another video, or the ordinary Layer stack) for those first few frames. */
+    private boolean drawVideoFrame(SpriteBatch batch, VideoPlayer player) {
+        Texture frame = player.getTexture();
+        if (frame == null) return false;
+        // gdx-video pads its decode buffer to the right (frame.getWidth() can exceed the real video
+        // width), so drawing the whole texture stretches that padding across the screen too,
+        // squeezing the actual picture a couple pixels narrower than it should be. Only the real
+        // video region maps onto the full screen quad.
+        batch.draw(frame, 0, 0, worldWidth, worldHeight, 0, 0, player.getVideoWidth(), player.getVideoHeight(), false, false);
+        return true;
     }
 
     public void reset() {
@@ -142,6 +176,11 @@ public class ScrollingBackground {
             bossVideoPlayer.dispose();
             bossVideoPlayer = null;
         }
+        if (backgroundVideoPlayer != null) {
+            backgroundVideoPlayer.dispose();
+        }
+        backgroundVideoPlayer = startVideo(backgroundVideoFile);
+        backgroundVideoStarted = backgroundVideoPlayer != null;
     }
 
     /** Jumps the scroll position to where it would be after scrolling for elapsedTime seconds from reset(). */
@@ -157,11 +196,21 @@ public class ScrollingBackground {
             bossVideoPlayer.dispose();
             bossVideoPlayer = null;
         }
+        // gdx-video has no seek API, so a debug/replay jump to elapsedTime can't fast-forward the
+        // background video to match - it just restarts from the top, same as reset().
+        if (backgroundVideoPlayer != null) {
+            backgroundVideoPlayer.dispose();
+        }
+        backgroundVideoPlayer = startVideo(backgroundVideoFile);
+        backgroundVideoStarted = backgroundVideoPlayer != null;
     }
 
     public void dispose() {
         if (bossVideoPlayer != null) {
             bossVideoPlayer.dispose();
+        }
+        if (backgroundVideoPlayer != null) {
+            backgroundVideoPlayer.dispose();
         }
     }
 }

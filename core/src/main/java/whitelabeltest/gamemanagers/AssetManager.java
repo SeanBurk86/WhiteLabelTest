@@ -130,6 +130,19 @@ public class AssetManager implements Disposable {
         };
         pointGemTexture = new Texture("images/pickups/PointGem.png");
 
+        // Stage spawn schedules can reference arbitrary textures via spriteCues (see
+        // SpawnScheduler.spawnSpriteCue), which - unlike every enemy/bullet/explosion texture
+        // above - aren't known here, so they'd otherwise only get loaded the first time a schedule
+        // actually needs them, mid-gameplay. loadTexture() is a synchronous decode + GPU upload
+        // (new Texture(path)), so hitting that cold makes for a real, visible frame-rate stutter
+        // the instant the cue fires. WarningSign.png (the tutorial's warning-sign sprite cue) is
+        // especially bad here - its source art is a 4860x1400 sheet (~27MB decoded) despite only
+        // ever being drawn at 2 world units on screen - so it's preloaded eagerly here instead,
+        // during startup loading where a hitch isn't noticeable. If a future stage's spriteCues
+        // reference a new texture, preload it here too, or (better) shrink WarningSign.png itself -
+        // this only hides the load-time cost, not the wasted decode/GPU-memory overhead.
+        loadTexture("images/ui/WarningSign.png");
+
         Pixmap pixmap = new Pixmap(1, 1, Pixmap.Format.RGBA8888);
         pixmap.setColor(Color.YELLOW);
         pixmap.fill();

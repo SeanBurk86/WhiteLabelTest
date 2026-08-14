@@ -80,7 +80,11 @@ public class Main extends ApplicationAdapter {
             InputType detected = startScreen.update(delta);
             drawStartScreen();
             if (detected != null) {
-                transitionToWeaponSelect(detected);
+                if (startScreen.isTutorialSelected()) {
+                    transitionToTutorial(detected);
+                } else {
+                    transitionToWeaponSelect(detected);
+                }
             } else if (startScreen.consumeOptionsRequested()) {
                 transitionToOptions();
             } else if (startScreen.consumeReplaysRequested()) {
@@ -127,6 +131,11 @@ public class Main extends ApplicationAdapter {
                 if (!game.isReplaying() || backPressed) {
                     transitionToStartFromReplayWatch();
                 }
+            } else if (game.isScheduleEndTriggered()) {
+                // See SpawnScheduler.scheduleEndTime - only ever true for a schedule that has no
+                // boss to drive the normal levelComplete flow (the tutorial), so this is a no-op for
+                // every ordinary arcade run.
+                transitionToStartFromTutorial();
             }
         }
     }
@@ -145,6 +154,21 @@ public class Main extends ApplicationAdapter {
         weaponSelectScreen.dispose();
         weaponSelectScreen = null;
         game = new GameController(PLAY_AREA_WIDTH, PLAY_AREA_HEIGHT, keyBindings, audioSettings, loadout);
+        game.setActiveInput(inputType);
+        ui = new UIManager(inputType);
+        state = AppState.PLAYING;
+    }
+
+    /** TUTORIAL skips WeaponSelectScreen entirely - the WeaponLoadout passed to the constructor
+     *  here is just a placeholder (same pattern as transitionToReplayWatch()'s), immediately
+     *  overridden by reset()'s applyStartingLoadout() once it resolves the "tutorial" stage
+     *  sequence's StartingLoadoutDefinition (assets/data/stage_sequences.json). */
+    private void transitionToTutorial(InputType inputType) {
+        startScreenConfirmSound = startScreen.getConfirmSound();
+        startScreen.dispose();
+        startScreen = null;
+        game = new GameController(PLAY_AREA_WIDTH, PLAY_AREA_HEIGHT, keyBindings, audioSettings,
+            WeaponLoadout.BASIC_THUNDERBOLT, GameController.TUTORIAL_STAGE_SEQUENCE_ID);
         game.setActiveInput(inputType);
         ui = new UIManager(inputType);
         state = AppState.PLAYING;
@@ -224,6 +248,21 @@ public class Main extends ApplicationAdapter {
         state = AppState.START;
     }
 
+    /** Returns to the start screen once the tutorial's own schedule reaches its scripted end (see
+     *  GameController.isScheduleEndTriggered()) - the tutorial has no boss, so it never reaches the
+     *  normal levelComplete flow other stages use to advance/restart; this is its equivalent. Mirrors
+     *  transitionToStartFromReplayWatch() exactly, just triggered by a different condition. */
+    private void transitionToStartFromTutorial() {
+        game.dispose();
+        game = null;
+        if (ui != null) {
+            ui.dispose();
+            ui = null;
+        }
+        startScreen = new StartScreen(PLAY_AREA_WIDTH, PLAY_AREA_HEIGHT, audioSettings);
+        state = AppState.START;
+    }
+
     private void drawStartScreen() {
         ScreenUtils.clear(Color.BLACK);
         viewport.apply();
@@ -283,6 +322,8 @@ public class Main extends ApplicationAdapter {
 
         game.draw(spriteBatch);
 
+        ui.drawEnemyHealthBars(spriteBatch, game.getEntities().getEnemies());
+
         if (game.isDebugMode()) {
             ui.drawEnemyHealthDebug(spriteBatch, game.getEntities().getEnemies());
         }
@@ -292,7 +333,7 @@ public class Main extends ApplicationAdapter {
 
         ui.drawHUD(spriteBatch, game.getScoreManager(), game.getEntities().getPlayer(), PLAY_AREA_HEIGHT, leftX, PLAY_AREA_WIDTH, panelWidth, game.getBombCooldownTimer(), game.getBombCooldownFraction());
 
-        ui.drawTextCues(spriteBatch, game.getLevelStartTimer(), game.getTextCues());
+        ui.drawTextCues(spriteBatch, game.getSpawnScheduleRealTime(), game.getTextCues());
 
         if (isGameOver) {
             ui.drawGameOver(spriteBatch, PLAY_AREA_WIDTH, PLAY_AREA_HEIGHT, game.getGameOverTimer());

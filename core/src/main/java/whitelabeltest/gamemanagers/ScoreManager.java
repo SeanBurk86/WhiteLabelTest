@@ -19,6 +19,10 @@ public class ScoreManager {
     // Highest chainCount reached this run, tracked alongside it in addScore() - see
     // UIManager.drawLevelComplete's "PEAK CHAIN" row.
     private int maxChainCount;
+    // Total point gems collected this run - see CollisionManager.checkPlayerGemCollisions()
+    // (the only call site) and SpawnScheduler's "gemsCollected" gate condition, which is the
+    // reason this is tracked at all (nothing else currently reads it).
+    private int gemsCollected;
 
     public ScoreManager(float defaultChainWindow) {
         this.defaultChainWindow = defaultChainWindow;
@@ -76,6 +80,10 @@ public class ScoreManager {
         enemiesDestroyed++;
     }
 
+    public void registerGemCollected() {
+        gemsCollected++;
+    }
+
     public void reset() {
         score = 0;
         chainCount = 0;
@@ -84,6 +92,7 @@ public class ScoreManager {
         currentChainWindow = defaultChainWindow;
         enemiesDestroyed = 0;
         maxChainCount = 0;
+        gemsCollected = 0;
     }
 
     public int getScore() { return score; }
@@ -92,4 +101,5 @@ public class ScoreManager {
     public float getChainTimerFraction() { return currentChainWindow > 0 ? chainTimer / currentChainWindow : 0; }
     public int getEnemiesDestroyed() { return enemiesDestroyed; }
     public int getMaxChainCount() { return maxChainCount; }
+    public int getGemsCollected() { return gemsCollected; }
 }

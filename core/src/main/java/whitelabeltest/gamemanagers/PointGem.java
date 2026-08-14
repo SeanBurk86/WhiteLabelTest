@@ -40,14 +40,30 @@ public class PointGem implements Pool.Poolable {
     private float homingSpeed;
     private float rotation;
     private float worldWidth, worldHeight;
+    // True for a gem placed by SpawnScheduler.spawnWaypointGem() as a fixed navigation target (e.g.
+    // the bullet-restreaming drill's markers) rather than dropped by a dying enemy - see update().
+    // Skips the pop/gravity/homing entirely so it just sits at its spawn point, waiting to be flown
+    // into, instead of drifting off wherever gravity and the player's position happen to take it.
+    private boolean stationary;
 
     public void init(Animation<TextureRegion> animation, float x, float y, float worldWidth, float worldHeight) {
+        init(animation, x, y, worldWidth, worldHeight, false);
+    }
+
+    public void init(Animation<TextureRegion> animation, float x, float y, float worldWidth, float worldHeight, boolean stationary) {
         this.animation = animation;
         this.stateTime = 0f;
         this.worldWidth = worldWidth;
         this.worldHeight = worldHeight;
+        this.stationary = stationary;
         rectangle.set(x - SIZE / 2f, y - SIZE / 2f, SIZE, SIZE);
         rotation = MathUtils.random(0f, 360f);
+
+        if (stationary) {
+            vx = 0f;
+            vy = 0f;
+            return;
+        }
 
         // Mostly-upward pop with some horizontal spread, rather than a perfectly random direction.
         float angle = MathUtils.random(20f, 160f);
@@ -58,6 +74,7 @@ public class PointGem implements Pool.Poolable {
 
     public void update(float delta, boolean playerFiring, Circle grazeHitbox) {
         stateTime += delta;
+        if (stationary) return;
 
         if (!playerFiring && grazeHitbox.radius > 0f) {
             float centerX = rectangle.x + rectangle.width / 2f;
@@ -118,5 +135,6 @@ public class PointGem implements Pool.Poolable {
         homingSpeed = 0f;
         rotation = 0f;
         stateTime = 0f;
+        stationary = false;
     }
 }

@@ -25,13 +25,14 @@ public class StartScreen implements Disposable {
     private enum Phase { SELECTING, MENU, FADING, DONE }
 
     private static final float FADE_DURATION = 0.7f;
-    // Played the instant ARCADE MODE is confirmed (see updateMenu()) - pentest.mp3, previously
-    // played here at the end of the fade, now plays instead when the weapon loadout is confirmed
-    // on WeaponSelectScreen (see WeaponSelectScreen.CONFIRM_SOUND).
+    // Played the instant ARCADE MODE or TUTORIAL is confirmed (see updateMenu()) - pentest.mp3,
+    // previously played here at the end of the fade, now plays instead when the weapon loadout is
+    // confirmed on WeaponSelectScreen (see WeaponSelectScreen.CONFIRM_SOUND).
     private static final String ARCADE_CONFIRM_SOUND = "audio/menu/arcadeselectsoundmenu.mp3";
     private static final String MENU_SELECT_SOUND = "audio/menu/selectsoundmenu.mp3";
-    // Played when OPTIONS is confirmed instead - the same generic confirm cue OptionsScreen's own
-    // menu uses internally, since ARCADE_CONFIRM_SOUND is specifically an arcade-mode-start cue.
+    // Played when OPTIONS/REPLAYS is confirmed instead - the same generic confirm cue
+    // OptionsScreen's own menu uses internally, since ARCADE_CONFIRM_SOUND is specifically a
+    // run-start cue (see MENU_ARCADE_MODE/MENU_TUTORIAL).
     private static final String OPTIONS_CONFIRM_SOUND = "audio/menu/confirmsoundmenu.mp3";
 
     // Looping background music for this screen, faded in from silence over MUSIC_FADE_IN_DURATION
@@ -51,10 +52,11 @@ public class StartScreen implements Disposable {
     // WeaponSelectScreen, which follows right after this). Index 0 starts the run as before;
     // index 1 signals Main to open OptionsScreen (see consumeOptionsRequested()) without leaving
     // this phase, so the menu is still showing when Options closes.
-    private static final String[] MENU_ITEMS = { "ARCADE MODE", "REPLAYS", "OPTIONS" };
+    private static final String[] MENU_ITEMS = { "ARCADE MODE", "TUTORIAL", "REPLAYS", "OPTIONS" };
     private static final int MENU_ARCADE_MODE = 0;
-    private static final int MENU_REPLAYS = 1;
-    private static final int MENU_OPTIONS = 2;
+    private static final int MENU_TUTORIAL = 1;
+    private static final int MENU_REPLAYS = 2;
+    private static final int MENU_OPTIONS = 3;
 
     /** One looping animated sign in the opening screen's stacked composition (reference mockup:
      *  Screenshot 2026-08-07 145711.png) - replaces the old single openingscreen.webm loop with
@@ -124,6 +126,11 @@ public class StartScreen implements Disposable {
     private int menuIndex;
     private boolean optionsRequested;
     private boolean replaysRequested;
+    // Set when MENU_TUTORIAL (rather than MENU_ARCADE_MODE) confirmed the FADING/DONE transition -
+    // see updateMenu()/isTutorialSelected(). Both share the same phase machine/detectedInput signal
+    // (Main.render() only learns "a run is starting" once, from update()'s return value), so this
+    // is how Main tells the two apart once it does.
+    private boolean tutorialSelected;
     private boolean prevMenuDpadUpDown, prevMenuDpadDownDown, prevMenuConfirmDown;
 
     // Kept alive after this screen is disposed (see getConfirmSound()) so the cue can keep
@@ -245,7 +252,8 @@ public class StartScreen implements Disposable {
 
         if (!confirmPressed) return;
 
-        if (menuIndex == MENU_ARCADE_MODE) {
+        if (menuIndex == MENU_ARCADE_MODE || menuIndex == MENU_TUTORIAL) {
+            tutorialSelected = menuIndex == MENU_TUTORIAL;
             confirmSound = Gdx.audio.newSound(Gdx.files.internal(ARCADE_CONFIRM_SOUND));
             confirmSound.play(audioSettings.getEffectiveSfxVolume());
             phase = Phase.FADING;
@@ -279,6 +287,13 @@ public class StartScreen implements Disposable {
         boolean requested = replaysRequested;
         replaysRequested = false;
         return requested;
+    }
+
+    /** Which run mode the just-completed FADING/DONE transition was for - see tutorialSelected.
+     *  Only meaningful once update() has returned non-null (i.e. detectedInput is set); read it
+     *  before this screen gets disposed. */
+    public boolean isTutorialSelected() {
+        return tutorialSelected;
     }
 
     public void draw(SpriteBatch batch) {
@@ -387,7 +402,8 @@ public class StartScreen implements Disposable {
 
     /** Returns the fire-and-forget arcade-confirm sound so the caller can dispose it once it's
      * safe to cut off (e.g. at app shutdown). Never disposed here, since this screen is torn down
-     * while the sound is still meant to be playing. May be null if ARCADE MODE was never
+     * while the sound is still meant to be playing. May be null if neither ARCADE MODE nor
+     * TUTORIAL was ever
      * confirmed. */
     public Sound getConfirmSound() {
         return confirmSound;

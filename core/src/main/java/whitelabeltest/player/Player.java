@@ -23,7 +23,7 @@ public class Player {
     private final Sprite sprite;
     private final Circle hitbox;
     private final Circle grazeHitbox;
-    private final float movementSpeed = 7.5f;
+    private final float movementSpeed;
     private final float worldWidth;
     private final float worldHeight;
 
@@ -164,6 +164,7 @@ public class Player {
         this.worldWidth = worldWidth;
         this.worldHeight = worldHeight;
         this.playerDef = assets.getPlayerDefinition();
+        this.movementSpeed = playerDef.movementSpeed;
 
         PlayerDefinition.SpriteDef playerSprite = playerDef.player;
         animation = AnimationCache.get(assets.playerTexture, playerSprite.columns > 0 ? playerSprite.columns : playerSprite.frameCount,
@@ -244,7 +245,7 @@ public class Player {
         WeaponDefinition thbDef = assets.getWeaponDefinition("Thunderbolt");
         thunderboltWeaponDef = thbDef;
         thunderboltWeapon = new ThunderboltWeapon();
-        thunderboltWeapon.init(thbDef, assets.pixelTexture, assets.circleTexture, new Vector2(0, 0), new Vector2(0, 1), thbDef.size, worldHeight);
+        thunderboltWeapon.initDefinition(thbDef);
 
         hitbox = new Circle();
         updateHitbox();
@@ -274,7 +275,7 @@ public class Player {
         return anim;
     }
 
-    public void update(float delta, InputManager input, AssetManager assets, AudioManager audio, Array<Weapon> bullets, Array<Enemy> enemies) {
+    public void update(float delta, InputManager input, AssetManager assets, AudioManager audio, Array<Weapon> bullets, Array<Enemy> enemies, boolean weaponsDisabled, boolean hyperAttackDisabled) {
         if (isDead) {
             deathTimer += delta;
             if (deathTimer >= DEATH_WAIT) {
@@ -299,14 +300,24 @@ public class Player {
             recallHaloOnWeaponSwitch(audio);
         }
 
+        // weaponsDisabled only withholds actually firing (this local, used below) - everything
+        // else that reads the raw isShooting() (movement's focus-fire slowdown, the orbit ring,
+        // EntityManager's gem-homing suppression, replay recording) is untouched, so a tutorial
+        // window that disables weapons doesn't have side effects on any of those - see
+        // SpawnScheduler.isWeaponsDisabled()'s doc. hyperAttackDisabled is the same idea, kept as
+        // its own separate flag (see SpawnScheduler.isHyperAttackDisabled()) since a tutorial
+        // teaches normal fire well before Hyper Attack - gating it here rather than inside
+        // handleHyperAttack() keeps that method's own "was it just pressed" contract untouched, so
+        // a press that lands while disabled is simply dropped, not buffered for later.
+        boolean canShoot = input.isShooting() && !weaponsDisabled;
         handleMovement(delta, input.getMoveDirection(), input.isShooting());
-        handleShooting(delta, input.isShooting(), assets, audio, bullets, enemies);
+        handleShooting(delta, canShoot, assets, audio, bullets, enemies);
         maintainOrbitRing(bullets, assets, audio, input.isShooting());
-        handleHyperAttack(input.isHyperAttackJustPressed(), bullets, enemies, assets, audio);
+        handleHyperAttack(input.isHyperAttackJustPressed() && !hyperAttackDisabled, bullets, enemies, assets, audio);
         updateThunderboltCharge(delta, input.isHyperAttackJustReleased(), audio);
         updateThunderboltDetonationAnim(delta, input.isHyperAttackHeld(), audio);
         updateHaloMovement(delta, audio);
-        updateHaloFiring(delta, input.isShooting(), bullets, assets, audio);
+        updateHaloFiring(delta, canShoot, bullets, assets, audio);
         updateHitbox();
         updateGrazeHitbox();
         resolveGrazePoints();
@@ -889,6 +900,7 @@ public class Player {
     public Weapon getWeaponPrototype() { return getCurrentWeapon(); }
     public int getActiveSlot() { return activeSlot; }
     public String getSlotWeaponId(int slot) { return weaponId(weaponSlots[slot]); }
+    public String getCurrentWeaponId() { return weaponId(getCurrentWeapon()); }
 
     /** A normal weapon powerup (see WeaponPowerup.apply()) levels up both currently equipped
      *  weapons at once by the same amount, instead of a single specific weapon - there's no more
@@ -983,6 +995,10 @@ public class Player {
 
     public int getNumBombs() { return numBombs;}
     public int getMaxBombs() { return maxBombs; }
+
+    // Debug/tutorial-only: raises (or lowers) the bomb cap directly, bypassing the normal "gain one
+    // permanently on death" progression - see StartingLoadoutDefinition.maxBombs.
+    public void setMaxBombs(int maxBombs) { this.maxBombs = Math.max(0, maxBombs); }
 
     public void setNumBombs(int numBombs) {
         this.numBombs = MathUtils.clamp(numBombs, 0, maxBombs);

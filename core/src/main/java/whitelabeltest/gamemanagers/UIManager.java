@@ -424,6 +424,29 @@ public class UIManager implements Disposable {
         batch.setColor(Color.WHITE);
     }
 
+    // Player-facing (not debug-only, unlike drawEnemyHealthDebug below): a small meter floating
+    // above every enemy that opts in via Enemy.showsHealthBar() - e.g. the tutorial's
+    // bullet-streaming targets, whose regenerating health isn't otherwise visible to the player
+    // deciding whether their stream is actually landing.
+    public void drawEnemyHealthBars(SpriteBatch batch, Array<Enemy> enemies) {
+        float barHeight = 0.12f;
+        for (Enemy enemy : enemies) {
+            if (!enemy.isActive() || !enemy.showsHealthBar()) continue;
+
+            int maxHealth = enemy.getMaxHealth();
+            if (maxHealth <= 0) continue;
+
+            float fraction = MathUtils.clamp(enemy.getHealth() / (float) maxHealth, 0f, 1f);
+            Rectangle r = enemy.getRectangle();
+            float barX = r.x;
+            float barY = r.y + r.height + 0.15f;
+
+            Color fillColor = fraction > 0.5f ? HUD_GREEN : (fraction > 0.25f ? Color.ORANGE : Color.RED);
+            drawMeterBar(batch, barX, barY, r.width, barHeight, fraction, fillColor);
+            drawBoxBorder(batch, barX, barY, r.width, barHeight, Color.BLACK);
+        }
+    }
+
     // Debug-only: a small meter and "current/max" text floating above each enemy's sprite.
     public void drawEnemyHealthDebug(SpriteBatch batch, Array<Enemy> enemies) {
         float barHeight = 0.08f;
@@ -935,13 +958,18 @@ public class UIManager implements Disposable {
         drawScaledCentered(batch, text, centerX, y, scale, color);
     }
 
-    public void drawTextCues(SpriteBatch batch, float elapsedTime, Array<TextCue> cues) {
+    // realTime must be SpawnScheduler's own never-frozen clock (see TextCue.triggeredAtRealTime),
+    // not its gate-freezable totalTime - otherwise a cue whose window spans an unsatisfied gate
+    // would stall its typewriter reveal for however long the player takes to clear it.
+    public void drawTextCues(SpriteBatch batch, float realTime, Array<TextCue> cues) {
         if (cues == null) return;
 
         font.setColor(Color.RED);
         for (TextCue cue : cues) {
-            if (elapsedTime < cue.time || elapsedTime >= cue.time + cue.duration) continue;
-            drawTextCue(batch, cue, elapsedTime - cue.time);
+            if (cue.triggeredAtRealTime < 0f) continue;
+            float cueElapsedTime = realTime - cue.triggeredAtRealTime;
+            if (cueElapsedTime < 0f || cueElapsedTime >= cue.duration) continue;
+            drawTextCue(batch, cue, cueElapsedTime);
         }
         font.setColor(Color.WHITE);
     }

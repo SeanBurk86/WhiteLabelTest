@@ -22,6 +22,12 @@ public class AudioManager implements Disposable {
     private final Sound gameOverSound;
     private final Sound powerupSound;
     private final Sound gemPickupSound;
+    // Plays once per TextCue the instant it becomes visible (see SpawnScheduler.update(), which
+    // edge-detects each cue's own triggeredAtRealTime the same way GameController edge-detects
+    // backgroundVideoTriggered/musicFadeOutTriggered) - a UI blip, not tied to any particular
+    // weapon/enemy, so it's preloaded here rather than going through the lazy-loaded cueSounds map
+    // below (that one's for level-scripted SoundCues, keyed by their own arbitrary asset path).
+    private final Sound textCueSound;
     // BasicWeapon's Hyper Attack (see Player.triggerBasicHyperAttack): plays once, the moment the
     // halo actually detaches from the ship to dash out - not on the re-press that starts its
     // return trip.
@@ -44,6 +50,9 @@ public class AudioManager implements Disposable {
     // sound banks below - plus a dedicated explosion sound on detonation.
     private final Sound[] thunderboltHyperLevelSounds;
     private final Sound thunderboltHyperExplosionSound;
+    // ThunderboltWeapon's main fire when it finds nothing to strike (see ThunderboltWeapon.spawn's
+    // nearest-enemy selection) - played instead of the normal per-level weapon sound bank.
+    private final Sound thunderboltNullSound;
     private final Music victoryFanfare;
     private final Music victoryLoop;
     private Music stageMusic;
@@ -71,6 +80,7 @@ public class AudioManager implements Disposable {
         gameOverSound = Gdx.audio.newSound(Gdx.files.internal("audio/sfx/gameover.mp3"));
         powerupSound = Gdx.audio.newSound(Gdx.files.internal("audio/sfx/powerup.mp3"));
         gemPickupSound = Gdx.audio.newSound(Gdx.files.internal("audio/sfx/pointgem.mp3"));
+        textCueSound = Gdx.audio.newSound(Gdx.files.internal("audio/sfx/textsound.mp3"));
         haloDetachSound = Gdx.audio.newSound(Gdx.files.internal("audio/sfx/halo_release.mp3"));
         haloBashSound = Gdx.audio.newSound(Gdx.files.internal("audio/sfx/halo_bash.mp3"));
         haloReturnSound = Gdx.audio.newSound(Gdx.files.internal("audio/sfx/halo_return.mp3"));
@@ -82,6 +92,7 @@ public class AudioManager implements Disposable {
             Gdx.audio.newSound(Gdx.files.internal("audio/sfx/thunderbolthyperlevel-003.wav"))
         };
         thunderboltHyperExplosionSound = Gdx.audio.newSound(Gdx.files.internal("audio/sfx/thunderbolthyperexplosion.wav"));
+        thunderboltNullSound = Gdx.audio.newSound(Gdx.files.internal("audio/sfx/nulllightning.mp3"));
         victoryFanfare = Gdx.audio.newMusic(Gdx.files.internal("audio/music/victoryfanfare.mp3"));
         victoryLoop = Gdx.audio.newMusic(Gdx.files.internal("audio/music/victory.mp3"));
         victoryLoop.setLooping(true);
@@ -194,6 +205,29 @@ public class AudioManager implements Disposable {
         if (!muted) powerupSound.play(settings.getEffectiveSfxVolume());
     }
 
+    // Non-typewriter TextCues (effect "static"/"blinking" - nothing to reveal, so nothing to loop
+    // a blip against) still get a single blip on appearing - see SpawnScheduler.update(). A
+    // typewriter cue instead loops/stops via loopTextCue()/stopTextCueLoop() below, timed to its
+    // own reveal.
+    public void playTextCue() {
+        if (!muted) textCueSound.play(settings.getEffectiveSfxVolume());
+    }
+
+    // Starts (or, called again while already looping, restarts) the text-blip sound looping for as
+    // long as a typewriter cue is still revealing characters - see SpawnScheduler.update(), which
+    // calls this once per cue on first reach and stopTextCueLoop() once the reveal (or the cue's own
+    // duration, whichever comes first) finishes.
+    public void loopTextCue() {
+        if (!muted) textCueSound.loop(settings.getEffectiveSfxVolume());
+    }
+
+    // Stops every currently playing instance of the text-blip sound - safe to call even if none is
+    // playing. Deliberately not gated on `muted`: a loop started while unmuted must still be
+    // stoppable after the player mutes mid-reveal.
+    public void stopTextCueLoop() {
+        textCueSound.stop();
+    }
+
     public void playHaloDetach() {
         if (!muted) haloDetachSound.play(settings.getEffectiveSfxVolume());
     }
@@ -263,6 +297,12 @@ public class AudioManager implements Disposable {
         if (!muted && thunderboltWeaponSounds != null && thunderboltWeaponSounds.containsKey(level)) thunderboltWeaponSounds.get(level).random().play(settings.getEffectiveSfxVolume());
     }
 
+    /** See ThunderboltWeapon.playFireSound - the "whiff" sound for firing with no enemy on screen
+     *  to strike, in place of the normal playThunderboltWeaponSound(). */
+    public void playThunderboltNullSound() {
+        if (!muted) thunderboltNullSound.play(settings.getEffectiveSfxVolume());
+    }
+
     /** Plays the tier-th (0-based) charge sound for ThunderboltWeapon's Hyper Attack bomb - see
      *  Player.updateThunderboltCharge, which calls this once per tier as the bomb climbs through
      *  its damage tiers (weapons.json's thunderboltChargeDamageByTier), in order, rather than
@@ -295,12 +335,14 @@ public class AudioManager implements Disposable {
         gameOverSound.dispose();
         powerupSound.dispose();
         gemPickupSound.dispose();
+        textCueSound.dispose();
         haloDetachSound.dispose();
         haloBashSound.dispose();
         haloReturnSound.dispose();
         haloLatchSound.dispose();
         for (Sound s : thunderboltHyperLevelSounds) s.dispose();
         thunderboltHyperExplosionSound.dispose();
+        thunderboltNullSound.dispose();
         victoryFanfare.dispose();
         victoryLoop.dispose();
         if (stageMusic != null) stageMusic.dispose();

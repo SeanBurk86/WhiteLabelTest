@@ -19,17 +19,11 @@ import whitelabeltest.player.Player;
 public class ThunderboltWeapon extends BaseWeapon {
     private static final float STRIKE_DURATION = 0.1f;
     private static final float FADE_DURATION = 0.7f;
-    private static final float HITBOX_GROWTH_PER_LEVEL = 0.75f;
-    private static final float MISS_BOLT_THICKNESS = 0.0625f;
+    // Grows the bolt's visual thickness/jitter envelope with level - purely cosmetic now (targeting
+    // is by nearest-enemy selection, not an area the bolt has to geometrically cover).
+    private static final float WIDTH_GROWTH_PER_LEVEL = 0.75f;
     private static final float HIT_BOLT_THICKNESS = 0.5f;
     private static final float FORK_ALPHA_SCALE = 0.75f;
-    private static final float MISS_ALPHA_SCALE = 0.75f;
-    private static final float MISS_WIDTH_FALLOFF = 0.75f;
-    private static final int MISS_ARC_COUNT = 18;
-
-    private static final int ROUGHEN_DETAIL = 2;
-    private static final float ROUGHEN_JITTER = 0.4f;
-    private static final float ROUGHEN_ROUGHNESS = 0.5f;
 
     private static final float GLOW_OUTER_WIDTH_SCALE = 2.0f;
     private static final float GLOW_INNER_WIDTH_SCALE = 1.3f;
@@ -75,12 +69,19 @@ public class ThunderboltWeapon extends BaseWeapon {
     private Texture texture;
     private Texture circleTexture;
     private final Vector2 origin = new Vector2();
-    private final Array<Enemy> hitEnemies = new Array<>(false, 4);
-    // Which enemies this specific strike is allowed to hit at all - picked once, up front (see
-    // selectTargets()), capped to the closest 2/4/6/8 (by level) enemies within the hitbox
-    // instead of every enemy the hitbox happens to touch. hasDamaged() rejects anything not in
-    // here, so the normal per-frame CollisionManager loop doesn't need to know about the cap.
-    private final Array<Enemy> allowedTargets = new Array<>(false, 4);
+    // The single enemy this bolt was aimed at when fired (see ThunderboltWeapon.spawn()'s
+    // nearest-enemy selection) - no hitbox/direction/range check involved, hasDamaged() just
+    // refuses to damage anything else. rectangle is bound to this enemy's own rect at init() time
+    // so the normal per-frame CollisionManager overlap test resolves against it directly.
+    private Enemy target;
+    private boolean hit;
+    // Whether the equipped instance's most recent spawn() found any enemy to strike - see
+    // playFireSound(). Meaningless on a pooled per-bolt instance; only the equipped weapon-slot
+    // instance's spawn()/playFireSound() pair reads and writes it.
+    private boolean foundTarget;
+    // Scratch buffer for spawn()'s nearest-enemy sort - only ever used on the equipped weapon
+    // instance (spawn() is called on `this`, never on a pooled bolt), not per-bolt state.
+    private final Array<Enemy> nearestEnemies = new Array<>(false, 16);
     private final Array<Sprite> bolts = new Array<>(false, 96);
 
     private final FloatArray segX1 = new FloatArray(16);
@@ -91,34 +92,24 @@ public class ThunderboltWeapon extends BaseWeapon {
     private final FloatArray segAlpha = new FloatArray(16);
     private final FloatArray segPhase = new FloatArray(16);
     private int segCount = 0;
-    private boolean hasRealHit = false;
     private float lifeTime = 0f;
-    private float rotationDeg = 0f;
 
-    private float dirX, dirY;
-    private float halfWidth;
-    private float startReach;
-    private float endReach;
+    /** Configures the weapon-slot instance's definition only - unlike the full init() below (used
+     *  for an actual fired bolt), this instance is never itself drawn or collided (see Player's
+     *  currentWeapon dispatch); spawn()/getFireRate() just read its def. */
+    public void initDefinition(WeaponDefinition def) {
+        this.def = def;
+    }
 
-    public void init(WeaponDefinition def, Texture texture, Texture circleTexture, Vector2 origin, Vector2 dir, float width, float worldHeight) {
+    public void init(WeaponDefinition def, Texture texture, Texture circleTexture, Vector2 origin, Enemy target, float width) {
         this.def = def;
         this.texture = texture;
         this.circleTexture = circleTexture;
         this.origin.set(origin);
         this.lifeTime = 0f;
-        this.hitEnemies.clear();
-        this.allowedTargets.clear();
+        this.target = target;
+        this.hit = false;
         this.segCount = 0;
-        this.hasRealHit = false;
-
-        float startReach = def.radius;
-        float endReach = Math.max(edgeDistance(origin, dir, worldHeight), startReach + 0.1f);
-        this.startReach = startReach;
-
-        float startX = origin.x + dir.x * startReach;
-        float startY = origin.y + dir.y * startReach;
-        float endX = origin.x + dir.x * endReach;
-        float endY = origin.y + dir.y * endReach;
 
         this.damage = def.getDamage(level);
         this.chainWindow = def.chainWindow;
@@ -128,61 +119,23 @@ public class ThunderboltWeapon extends BaseWeapon {
         this.velocity.setZero();
         this.path = null;
 
-        float halfWidth = width / 2f;
-        float perpUnitX = -dir.y;
-        float perpUnitY = dir.x;
-        this.dirX = dir.x;
-        this.dirY = dir.y;
-        this.halfWidth = halfWidth;
-        this.endReach = endReach;
+        // Bound to the target's own rect (not a swept area) so the generic bullet/enemy overlap
+        // test in CollisionManager resolves this strike against exactly the enemy it was aimed at.
+        rectangle.set(target.getRectangle());
 
-        // Un-rotated hitbox, same size as a straight (0,1) strike (e.g. level 2's), pivoted at the
-        // origin; getRotation()/getRotationPivotX/Y() let collision test it as a true rotated rect
-        // instead of inflating an axis-aligned box around the rotated corners.
-        rectangle.set(origin.x - halfWidth, origin.y + startReach, width, endReach - startReach);
-        rotationDeg = dir.angleDeg() - 90f;
-
-        generateMissArcs(startX, startY, dir.x, dir.y, perpUnitX, perpUnitY, endReach - startReach, halfWidth);
-    }
-
-    private static float edgeDistance(Vector2 origin, Vector2 dir, float worldHeight) {
-        if (dir.y > 0.0001f) return (worldHeight - origin.y) / dir.y;
-        if (dir.y < -0.0001f) return -origin.y / dir.y;
-        return 4f;
-    }
-
-    private void generateMissArcs(float startX, float startY, float dirX, float dirY, float perpUnitX, float perpUnitY, float length, float halfWidth) {
+        float targetX = rectangle.x + rectangle.width / 2f;
+        float targetY = rectangle.y + rectangle.height / 2f;
         long seed = System.nanoTime() ^ ((long) System.identityHashCode(this) << 32);
-        Array<RRTLightning.Edge> edges = RRTLightning.generate(MISS_ARC_COUNT, length, halfWidth, seed);
-
-        for (int e = 0; e < edges.size; e++) {
-            RRTLightning.Edge edge = edges.get(e);
-            float width = MISS_BOLT_THICKNESS * (float) Math.pow(MISS_WIDTH_FALLOFF, edge.depth);
-
-            // Roughened in beam-local (along, perp) space and clamped to [0, length] x [-halfWidth,
-            // halfWidth] so the jagged crackle can't bulge past the hitbox it's meant to depict.
-            long edgeSeed = seed ^ ((long) e * 0x9E3779B97F4A7C15L);
-            Array<Vector2> jagged = RRTLightning.roughen(edge.alongStart, edge.perpStart, edge.alongEnd, edge.perpEnd,
-                ROUGHEN_DETAIL, ROUGHEN_JITTER, ROUGHEN_ROUGHNESS, edgeSeed, 0f, length, -halfWidth, halfWidth);
-            for (int p = 0; p < jagged.size - 1; p++) {
-                Vector2 a = jagged.get(p);
-                Vector2 b = jagged.get(p + 1);
-                float x1 = startX + dirX * a.x + perpUnitX * a.y;
-                float y1 = startY + dirY * a.x + perpUnitY * a.y;
-                float x2 = startX + dirX * b.x + perpUnitX * b.y;
-                float y2 = startY + dirY * b.x + perpUnitY * b.y;
-                addBoltSegment(x1, y1, x2, y2, width, MISS_ALPHA_SCALE);
-            }
-        }
+        addArc(targetX, targetY, width / 2f, seed);
     }
 
-    private void addArc(float targetX, float targetY, long seed) {
+    private void addArc(float targetX, float targetY, float jitterHalfWidth, long seed) {
         float dx = targetX - origin.x, dy = targetY - origin.y;
-        float targetAlong = dx * dirX + dy * dirY;
-        float targetPerp = dy * dirX - dx * dirY;
+        float length = Math.max((float) Math.sqrt(dx * dx + dy * dy), 0.01f);
+        float dirX = dx / length, dirY = dy / length;
 
-        Array<LightningBolt.Segment> segments = LightningBolt.generate(0f, 0f, targetAlong, targetPerp, seed, HIT_BOLT_THICKNESS,
-            0f, endReach, -halfWidth, halfWidth);
+        Array<LightningBolt.Segment> segments = LightningBolt.generate(0f, 0f, length, 0f, seed, HIT_BOLT_THICKNESS,
+            0f, length, -jitterHalfWidth, jitterHalfWidth);
         for (LightningBolt.Segment seg : segments) {
             float x1 = origin.x + dirX * seg.x1 - dirY * seg.y1;
             float y1 = origin.y + dirY * seg.x1 + dirX * seg.y1;
@@ -378,120 +331,73 @@ public class ThunderboltWeapon extends BaseWeapon {
     }
 
     @Override
-    public float getRotation() {
-        return rotationDeg;
+    public boolean hasDamaged(Enemy enemy) {
+        if (lifeTime >= STRIKE_DURATION) return true;
+        if (enemy != target) return true;
+        return hit;
     }
 
     @Override
-    public float getRotationPivotX() {
-        return origin.x;
+    public void markDamaged(Enemy enemy) {
+        hit = true;
     }
 
+    /** Fires one bolt per target - up to 2 at level 1, 4/6/8 at higher levels - at whichever
+     *  enemies are currently closest to the player, full screen, no direction or range check.
+     *  With fewer active enemies than bolts to fire, extra bolts double up on the closest ones
+     *  again (round-robin from the front of the sorted list) instead of going unfired, so each
+     *  stacks its own instance of the weapon's damage onto the same target. */
     @Override
-    public float getRotationPivotY() {
-        return origin.y;
-    }
-
-    /** Picks which enemies this strike is even allowed to hit - up to 2 at level 1, 4/6/8 at
-     *  higher levels, preferring the closest to the strike's origin (the player's position at
-     *  spawn time) first - out of whichever enemies sit within the hitbox at the moment this
-     *  strike spawns. The hitbox is static for its whole lifetime, so this only needs to run once,
-     *  here, rather than re-evaluating every frame. */
-    private void selectTargets(Array<Enemy> enemies) {
-        allowedTargets.clear();
-
-        Array<Enemy> candidates = new Array<>(false, 8);
+    public void spawn(Array<Weapon> activeWeapons, Texture texture, float x, float y, Player player, Array<Enemy> enemies, AssetManager assets) {
+        nearestEnemies.clear();
         for (int i = 0; i < enemies.size; i++) {
             Enemy enemy = enemies.get(i);
-            if (enemy.isActive() && isWithinHitbox(enemy)) candidates.add(enemy);
+            if (enemy.isActive() && enemy.isTargetableByHoming()) nearestEnemies.add(enemy);
         }
-        candidates.sort((a, b) -> Float.compare(distanceSqToOrigin(a), distanceSqToOrigin(b)));
+        // Read by playFireSound() right after this call returns (see Player.handleShooting) to
+        // decide between the normal weapon sound and the nulllightning.mp3 whiff.
+        foundTarget = nearestEnemies.size > 0;
+        if (!foundTarget) return;
 
-        int maxTargets = MathUtils.clamp(level, 1, 4) * 2;
-        int count = Math.min(maxTargets, candidates.size);
-        for (int i = 0; i < count; i++) allowedTargets.add(candidates.get(i));
+        Vector2 origin = new Vector2(player.getCenterX(), player.getCenterY());
+        nearestEnemies.sort((a, b) -> Float.compare(distanceSqTo(origin, a), distanceSqTo(origin, b)));
+
+        // Grows a little with every level (not just a single jump at level 2), purely cosmetic now.
+        float width = def.size * (1f + (level - 1) * WIDTH_GROWTH_PER_LEVEL);
+        int boltCount = MathUtils.clamp(level, 1, 4) * 2;
+        Texture pixel = assets.pixelTexture;
+        Texture circle = assets.circleTexture;
+
+        for (int i = 0; i < boltCount; i++) {
+            Enemy boltTarget = nearestEnemies.get(i % nearestEnemies.size);
+            strike(activeWeapons, pixel, circle, origin, boltTarget, width);
+        }
     }
 
-    private float distanceSqToOrigin(Enemy enemy) {
+    private static float distanceSqTo(Vector2 origin, Enemy enemy) {
         Rectangle r = enemy.getRectangle();
         float dx = r.x + r.width / 2f - origin.x;
         float dy = r.y + r.height / 2f - origin.y;
         return dx * dx + dy * dy;
     }
 
-    // Same (along, perp) local-frame transform addArc() uses to aim a bolt at a target, reused
-    // here to test whether an enemy's center sits within the hitbox's un-rotated bounds
-    // (along in [startReach, endReach], perp in [-halfWidth, halfWidth]) - i.e. a point-in-rect
-    // test against the same rectangle CollisionManager's rotated-rect overlap test checks.
-    private boolean isWithinHitbox(Enemy enemy) {
-        Rectangle r = enemy.getRectangle();
-        float px = r.x + r.width / 2f;
-        float py = r.y + r.height / 2f;
-        float dx = px - origin.x, dy = py - origin.y;
-        float along = dx * dirX + dy * dirY;
-        float perp = dy * dirX - dx * dirY;
-        return along >= startReach && along <= endReach && Math.abs(perp) <= halfWidth;
-    }
-
-    @Override
-    public boolean hasDamaged(Enemy enemy) {
-        if (lifeTime >= STRIKE_DURATION) return true;
-        if (!allowedTargets.contains(enemy, true)) return true;
-        return hitEnemies.contains(enemy, true);
-    }
-
-    @Override
-    public void markDamaged(Enemy enemy) {
-        hitEnemies.add(enemy);
-        if (!hasRealHit) {
-            hasRealHit = true;
-            segCount = 0;
-        }
-
-        float px = enemy.getRectangle().x + enemy.getRectangle().width / 2f;
-        float py = enemy.getRectangle().y + enemy.getRectangle().height / 2f;
-
-        long seed = System.nanoTime() ^ ((long) System.identityHashCode(enemy) << 32);
-        addArc(px, py, seed);
-    }
-
-    @Override
-    public void spawn(Array<Weapon> activeWeapons, Texture texture, float x, float y, Player player, Array<Enemy> enemies, AssetManager assets) {
-        Vector2 origin = new Vector2(player.getCenterX(), player.getCenterY());
-        // Grows a little with every level (not just a single jump at level 2) so an enemy caught
-        // where multiple strikes overlap is more likely to sit in several hitboxes at once.
-        float width = def.size * (1f + (level - 1) * HITBOX_GROWTH_PER_LEVEL);
-        float worldHeight = player.getWorldHeight();
-        Texture pixel = assets.pixelTexture;
-        Texture circle = assets.circleTexture;
-
-        strike(activeWeapons, pixel, circle, origin, new Vector2(0, 1), width, worldHeight, enemies);
-
-        if (level >= 3) {
-            strike(activeWeapons, pixel, circle, origin, new Vector2(0, 1).rotateDeg(45), width, worldHeight, enemies);
-            strike(activeWeapons, pixel, circle, origin, new Vector2(0, 1).rotateDeg(-45), width, worldHeight, enemies);
-        }
-        if (level >= 4) {
-            strike(activeWeapons, pixel, circle, origin, new Vector2(0, -1), width, worldHeight, enemies);
-            strike(activeWeapons, pixel, circle, origin, new Vector2(0, -1).rotateDeg(45), width, worldHeight, enemies);
-            strike(activeWeapons, pixel, circle, origin, new Vector2(0, -1).rotateDeg(-45), width, worldHeight, enemies);
-        }
-    }
-
-    private void strike(Array<Weapon> activeWeapons, Texture texture, Texture circleTexture, Vector2 origin, Vector2 dir, float width, float worldHeight, Array<Enemy> enemies) {
+    private void strike(Array<Weapon> activeWeapons, Texture texture, Texture circleTexture, Vector2 origin, Enemy target, float width) {
         ThunderboltWeapon w = ObjectPools.thunderboltWeaponPool.obtain();
         w.setLevel(this.level);
-        w.init(def, texture, circleTexture, origin, dir.nor(), width, worldHeight);
-        w.selectTargets(enemies);
+        w.init(def, texture, circleTexture, origin, target, width);
         activeWeapons.add(w);
     }
 
     @Override
     public float getFireRate() { return def.getFireRate(level); }
 
+    /** Only the normal weapon sound if the shot that just fired (see spawn()) actually found an
+     *  enemy to strike - otherwise the nulllightning.mp3 whiff, since a bolt with nothing to
+     *  target never even spawns. */
     @Override
     public void playFireSound(AudioManager audio, int level) {
-        audio.playThunderboltWeaponSound(level);
+        if (foundTarget) audio.playThunderboltWeaponSound(level);
+        else audio.playThunderboltNullSound();
     }
 
     /** Starts the halo's charge-then-detonate sequence (see Player.triggerThunderboltHyperAttack)
@@ -506,9 +412,8 @@ public class ThunderboltWeapon extends BaseWeapon {
     public void reset() {
         super.reset();
         lifeTime = 0f;
-        hitEnemies.clear();
-        allowedTargets.clear();
+        target = null;
+        hit = false;
         segCount = 0;
-        hasRealHit = false;
     }
 }
