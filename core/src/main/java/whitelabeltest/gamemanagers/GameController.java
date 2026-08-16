@@ -486,7 +486,7 @@ public class GameController implements Disposable {
     private void loadStage(int index) {
         StageDefinition stageDef = assets.getStageDefinition(stageSequence.get(index));
         if (background != null) background.dispose();
-        background = new ScrollingBackground(worldWidth, worldHeight, audioSettings, assets, stageDef.backgroundLayers, stageDef.bossVideo, stageDef.backgroundVideo);
+        background = new ScrollingBackground(worldWidth, worldHeight, audioSettings, assets, stageDef.backgroundLayers, stageDef.bossVideo, stageDef.backgroundVideo, stageDef.shaderBackground);
         background.setMuted(audio.isMuted());
         spawnScheduler = new SpawnScheduler(worldWidth, worldHeight, assets, stageDef.spawnSchedule);
         audio.loadStageMusic(stageDef.music);

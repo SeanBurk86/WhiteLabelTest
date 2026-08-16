@@ -42,6 +42,11 @@ public class ScrollingBackground {
     // see StageDefinition.backgroundVideo/GameController.loadStage(). Stages that use this
     // typically have no (or few) backgroundLayers, since the video fully covers the screen.
     private final String backgroundVideoFile;
+    // See StageDefinition.shaderBackground - a procedural full-screen effect standing in for
+    // backgroundVideoFile, same "plays immediately, covers the whole screen" priority (checked
+    // ahead of it in draw()/update() below since a stage only ever sets one or the other).
+    private final TutorialBoxTunnelShader shaderBackground;
+    private final Texture shaderQuadTexture;
     private boolean stopped;
     private boolean muted;
 
@@ -51,7 +56,8 @@ public class ScrollingBackground {
     private boolean backgroundVideoStarted;
 
     public ScrollingBackground(float worldWidth, float worldHeight, AudioSettings audioSettings, AssetManager assets,
-                                Array<StageDefinition.BackgroundLayerDef> layerDefs, String bossVideoFile, String backgroundVideoFile) {
+                                Array<StageDefinition.BackgroundLayerDef> layerDefs, String bossVideoFile, String backgroundVideoFile,
+                                boolean useShaderBackground) {
         this.worldWidth = worldWidth;
         this.worldHeight = worldHeight;
         this.audioSettings = audioSettings;
@@ -61,6 +67,13 @@ public class ScrollingBackground {
             Texture texture = assets.ensureTexture(layerDef.texture);
             float scrollSpeed = Float.isNaN(layerDef.scrollSpeed) ? DEFAULT_SCROLL_SPEED : layerDef.scrollSpeed;
             layers.add(new Layer(texture, worldWidth, worldHeight, scrollSpeed));
+        }
+        if (useShaderBackground) {
+            shaderBackground = new TutorialBoxTunnelShader();
+            shaderQuadTexture = assets.pixelTexture;
+        } else {
+            shaderBackground = null;
+            shaderQuadTexture = null;
         }
         backgroundVideoPlayer = startVideo(backgroundVideoFile);
         backgroundVideoStarted = backgroundVideoPlayer != null;
@@ -103,6 +116,10 @@ public class ScrollingBackground {
         if (backgroundVideoStarted) {
             backgroundVideoPlayer.update();
         }
+        // Keeps animating through stop() same as backgroundVideoFile does - see stop()'s own doc.
+        if (shaderBackground != null) {
+            shaderBackground.update(delta);
+        }
     }
 
     /** Freezes a layer's scrollY once its top edge reaches the top of the viewport, instead of scrolling past it. */
@@ -144,6 +161,10 @@ public class ScrollingBackground {
 
     public void draw(SpriteBatch batch) {
         if (bossVideoStarted && drawVideoFrame(batch, bossVideoPlayer)) return;
+        if (shaderBackground != null) {
+            shaderBackground.render(batch, shaderQuadTexture, worldWidth, worldHeight);
+            return;
+        }
         if (backgroundVideoStarted && drawVideoFrame(batch, backgroundVideoPlayer)) return;
         // Back-to-front: declaration order in the stage's backgroundLayers is far-to-near.
         for (Layer layer : layers) {
@@ -181,6 +202,7 @@ public class ScrollingBackground {
         }
         backgroundVideoPlayer = startVideo(backgroundVideoFile);
         backgroundVideoStarted = backgroundVideoPlayer != null;
+        if (shaderBackground != null) shaderBackground.resetTime();
     }
 
     /** Jumps the scroll position to where it would be after scrolling for elapsedTime seconds from reset(). */
@@ -196,6 +218,10 @@ public class ScrollingBackground {
             bossVideoPlayer.dispose();
             bossVideoPlayer = null;
         }
+        // Same "no seek API, jump to the top of its own loop instead" compromise the video comment
+        // below describes - the shader has no persistent state to fast-forward either, so this just
+        // restarts its clock at 0 rather than approximating elapsedTime seconds of animation.
+        if (shaderBackground != null) shaderBackground.resetTime();
         // gdx-video has no seek API, so a debug/replay jump to elapsedTime can't fast-forward the
         // background video to match - it just restarts from the top, same as reset().
         if (backgroundVideoPlayer != null) {
@@ -211,6 +237,9 @@ public class ScrollingBackground {
         }
         if (backgroundVideoPlayer != null) {
             backgroundVideoPlayer.dispose();
+        }
+        if (shaderBackground != null) {
+            shaderBackground.dispose();
         }
     }
 }
