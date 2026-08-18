@@ -14,30 +14,7 @@ import whitelabeltest.enemy.bullets.AimedEnemyBullet;
 import whitelabeltest.enemy.bullets.EnemyBullet;
 import whitelabeltest.gamemanagers.ObjectPools;
 
-/** Fires numBullets-per-volley converging on the player's CURRENT position (playerHitbox, snapshot
- *  fresh each volley) from every angle around a full circle, each one deliberately aimed missDistance
- *  off-center rather than straight at it - so a player holding still sees a "wall closing in from
- *  everywhere" that never actually touches their hitbox, only their much larger sprite. Moving
- *  breaks the guarantee (a later volley re-aims at wherever they've moved to, but a bullet already
- *  in flight from an earlier volley keeps its original aim), which is the point - this is the
- *  "trust your tiny hitbox and don't panic-dodge" drill, not a movement test.
- *
- *  Each bullet's spawn point is the player's position projected outward along that bullet's angle
- *  until it hits the play area's edge (see update()'s ray/box projection), NOT a fixed distance out
- *  - AimedEnemyBullet.isOffScreen() uses hard-coded world bounds and culls a bullet the very first
- *  frame it exists past them, so a fixed spawnRadius large enough to clear the field from a
- *  center-ish position (e.g. 9+) puts most of a full-circle spread's spawn points outside those
- *  bounds - especially "downward" from a player resting near the bottom, where there's only ~1
- *  world unit of slack below y=0 before the cull triggers. Projecting onto the edge instead
- *  guarantees every spawn point is valid regardless of where the player is standing or which of the
- *  numBullets directions a given bullet comes from.
- *
- *  Every bullet in a volley shares the same missDistance and a consistent tangential offset
- *  direction (see update()'s perpAngle), so the whole ring reads as one coherent formation curving
- *  past the player rather than a scatter of independent near-misses.
- *
- *  Fires up to volleyCount volleys, fireRate seconds apart, then goes idle - reset() re-arms it for
- *  pooled reuse. */
+
 public class RadialNearMissFiring implements FiringPattern {
     // Inset from AimedEnemyBullet's actual cull bounds (x in [0,9], y in [-1,13] for this game's
     // play area) so a spawned bullet's sprite - not just its center point - stays fully inside them.

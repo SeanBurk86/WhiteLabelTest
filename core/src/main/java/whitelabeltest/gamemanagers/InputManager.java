@@ -42,6 +42,8 @@ public class InputManager {
     private boolean prevWeaponSwitchButton;
     private boolean prevHyperAttackHeld;
     private boolean prevShootHeld;
+    private boolean prevRestartButton;
+    private boolean prevQuitButton;
     private boolean prevMoving;
     private boolean prevMovingLeft;
     private boolean prevMovingRight;
@@ -55,6 +57,8 @@ public class InputManager {
     public void setActiveInput(InputType type) {
         this.activeInput = type;
     }
+
+    public InputType getActiveInput() { return activeInput; }
 
     /** Primes prevShootHeld/prevHyperAttackHeld/prevMoving/etc. from the actual current
      *  keyboard/gamepad state instead of leaving them at their false default - without this, a key
@@ -70,6 +74,8 @@ public class InputManager {
             prevBombButton = Gdx.input.isKeyPressed(keyBindings.getKey(Action.BOMB));
             prevWeaponSwitchButton = Gdx.input.isKeyPressed(keyBindings.getKey(Action.WEAPON_SWITCH));
             prevHyperAttackHeld = Gdx.input.isKeyPressed(keyBindings.getKey(Action.HYPER_ATTACK));
+            prevRestartButton = Gdx.input.isKeyPressed(keyBindings.getKey(Action.RESTART));
+            prevQuitButton = Gdx.input.isKeyPressed(keyBindings.getKey(Action.QUIT));
             prevMoving = Gdx.input.isKeyPressed(keyBindings.getKey(Action.MOVE_LEFT))
                 || Gdx.input.isKeyPressed(keyBindings.getKey(Action.MOVE_RIGHT))
                 || Gdx.input.isKeyPressed(keyBindings.getKey(Action.MOVE_UP))
@@ -83,6 +89,8 @@ public class InputManager {
                 prevBombButton = controller.getButton(KeyBindings.rawCode(controller, keyBindings.getGamepadButton(Action.BOMB)));
                 prevWeaponSwitchButton = controller.getButton(KeyBindings.rawCode(controller, keyBindings.getGamepadButton(Action.WEAPON_SWITCH)));
                 prevHyperAttackHeld = controller.getButton(KeyBindings.rawCode(controller, keyBindings.getGamepadButton(Action.HYPER_ATTACK)));
+                prevRestartButton = controller.getButton(KeyBindings.rawCode(controller, keyBindings.getGamepadButton(Action.RESTART)));
+                prevQuitButton = controller.getButton(KeyBindings.rawCode(controller, keyBindings.getGamepadButton(Action.QUIT)));
                 float axisX = controller.getAxis(controller.getMapping().axisLeftX);
                 float axisY = controller.getAxis(controller.getMapping().axisLeftY);
                 boolean dpadLeft = controller.getButton(controller.getMapping().buttonDpadLeft);
@@ -186,8 +194,13 @@ public class InputManager {
 
                     hyperAttackHeld |= controller.getButton(KeyBindings.rawCode(controller, keyBindings.getGamepadButton(Action.HYPER_ATTACK)));
 
-                    if (controller.getButton(KeyBindings.rawCode(controller, keyBindings.getGamepadButton(Action.RESTART)))) restartJustPressed = true;
-                    if (controller.getButton(KeyBindings.rawCode(controller, keyBindings.getGamepadButton(Action.QUIT)))) quitJustPressed = true;
+                    boolean restartButton = controller.getButton(KeyBindings.rawCode(controller, keyBindings.getGamepadButton(Action.RESTART)));
+                    if (restartButton && !prevRestartButton) restartJustPressed = true;
+                    prevRestartButton = restartButton;
+
+                    boolean quitButton = controller.getButton(KeyBindings.rawCode(controller, keyBindings.getGamepadButton(Action.QUIT)));
+                    if (quitButton && !prevQuitButton) quitJustPressed = true;
+                    prevQuitButton = quitButton;
                 }
             }
         }

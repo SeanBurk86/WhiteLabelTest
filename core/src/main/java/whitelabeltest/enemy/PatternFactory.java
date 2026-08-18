@@ -220,7 +220,7 @@ public class PatternFactory {
                 BulletDef bulletDef = PatternRegistry.getBullet(def.bulletId);
                 Animation<TextureRegion> spriteOverride = buildBulletAnimation(enemyDef, def, bulletDef);
                 int numBullets = resolve(def.numBullets, 16);
-                float missDistance = def.nearMissDistance > 0 ? def.nearMissDistance : 0.35f;
+                float missDistance = resolve(def.nearMissDistance, 0.35f);
                 float fireRate = def.fireRate > 0 ? def.fireRate : 1.5f;
                 int volleyCount = def.volleyCount >= 0 ? def.volleyCount : 3;
                 return new RadialNearMissFiring(resolve(bulletSize(def, bulletDef), 0.3f), resolve(bulletSpeed(def, bulletDef), 4f), bulletDamage(def, bulletDef), spriteOverride,

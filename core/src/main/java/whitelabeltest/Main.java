@@ -333,7 +333,8 @@ public class Main extends ApplicationAdapter {
 
         ui.drawHUD(spriteBatch, game.getScoreManager(), game.getEntities().getPlayer(), PLAY_AREA_HEIGHT, leftX, PLAY_AREA_WIDTH, panelWidth, game.getBombCooldownTimer(), game.getBombCooldownFraction());
 
-        ui.drawTextCues(spriteBatch, game.getSpawnScheduleRealTime(), game.getTextCues());
+        ui.drawTextCues(spriteBatch, game.getSpawnScheduleRealTime(), game.getTextCues(),
+            game.isTextCuesRequireConfirm(), game.getTextCueConfirmKeyLabel());
 
         if (isGameOver) {
             ui.drawGameOver(spriteBatch, PLAY_AREA_WIDTH, PLAY_AREA_HEIGHT, game.getGameOverTimer());
@@ -363,7 +364,7 @@ public class Main extends ApplicationAdapter {
             } else {
                 ui.drawDebugMenu(spriteBatch, PLAY_AREA_WIDTH, PLAY_AREA_HEIGHT, game.getSpawnScheduleTotalTime(),
                     game.getDebugMenuSeekTime(), game.getDebugMenuSelectedIndex(), game.getDebugSaveStates(),
-                    game.getEntities().getPlayer(), game.isAudioMuted());
+                    game.getEntities().getPlayer(), game.isAudioMuted(), game.getDebugMenuStageIds(), game.getDebugMenuStageIndex());
             }
         }
         spriteBatch.end();

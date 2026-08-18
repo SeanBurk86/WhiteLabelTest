@@ -1,12 +1,13 @@
 package whitelabeltest.enemy;
 
 import com.badlogic.gdx.Gdx;
+import com.badlogic.gdx.files.FileHandle;
 import com.badlogic.gdx.utils.Array;
 import com.badlogic.gdx.utils.Json;
 import com.badlogic.gdx.utils.ObjectMap;
 
-/** Holds the named movement/firing/explosion pattern library (movement_patterns.json,
- * firing_patterns.json, bullets.json, explosion_patterns.json) so enemy definitions can
+/** Holds the named movement/firing/explosion pattern library (movement_patterns/*.json,
+ * firing_patterns/*.json, bullets.json, explosion_patterns.json) so enemy definitions can
  * reference a pattern by id instead of embedding it inline. */
 public final class PatternRegistry {
     private static final ObjectMap<String, MovementPatternDef> movementPatterns = new ObjectMap<>();
@@ -17,10 +18,14 @@ public final class PatternRegistry {
     private PatternRegistry() {}
 
     public static void load(Json json) {
+        // One MovementPatternDef per file under data/movement_patterns/ (filename == id) -
+        // same split, and same reasoning, as firing_patterns/ below.
         movementPatterns.clear();
-        @SuppressWarnings("unchecked")
-        Array<MovementPatternDef> mDefs = json.fromJson(Array.class, MovementPatternDef.class, Gdx.files.internal("data/movement_patterns.json"));
-        for (MovementPatternDef def : mDefs) movementPatterns.put(def.id, def);
+        FileHandle movementDir = Gdx.files.local("data/movement_patterns");
+        for (FileHandle f : movementDir.list("json")) {
+            MovementPatternDef def = json.fromJson(MovementPatternDef.class, f);
+            movementPatterns.put(def.id, def);
+        }
 
         bulletDefs.clear();
         @SuppressWarnings("unchecked")
@@ -32,10 +37,18 @@ public final class PatternRegistry {
         Array<ExplosionPatternDef> eDefs = json.fromJson(Array.class, ExplosionPatternDef.class, Gdx.files.internal("data/explosion_patterns.json"));
         for (ExplosionPatternDef def : eDefs) explosionPatterns.put(def.id, def);
 
+        // One FiringPatternDef per file under data/firing_patterns/ (filename == id, e.g.
+        // "BossAgniFiring.json") rather than one giant array in a single file - these can run
+        // 100+ lines deep per pattern (Sequence/Combined trees), so splitting them out makes each
+        // one findable and editable on its own instead of scrolling a ~2800-line file. See
+        // PatternPreviewer.saveAll() for the write side. Uses Gdx.files.local (not internal) for
+        // the directory listing - same reasoning as PatternPreviewer.collectPngFiles().
         firingPatterns.clear();
-        @SuppressWarnings("unchecked")
-        Array<FiringPatternDef> fDefs = json.fromJson(Array.class, FiringPatternDef.class, Gdx.files.internal("data/firing_patterns.json"));
-        for (FiringPatternDef def : fDefs) firingPatterns.put(def.id, def);
+        FileHandle firingDir = Gdx.files.local("data/firing_patterns");
+        for (FileHandle f : firingDir.list("json")) {
+            FiringPatternDef def = json.fromJson(FiringPatternDef.class, f);
+            firingPatterns.put(def.id, def);
+        }
     }
 
     public static MovementPatternDef getMovement(String id) {
@@ -74,6 +87,12 @@ public final class PatternRegistry {
         return id != null ? bulletDefs.get(id) : null;
     }
 
+    /** Registers (or overwrites) a bullet definition under an id — used by the debug pattern
+     *  previewer to install a live-edited working copy without touching the JSON-loaded set. */
+    public static void putBullet(String id, BulletDef def) {
+        bulletDefs.put(id, def);
+    }
+
     public static ObjectMap.Values<BulletDef> getBulletDefs() {
         return bulletDefs.values();
     }
@@ -96,21 +115,5 @@ public final class PatternRegistry {
         Array<String> ids = explosionPatterns.keys().toArray();
         ids.sort();
         return ids;
-    }
-
-    /** All movement patterns currently registered (including live-edited working copies from the
-     *  debug editor), sorted by id — used when writing movement_patterns.json back to disk. */
-    public static Array<MovementPatternDef> getAllMovementDefsSorted() {
-        Array<MovementPatternDef> out = new Array<>();
-        for (String id : getMovementIds()) out.add(movementPatterns.get(id));
-        return out;
-    }
-
-    /** All firing patterns currently registered, sorted by id — used when writing
-     *  firing_patterns.json back to disk. */
-    public static Array<FiringPatternDef> getAllFiringDefsSorted() {
-        Array<FiringPatternDef> out = new Array<>();
-        for (String id : getFiringIds()) out.add(firingPatterns.get(id));
-        return out;
     }
 }

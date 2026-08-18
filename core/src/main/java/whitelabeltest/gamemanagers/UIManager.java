@@ -482,7 +482,8 @@ public class UIManager implements Disposable {
     private static final int DEBUG_ROW_LIVES = DEBUG_ROW_LEVELS_START + DEBUG_WEAPON_LEVEL_IDS.length;
     private static final int DEBUG_ROW_PATTERN_PREVIEW = DEBUG_ROW_LIVES + 1;
     private static final int DEBUG_ROW_REPLAY_BROWSER = DEBUG_ROW_PATTERN_PREVIEW + 1;
-    private static final int DEBUG_ROW_BOOKMARKS_START = DEBUG_ROW_REPLAY_BROWSER + 1;
+    private static final int DEBUG_ROW_STAGE_SELECT = DEBUG_ROW_REPLAY_BROWSER + 1;
+    private static final int DEBUG_ROW_BOOKMARKS_START = DEBUG_ROW_STAGE_SELECT + 1;
 
     // Debug-only: shows a "MUTED" badge in the left panel when audio is silenced.
     public void drawDebugMuteIndicator(SpriteBatch batch, float leftPanelX, float worldHeight) {
@@ -554,7 +555,7 @@ public class UIManager implements Disposable {
     // bookmark, and for setting equipped weapons/slots and their levels.
     public void drawDebugMenu(SpriteBatch batch, float worldWidth, float worldHeight, float scheduleTime,
                                float seekTime, int selectedIndex, Array<DebugSaveState> saveStates, Player player,
-                               boolean audioMuted) {
+                               boolean audioMuted, Array<String> stageIds, int stageIndex) {
         batch.setColor(0f, 0f, 0f, 0.75f);
         batch.draw(whitePixel, 0, 0, worldWidth, worldHeight);
         batch.setColor(Color.WHITE);
@@ -623,6 +624,15 @@ public class UIManager implements Disposable {
         y -= lineHeight;
         font.setColor(Color.GRAY);
         font.draw(batch, "  Enter = browse recorded replays", x, y);
+        y -= lineHeight * 1.5f;
+
+        boolean stageSelectSelected = selectedIndex == DEBUG_ROW_STAGE_SELECT;
+        font.setColor(stageSelectSelected ? Color.YELLOW : Color.WHITE);
+        String stageLabel = stageIds.size == 0 ? "(none)" : stageIds.get(stageIndex);
+        font.draw(batch, (stageSelectSelected ? "> " : "  ") + "Stage: " + stageLabel, x, y);
+        y -= lineHeight;
+        font.setColor(Color.GRAY);
+        font.draw(batch, "  </> cycle stage   Enter = load", x, y);
         y -= lineHeight * 1.5f;
 
         font.setColor(Color.WHITE);
@@ -748,7 +758,7 @@ public class UIManager implements Disposable {
 
         y -= lineHeight * 0.5f;
         font.setColor(Color.GRAY);
-        font.draw(batch, "Up/Down select   </> adjust or cycle   Enter = confirm/new id", x, y);
+        font.draw(batch, "Up/Down select   </> adjust or cycle   Enter = confirm/new id/type value", x, y);
         y -= lineHeight;
         font.draw(batch, "Del = remove sub-pattern (or close screen if nothing to remove)", x, y);
 
@@ -958,41 +968,88 @@ public class UIManager implements Disposable {
         drawScaledCentered(batch, text, centerX, y, scale, color);
     }
 
+    // Solid gray backdrop drawn behind a text cue's own bounds (see drawTextCue()) to keep it
+    // legible over whatever's on screen behind it (shader backgrounds, bullets, enemies).
+    private static final Color TEXT_CUE_BOX_COLOR = new Color(0.5f, 0.5f, 0.5f, 0.85f);
+    private static final float TEXT_CUE_BOX_PAD_X = 0.25f;
+    private static final float TEXT_CUE_BOX_PAD_TOP = 0.15f;
+    private static final float TEXT_CUE_BOX_PAD_BOTTOM = 0.15f;
+    // Extra room reserved below the message itself for the "press to continue" hint - see
+    // drawTextCue()'s showHint branch, only used while requireConfirm is true.
+    private static final float TEXT_CUE_HINT_HEIGHT = 0.4f;
+
     // realTime must be SpawnScheduler's own never-frozen clock (see TextCue.triggeredAtRealTime),
     // not its gate-freezable totalTime - otherwise a cue whose window spans an unsatisfied gate
     // would stall its typewriter reveal for however long the player takes to clear it.
-    public void drawTextCues(SpriteBatch batch, float realTime, Array<TextCue> cues) {
+    // @param requireConfirm mirrors SpawnScheduler.isTextCuesRequireConfirm() for the owning
+    //  schedule - true suppresses the normal duration-based auto-hide (a confirm-gated cue lingers
+    //  until SpawnScheduler.update() marks it dismissed, however long that takes) and draws the
+    //  "press to continue" hint; confirmKeyLabel is only read in that case.
+    public void drawTextCues(SpriteBatch batch, float realTime, Array<TextCue> cues, boolean requireConfirm, String confirmKeyLabel) {
         if (cues == null) return;
 
-        font.setColor(Color.RED);
         for (TextCue cue : cues) {
-            if (cue.triggeredAtRealTime < 0f) continue;
+            if (cue.dismissed || cue.triggeredAtRealTime < 0f) continue;
             float cueElapsedTime = realTime - cue.triggeredAtRealTime;
-            if (cueElapsedTime < 0f || cueElapsedTime >= cue.duration) continue;
-            drawTextCue(batch, cue, cueElapsedTime);
+            if (cueElapsedTime < 0f) continue;
+            if (!requireConfirm && cueElapsedTime >= cue.duration) continue;
+            drawTextCue(batch, cue, cueElapsedTime, requireConfirm, confirmKeyLabel);
         }
         font.setColor(Color.WHITE);
     }
 
-    private void drawTextCue(SpriteBatch batch, TextCue cue, float cueElapsedTime) {
+    private void drawTextCue(SpriteBatch batch, TextCue cue, float cueElapsedTime, boolean requireConfirm, String confirmKeyLabel) {
         float originalScaleX = font.getData().scaleX;
         float originalScaleY = font.getData().scaleY;
         if (cue.fontSize != 1f) {
             font.getData().setScale(originalScaleX * cue.fontSize, originalScaleY * cue.fontSize);
         }
 
+        // Measured against the cue's FULL text, not just whatever's revealed so far - keeps the
+        // backdrop box a stable size while a typewriter cue is still typing instead of growing
+        // along with it.
+        textCueLayout.setText(font, cue.text);
+        float textWidth = textCueLayout.width;
+        float textHeight = textCueLayout.height;
+
         float x = cue.x;
-        float y = cue.y;
+        float y = cue.y; // top edge of the text block, per font.draw's own convention
         if (cue.centered) {
-            textCueLayout.setText(font, cue.text);
-            x = cue.x - textCueLayout.width / 2f;
-            y = cue.y + textCueLayout.height / 2f;
+            x = cue.x - textWidth / 2f;
+            y = cue.y + textHeight / 2f;
         }
 
+        // The box must cover whichever of the message or the hint line is wider - a short message
+        // (e.g. "Nice flying!") is often narrower than "Press SPACE to continue", and both share
+        // the same left edge x, so sizing the box off the message alone left the hint sticking out
+        // past its right edge, uncovered.
+        String hintText = requireConfirm ? "Press " + confirmKeyLabel + " to continue" : null;
+        float hintWidth = 0f;
+        if (hintText != null) {
+            measureLayout.setText(font, hintText);
+            hintWidth = measureLayout.width;
+        }
+        float blockWidth = Math.max(textWidth, hintWidth);
+
+        float hintReserve = requireConfirm ? TEXT_CUE_HINT_HEIGHT : 0f;
+        float boxX = x - TEXT_CUE_BOX_PAD_X;
+        float boxY = y - textHeight - TEXT_CUE_BOX_PAD_BOTTOM - hintReserve;
+        float boxWidth = blockWidth + TEXT_CUE_BOX_PAD_X * 2f;
+        float boxHeight = textHeight + TEXT_CUE_BOX_PAD_TOP + TEXT_CUE_BOX_PAD_BOTTOM + hintReserve;
+        batch.setColor(TEXT_CUE_BOX_COLOR);
+        batch.draw(whitePixel, boxX, boxY, boxWidth, boxHeight);
+        batch.setColor(Color.WHITE);
+
+        font.setColor(Color.RED);
         switch (cue.effect) {
             case "typewriter" -> drawTypewriter(batch, cue.text, x, y, cueElapsedTime, cue.charsPerSecond);
             case "blinking" -> drawBlinking(batch, cue.text, x, y, cueElapsedTime, cue.blinksPerSecond);
             default -> font.draw(batch, cue.text, x, y);
+        }
+
+        if (hintText != null) {
+            font.setColor(HUD_LABEL);
+            font.draw(batch, hintText, x, y - textHeight - 0.1f);
         }
 
         if (cue.fontSize != 1f) {

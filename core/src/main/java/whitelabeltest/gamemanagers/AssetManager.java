@@ -243,6 +243,18 @@ public class AssetManager implements Disposable {
         return stages.get(id);
     }
 
+    // Debug-only: every stage id that exists, regardless of which stageSequence(s) (if any)
+    // actually play it - see GameController's debug-menu stage select, which lets a dev jump
+    // straight to any of these instead of only the ones reachable through normal play. Sorted for
+    // a stable, predictable left/right cycling order in that menu (ObjectMap's own iteration order
+    // isn't guaranteed).
+    public Array<String> getStageIds() {
+        Array<String> ids = new Array<>(stages.size);
+        for (String id : stages.keys()) ids.add(id);
+        ids.sort();
+        return ids;
+    }
+
     public StageSequenceDefinition getStageSequence(String id) {
         return stageSequences.get(id);
     }

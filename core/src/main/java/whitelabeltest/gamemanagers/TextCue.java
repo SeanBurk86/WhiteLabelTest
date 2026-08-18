@@ -37,5 +37,12 @@ public class TextCue {
     // leave the loop playing with nothing left tracking it.
     public boolean typingSoundActive = false;
 
+    // True once the player has manually confirmed past this cue - only ever set when the owning
+    // schedule has textCuesRequireConfirm on (see SpawnScheduler.update()'s cue-await-confirm
+    // block); always false for a schedule that doesn't use that mode. Hides the cue immediately in
+    // UIManager.drawTextCue() regardless of duration/elapsed time, and marks it as resolved for
+    // SpawnScheduler.seekTo()'s simplified reconstruction under that mode.
+    public boolean dismissed = false;
+
     public TextCue() {}
 }

@@ -195,6 +195,15 @@ public class SpawnScheduler {
         public Array<WeaponsDisabledWindow> hyperAttackDisabledWindows;
         public Array<WeaponsDisabledWindow> bombDisabledWindows;
 
+        // When true, every text cue in this schedule freezes the schedule clock the instant it
+        // triggers - same "nothing else advances or fires" freeze as an active GateCue - until the
+        // player presses confirm (see update()'s cue-await-confirm block), instead of auto-hiding
+        // after its own `duration`. Lets a schedule with lots of reading (e.g. the tutorial)
+        // guarantee every message actually gets read instead of racing a fixed timer against
+        // whatever's simultaneously happening on screen. False (the default) keeps every existing
+        // schedule's original fixed-duration cue behavior unchanged.
+        public boolean textCuesRequireConfirm = false;
+
         public ScheduleFile() {}
     }
 
@@ -277,6 +286,12 @@ public class SpawnScheduler {
     // See isHyperAttackDisabled()/isBombDisabled().
     private Array<WeaponsDisabledWindow> hyperAttackDisabledWindows = new Array<>();
     private Array<WeaponsDisabledWindow> bombDisabledWindows = new Array<>();
+    // See ScheduleFile.textCuesRequireConfirm.
+    private boolean textCuesRequireConfirm = false;
+    // The cue currently freezing the schedule clock while textCuesRequireConfirm is on, waiting on
+    // a confirm press - see update(). Only one at a time: totalTime can't reach a second cue's
+    // trigger time while frozen at the first's.
+    private TextCue awaitingConfirmCue;
     private final ObjectMap<String, EnemyDefinition> enemyDefinitions;
     private final AssetManager assets;
 
@@ -316,6 +331,7 @@ public class SpawnScheduler {
             if (file != null && file.weaponsDisabledWindows != null) this.weaponsDisabledWindows = file.weaponsDisabledWindows;
             if (file != null && file.hyperAttackDisabledWindows != null) this.hyperAttackDisabledWindows = file.hyperAttackDisabledWindows;
             if (file != null && file.bombDisabledWindows != null) this.bombDisabledWindows = file.bombDisabledWindows;
+            if (file != null) this.textCuesRequireConfirm = file.textCuesRequireConfirm;
             schedule.sort(new Comparator<SpawnEvent>() {
                 @Override
                 public int compare(SpawnEvent e1, SpawnEvent e2) {
@@ -348,6 +364,7 @@ public class SpawnScheduler {
 
     public Array<TextCue> getTextCues() { return textCues; }
     public float getRealTime() { return realTime; }
+    public boolean isTextCuesRequireConfirm() { return textCuesRequireConfirm; }
 
     public float getTotalTime() { return totalTime; }
 
@@ -482,9 +499,19 @@ public class SpawnScheduler {
         // seek landing anywhere else doesn't leave it playing with nothing left tracking it; resumed
         // below for whichever cue's reveal the new position actually falls inside of.
         audio.stopTextCueLoop();
+        awaitingConfirmCue = null;
         for (TextCue cue : textCues) {
             cue.typingSoundActive = false;
-            if (cue.time > totalTime) {
+            if (textCuesRequireConfirm) {
+                // A confirm-gated schedule can never have its clock sitting strictly between a
+                // cue's trigger time and its resolution in real gameplay - it's frozen exactly at
+                // the trigger until dismissed - so there's no real "mid-window" case to reconstruct
+                // here the way the duration-timed branch below does. Simpler and, more importantly,
+                // never leaves the schedule frozen after a debug/practice-rewind seek lands: past
+                // the cue's time means it must already have been read and dismissed to get here.
+                cue.dismissed = cue.time <= totalTime;
+                cue.triggeredAtRealTime = cue.dismissed ? realTime : -1f;
+            } else if (cue.time > totalTime) {
                 cue.triggeredAtRealTime = -1f;
             } else if (cue.time + cue.duration <= totalTime) {
                 cue.triggeredAtRealTime = realTime - cue.duration;
@@ -516,6 +543,7 @@ public class SpawnScheduler {
             if (cue.triggeredAtRealTime < 0f) {
                 if (totalTime < cue.time) continue;
                 cue.triggeredAtRealTime = realTime;
+                if (textCuesRequireConfirm) awaitingConfirmCue = cue;
                 if ("typewriter".equals(cue.effect)) {
                     audio.loopTextCue();
                     cue.typingSoundActive = true;
@@ -529,6 +557,35 @@ public class SpawnScheduler {
                     audio.stopTextCueLoop();
                     cue.typingSoundActive = false;
                 }
+            }
+        }
+
+        // Freezes the schedule clock exactly like an active GateCue below, until the player
+        // confirms past the message that just triggered above - see ScheduleFile.textCuesRequireConfirm.
+        // Checked ahead of the gate block since totalTime can never reach a gate's own trigger time
+        // while stuck here, so the two can't contend over the same frame's input.
+        if (awaitingConfirmCue != null) {
+            if (input.isRestartJustPressed() || input.isShootJustPressed()) {
+                float revealDuration = "typewriter".equals(awaitingConfirmCue.effect) && awaitingConfirmCue.charsPerSecond > 0f
+                    ? awaitingConfirmCue.text.length() / awaitingConfirmCue.charsPerSecond : 0f;
+                float cueElapsedTime = realTime - awaitingConfirmCue.triggeredAtRealTime;
+                if (cueElapsedTime < revealDuration) {
+                    // Still typing - this press force-completes the reveal instead of dismissing,
+                    // so the player never has to wait out a slow typewriter once they've already
+                    // asked to move on. Rewinding triggeredAtRealTime (rather than a separate
+                    // "forced" flag) reuses the same elapsed-time math everywhere else already reads
+                    // to decide the reveal is done. Stays frozen - the next press dismisses for real.
+                    awaitingConfirmCue.triggeredAtRealTime = realTime - revealDuration;
+                    if (awaitingConfirmCue.typingSoundActive) {
+                        audio.stopTextCueLoop();
+                        awaitingConfirmCue.typingSoundActive = false;
+                    }
+                } else {
+                    awaitingConfirmCue.dismissed = true;
+                    awaitingConfirmCue = null;
+                }
+            } else {
+                return; // frozen - nothing below this point advances or fires this frame
             }
         }
 
@@ -717,11 +774,13 @@ public class SpawnScheduler {
         for (TextCue cue : textCues) {
             cue.triggeredAtRealTime = -1f;
             cue.typingSoundActive = false;
+            cue.dismissed = false;
         }
         for (SoundCue cue : soundCues) cue.triggered = false;
         for (SpriteCue cue : spriteCues) cue.triggered = false;
         for (GateCue gate : gates) gate.triggered = false;
         activeGate = null;
+        awaitingConfirmCue = null;
         gemsAtLastWaypointSpawn = -1;
         backgroundVideoTriggered = false;
         musicFadeOutTriggered = false;

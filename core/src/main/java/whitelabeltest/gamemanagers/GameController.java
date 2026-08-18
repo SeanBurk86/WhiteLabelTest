@@ -1,6 +1,7 @@
 package whitelabeltest.gamemanagers;
 
 import com.badlogic.gdx.Gdx;
+import com.badlogic.gdx.Input;
 import com.badlogic.gdx.graphics.Texture;
 import com.badlogic.gdx.graphics.g2d.Animation;
 import com.badlogic.gdx.graphics.g2d.TextureRegion;
@@ -19,6 +20,7 @@ import whitelabeltest.player.powerups.WeaponPowerup;
 public class GameController implements Disposable {
     private final AssetManager assets;
     private final AudioManager audio;
+    private final KeyBindings keyBindings;
     private final EntityManager entities;
     private final CollisionManager collisionManager;
     private ScrollingBackground background;
@@ -76,6 +78,10 @@ public class GameController implements Disposable {
     private boolean debugMenuOpen;
     private int debugMenuSelectedIndex;
     private float debugMenuSeekTime;
+    // Index into AssetManager.getStageIds() the ROW_STAGE_SELECT row is currently showing - see
+    // handleDebugMenuInput()/debugLoadStage(). Initialized to the currently-loaded stage whenever
+    // the menu opens, same as debugMenuSeekTime snapping to the current schedule time.
+    private int debugMenuStageIndex;
 
     private static final float DEBUG_MENU_SCRUB_SPEED = 5f;
 
@@ -87,7 +93,8 @@ public class GameController implements Disposable {
     private static final int ROW_LIVES = ROW_LEVELS_START + WEAPON_LEVEL_IDS.length;
     private static final int ROW_PATTERN_PREVIEW = ROW_LIVES + 1;
     private static final int ROW_REPLAY_BROWSER = ROW_PATTERN_PREVIEW + 1;
-    private static final int ROW_BOOKMARKS_START = ROW_REPLAY_BROWSER + 1;
+    private static final int ROW_STAGE_SELECT = ROW_REPLAY_BROWSER + 1;
+    private static final int ROW_BOOKMARKS_START = ROW_STAGE_SELECT + 1;
     private static final String[] SLOT_WEAPON_OPTIONS = {null, "BasicWeapon", "WaveBlastWeapon", "OrbitWeapon", "Thunderbolt"};
     private static final int MAX_DEBUG_LIVES = 9;
 
@@ -128,6 +135,7 @@ public class GameController implements Disposable {
         this.audio = new AudioManager(audioSettings);
         this.entities = new EntityManager(assets, worldWidth, worldHeight);
         this.collisionManager = new CollisionManager();
+        this.keyBindings = keyBindings;
         this.input = new InputManager(keyBindings);
 
         this.scoreManager = new ScoreManager(assets.getGameBalance().defaultChainWindow);
@@ -203,6 +211,8 @@ public class GameController implements Disposable {
             if (debugMenuOpen) {
                 debugMenuSeekTime = spawnScheduler.getTotalTime();
                 debugMenuSelectedIndex = 0;
+                int currentStage = assets.getStageIds().indexOf(stageSequence.get(stageIndex), false);
+                debugMenuStageIndex = Math.max(currentStage, 0);
             } else {
                 patternPreviewer.close(entities);
                 replayBrowser.close();
@@ -383,6 +393,17 @@ public class GameController implements Disposable {
             if (input.isDebugMenuConfirmJustPressed()) {
                 replayBrowser.open();
             }
+        } else if (debugMenuSelectedIndex == ROW_STAGE_SELECT) {
+            Array<String> stageIds = assets.getStageIds();
+            if (input.isDebugMenuLeftJustPressed()) {
+                debugMenuStageIndex = (debugMenuStageIndex - 1 + stageIds.size) % stageIds.size;
+            }
+            if (input.isDebugMenuRightJustPressed()) {
+                debugMenuStageIndex = (debugMenuStageIndex + 1) % stageIds.size;
+            }
+            if (input.isDebugMenuConfirmJustPressed()) {
+                debugLoadStage(stageIds.get(debugMenuStageIndex));
+            }
         } else if (debugMenuSelectedIndex < ROW_BOOKMARKS_START) {
             String weaponId = WEAPON_LEVEL_IDS[debugMenuSelectedIndex - ROW_LEVELS_START];
             Player player = entities.getPlayer();
@@ -519,6 +540,28 @@ public class GameController implements Disposable {
         }
         String chosen = videos.get(MathUtils.random(videos.size - 1));
         interstitialPlayer.play(chosen, audio.isMuted() ? 0f : audioSettings.getEffectiveMusicVolume());
+    }
+
+    /** Debug-only: jumps straight into an arbitrary stage from stages.json, bypassing whatever
+     *  stage_sequences.json normally governs progression - the only way to reach a stage (like
+     *  "testground") that isn't part of any curated sequence. Replaces stageSequence with a
+     *  synthetic single-entry list so hasNextStage() is false and normal advancement stays inert.
+     *  Not representable as a mid-run seek (c.f. seekToTime's recordSeek), so any in-progress
+     *  replay recording is simply dropped rather than corrupted. */
+    private void debugLoadStage(String stageId) {
+        recorder = null;
+        stageSequence = new Array<>();
+        stageSequence.add(stageId);
+        loadStage(0);
+        entities.clearWorld();
+        gameOver = false;
+        gameOverTimer = 0f;
+        levelComplete = false;
+        levelCompleteDelayTimer = -1f;
+        bossDefeatedScheduleTime = -1f;
+        audio.stopVictory();
+        audio.playStageMusic();
+        debugMenuOpen = false;
     }
 
     public boolean hasNextStage() { return stageIndex + 1 < stageSequence.size; }
@@ -792,11 +835,24 @@ public class GameController implements Disposable {
     public boolean isDebugMenuOpen() { return debugMenuOpen; }
     public int getDebugMenuSelectedIndex() { return debugMenuSelectedIndex; }
     public float getDebugMenuSeekTime() { return debugMenuSeekTime; }
+    public int getDebugMenuStageIndex() { return debugMenuStageIndex; }
+    public Array<String> getDebugMenuStageIds() { return assets.getStageIds(); }
     public float getSpawnScheduleTotalTime() { return spawnScheduler.getTotalTime(); }
     public float getSpawnScheduleRealTime() { return spawnScheduler.getRealTime(); }
     // See SpawnScheduler.isScheduleEndTriggered() - always false for an ordinary arcade stage
     // (only a schedule that explicitly sets scheduleEndTime, e.g. the tutorial, ever latches this).
     public boolean isScheduleEndTriggered() { return spawnScheduler.isScheduleEndTriggered(); }
+    // See SpawnScheduler.isTextCuesRequireConfirm()/UIManager.drawTextCues().
+    public boolean isTextCuesRequireConfirm() { return spawnScheduler.isTextCuesRequireConfirm(); }
+    // Matches whichever input the player's actually using - a gamepad player dismissing tutorial
+    // messages with the SHOOT/RESTART buttons (see SpawnScheduler.update()'s cue-await-confirm
+    // block) shouldn't see a keyboard-only "Press SPACE" hint they can't act on.
+    public String getTextCueConfirmKeyLabel() {
+        if (input.getActiveInput() == InputType.GAMEPAD) {
+            return keyBindings.getGamepadButton(KeyBindings.Action.SHOOT).displayName;
+        }
+        return Input.Keys.toString(keyBindings.getKey(KeyBindings.Action.SHOOT));
+    }
     public Array<DebugSaveState> getDebugSaveStates() { return debugSaveStateManager.getSaveStates(); }
     public float getLevelStartTimer() { return levelStartTimer; }
     public Array<TextCue> getTextCues() { return spawnScheduler.getTextCues(); }
