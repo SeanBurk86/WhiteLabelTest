@@ -22,11 +22,13 @@ public class StageDefinition {
     // spawn-schedule cue), this plays immediately, so a stage using it typically leaves
     // backgroundLayers empty (or minimal) rather than layering it under a parallax image.
     public String backgroundVideo;
-    // When true, the background is a full-screen raymarched shader effect (see
-    // ScrollingBackground/TutorialBoxTunnelShader) instead of backgroundVideo/backgroundLayers -
-    // same "plays immediately, covers the whole screen" role as backgroundVideo, just procedural
-    // rather than a decoded video file. Takes priority over backgroundVideo if both are somehow set.
-    public boolean shaderBackground = false;
+    // When set, the background is a full-screen procedural shader effect (see
+    // ScrollingBackground.createShaderBackground/BackgroundShader) instead of backgroundVideo/
+    // backgroundLayers - same "plays immediately, covers the whole screen" role as backgroundVideo,
+    // just procedural rather than a decoded video file. Takes priority over backgroundVideo if both
+    // are somehow set. null (the default) means no shader background; otherwise must be one of the
+    // ids createShaderBackground() recognizes ("boxTunnel", "kaleidoscope").
+    public String shaderBackground = null;
 
     public StageDefinition() {}
 }

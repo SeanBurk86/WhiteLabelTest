@@ -170,6 +170,12 @@ public class SpawnScheduler {
         // a defined ending - GameController surfaces this so its caller can decide what "done" means
         // (the tutorial's case: hand control back to the start screen).
         public Float scheduleEndTime;
+        // Optional seconds of u_time this stage's Stage2KaleidoscopeShader background plays the
+        // phosphene kaleidoscope effect before switching to the tentacles tunnel - see
+        // ScrollingBackground.setKaleidoscopeTransitionTime()/getKaleidoscopeTransitionTime()
+        // below. Null (the default, and the only sensible value for a stage that isn't using that
+        // shader background) falls back to Stage2KaleidoscopeShader.DEFAULT_TRANSITION_TIME.
+        public Float kaleidoscopeTransitionTime;
         // Zero or more [start, end) schedule-time windows - see isInPracticeSection(). A schedule
         // can have several independent drills (e.g. a movement dodge, then later a stand-still
         // dodge), each with its own restart-on-hit range.
@@ -273,6 +279,8 @@ public class SpawnScheduler {
     private boolean musicFadeOutTriggered;
     private Float scheduleEndTime;
     private boolean scheduleEndTriggered;
+    // See ScheduleFile.kaleidoscopeTransitionTime.
+    private float kaleidoscopeTransitionTime = Stage2KaleidoscopeShader.DEFAULT_TRANSITION_TIME;
     // See isInPracticeSection() - lets a scripted section (e.g. a tutorial dodge drill) tell
     // GameController "a death in here doesn't cost a life, just rewind to the start of this
     // window" instead of the normal hit-handling.
@@ -326,6 +334,7 @@ public class SpawnScheduler {
             if (file != null) this.backgroundVideoTime = file.backgroundVideoTime;
             if (file != null) this.musicFadeOutTime = file.musicFadeOutTime;
             if (file != null) this.scheduleEndTime = file.scheduleEndTime;
+            if (file != null && file.kaleidoscopeTransitionTime != null) this.kaleidoscopeTransitionTime = file.kaleidoscopeTransitionTime;
             if (file != null && file.practiceCheckpoints != null) this.practiceCheckpoints = file.practiceCheckpoints;
             if (file != null && file.invincibilityWindows != null) this.invincibilityWindows = file.invincibilityWindows;
             if (file != null && file.weaponsDisabledWindows != null) this.weaponsDisabledWindows = file.weaponsDisabledWindows;
@@ -400,6 +409,11 @@ public class SpawnScheduler {
      *  levelComplete flow (e.g. the tutorial). Always false when the schedule doesn't set
      *  scheduleEndTime, so this is a no-op for every ordinary arcade stage. */
     public boolean isScheduleEndTriggered() { return scheduleEndTriggered; }
+
+    /** See ScheduleFile.kaleidoscopeTransitionTime - Stage2KaleidoscopeShader.DEFAULT_TRANSITION_TIME
+     *  unless this stage's own schedule overrides it. Meaningless (and unread) for a stage whose
+     *  shaderBackground isn't "kaleidoscope". */
+    public float getKaleidoscopeTransitionTime() { return kaleidoscopeTransitionTime; }
 
     /** True while the schedule clock sits inside any [start, end) practice checkpoint - see
      *  GameController.applyPlayerHit(), which checks this before applying the normal

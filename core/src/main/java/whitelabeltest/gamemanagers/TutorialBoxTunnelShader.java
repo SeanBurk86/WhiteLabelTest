@@ -4,9 +4,8 @@ import com.badlogic.gdx.graphics.Color;
 import com.badlogic.gdx.graphics.Texture;
 import com.badlogic.gdx.graphics.g2d.SpriteBatch;
 import com.badlogic.gdx.graphics.glutils.ShaderProgram;
-import com.badlogic.gdx.utils.Disposable;
 
-public class TutorialBoxTunnelShader implements Disposable {
+public class TutorialBoxTunnelShader implements BackgroundShader {
     private static final String VERTEX_SHADER =
         "attribute vec4 a_position;\n" +
         "attribute vec4 a_color;\n" +
@@ -121,14 +120,17 @@ public class TutorialBoxTunnelShader implements Disposable {
         }
     }
 
+    @Override
     public void update(float delta) {
         time += delta;
     }
 
+    @Override
     public void resetTime() {
         time = 0f;
     }
 
+    @Override
     public void render(SpriteBatch batch, Texture quadTexture, float worldWidth, float worldHeight) {
         ShaderProgram previousShader = batch.getShader();
         float previousPackedColor = batch.getPackedColor();

@@ -45,7 +45,7 @@ public class ScrollingBackground {
     // See StageDefinition.shaderBackground - a procedural full-screen effect standing in for
     // backgroundVideoFile, same "plays immediately, covers the whole screen" priority (checked
     // ahead of it in draw()/update() below since a stage only ever sets one or the other).
-    private final TutorialBoxTunnelShader shaderBackground;
+    private final BackgroundShader shaderBackground;
     private final Texture shaderQuadTexture;
     private boolean stopped;
     private boolean muted;
@@ -57,7 +57,7 @@ public class ScrollingBackground {
 
     public ScrollingBackground(float worldWidth, float worldHeight, AudioSettings audioSettings, AssetManager assets,
                                 Array<StageDefinition.BackgroundLayerDef> layerDefs, String bossVideoFile, String backgroundVideoFile,
-                                boolean useShaderBackground) {
+                                String shaderBackgroundId) {
         this.worldWidth = worldWidth;
         this.worldHeight = worldHeight;
         this.audioSettings = audioSettings;
@@ -68,15 +68,34 @@ public class ScrollingBackground {
             float scrollSpeed = Float.isNaN(layerDef.scrollSpeed) ? DEFAULT_SCROLL_SPEED : layerDef.scrollSpeed;
             layers.add(new Layer(texture, worldWidth, worldHeight, scrollSpeed));
         }
-        if (useShaderBackground) {
-            shaderBackground = new TutorialBoxTunnelShader();
-            shaderQuadTexture = assets.pixelTexture;
-        } else {
-            shaderBackground = null;
-            shaderQuadTexture = null;
-        }
+        shaderBackground = createShaderBackground(shaderBackgroundId);
+        shaderQuadTexture = shaderBackground != null ? assets.pixelTexture : null;
         backgroundVideoPlayer = startVideo(backgroundVideoFile);
         backgroundVideoStarted = backgroundVideoPlayer != null;
+    }
+
+    /** See StageDefinition.shaderBackground for the id each stage sets - null means "no shader
+     *  background" (the ordinary Layer/backgroundVideoFile path). Add a new stage's shader here as
+     *  its own BackgroundShader implementation and a new id, rather than growing one shader class
+     *  to cover every stage. */
+    private static BackgroundShader createShaderBackground(String shaderBackgroundId) {
+        if (shaderBackgroundId == null) return null;
+        return switch (shaderBackgroundId) {
+            case "boxTunnel" -> new TutorialBoxTunnelShader();
+            case "kaleidoscope" -> new Stage2KaleidoscopeShader();
+            default -> throw new IllegalArgumentException("Unknown shaderBackground id: " + shaderBackgroundId);
+        };
+    }
+
+    /** Passes a stage's schedule-configured kaleidoscope-to-tentacles switchover time down to the
+     *  shader background - see SpawnScheduler.getKaleidoscopeTransitionTime()/
+     *  Stage2KaleidoscopeShader.setTransitionTime(). No-op if this stage's shaderBackground isn't
+     *  "kaleidoscope" (or has none), so GameController can call this unconditionally after loading
+     *  any stage without checking which one it got first. */
+    public void setKaleidoscopeTransitionTime(float transitionTime) {
+        if (shaderBackground instanceof Stage2KaleidoscopeShader kaleidoscope) {
+            kaleidoscope.setTransitionTime(transitionTime);
+        }
     }
 
     public void setMuted(boolean muted) {

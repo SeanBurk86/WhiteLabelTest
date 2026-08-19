@@ -510,6 +510,7 @@ public class GameController implements Disposable {
         background = new ScrollingBackground(worldWidth, worldHeight, audioSettings, assets, stageDef.backgroundLayers, stageDef.bossVideo, stageDef.backgroundVideo, stageDef.shaderBackground);
         background.setMuted(audio.isMuted());
         spawnScheduler = new SpawnScheduler(worldWidth, worldHeight, assets, stageDef.spawnSchedule);
+        background.setKaleidoscopeTransitionTime(spawnScheduler.getKaleidoscopeTransitionTime());
         audio.loadStageMusic(stageDef.music);
         totalEnemiesAcrossRun += spawnScheduler.getSchedule().size;
         bossVideoTriggered = false;
