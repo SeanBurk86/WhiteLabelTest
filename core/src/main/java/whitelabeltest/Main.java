@@ -136,6 +136,10 @@ public class Main extends ApplicationAdapter {
                 // boss to drive the normal levelComplete flow (the tutorial), so this is a no-op for
                 // every ordinary arcade run.
                 transitionToStartFromTutorial();
+            } else if (game.isQuitToMenuRequested()) {
+                // QUIT confirmed from the game-over/level-complete prompt - see
+                // GameController.handleGameOverInput()/handleLevelCompleteInput().
+                transitionToStartFromGameOver();
             }
         }
     }
@@ -253,6 +257,21 @@ public class Main extends ApplicationAdapter {
      *  normal levelComplete flow other stages use to advance/restart; this is its equivalent. Mirrors
      *  transitionToStartFromReplayWatch() exactly, just triggered by a different condition. */
     private void transitionToStartFromTutorial() {
+        game.dispose();
+        game = null;
+        if (ui != null) {
+            ui.dispose();
+            ui = null;
+        }
+        startScreen = new StartScreen(PLAY_AREA_WIDTH, PLAY_AREA_HEIGHT, audioSettings);
+        state = AppState.START;
+    }
+
+    /** Returns to the start screen when QUIT is confirmed from the game-over/level-complete prompt
+     *  (see GameController.isQuitToMenuRequested()) - previously this just called Gdx.app.exit() and
+     *  closed the whole game; now it backs out to the main menu instead, same as every other way of
+     *  leaving a run early. Mirrors transitionToStartFromTutorial() exactly. */
+    private void transitionToStartFromGameOver() {
         game.dispose();
         game = null;
         if (ui != null) {

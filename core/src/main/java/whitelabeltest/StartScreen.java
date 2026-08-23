@@ -52,11 +52,12 @@ public class StartScreen implements Disposable {
     // WeaponSelectScreen, which follows right after this). Index 0 starts the run as before;
     // index 1 signals Main to open OptionsScreen (see consumeOptionsRequested()) without leaving
     // this phase, so the menu is still showing when Options closes.
-    private static final String[] MENU_ITEMS = { "ARCADE MODE", "TUTORIAL", "REPLAYS", "OPTIONS" };
+    private static final String[] MENU_ITEMS = { "ARCADE MODE", "TUTORIAL", "REPLAYS", "OPTIONS", "EXIT" };
     private static final int MENU_ARCADE_MODE = 0;
     private static final int MENU_TUTORIAL = 1;
     private static final int MENU_REPLAYS = 2;
     private static final int MENU_OPTIONS = 3;
+    private static final int MENU_EXIT = 4;
 
     /** One looping animated sign in the opening screen's stacked composition (reference mockup:
      *  Screenshot 2026-08-07 145711.png) - replaces the old single openingscreen.webm loop with
@@ -263,6 +264,9 @@ public class StartScreen implements Disposable {
         } else if (menuIndex == MENU_OPTIONS) {
             optionsConfirmSound.play(audioSettings.getEffectiveSfxVolume());
             optionsRequested = true;
+        } else if (menuIndex == MENU_EXIT) {
+            optionsConfirmSound.play(audioSettings.getEffectiveSfxVolume());
+            Gdx.app.exit();
         }
     }
 

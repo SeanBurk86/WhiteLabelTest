@@ -86,6 +86,11 @@ public class GameController implements Disposable {
     private boolean gameOver;
     private float gameOverTimer;
     private boolean levelComplete;
+    // Set when QUIT is confirmed from the game-over/level-complete prompt - see
+    // handleGameOverInput()/handleLevelCompleteInput(). Main polls this each frame while PLAYING and
+    // tears this GameController down for the start screen once it's set, same as it already does
+    // when a replay-from-menu playback ends or the tutorial's schedule reaches its scripted end.
+    private boolean quitToMenuRequested;
     private boolean bossVideoTriggered;
     private boolean musicFadeTriggered;
     private static final float LEVEL_COMPLETE_DELAY = 3f;
@@ -515,7 +520,7 @@ public class GameController implements Disposable {
         if (input.isRestartJustPressed()) {
             reset();
         } else if (input.isQuitJustPressed()) {
-            Gdx.app.exit();
+            quitToMenuRequested = true;
         }
     }
 
@@ -523,7 +528,7 @@ public class GameController implements Disposable {
         if (input.isRestartJustPressed()) {
             if (hasNextStage()) advanceToNextStage(); else reset();
         } else if (input.isQuitJustPressed()) {
-            Gdx.app.exit();
+            quitToMenuRequested = true;
         }
     }
 
@@ -846,6 +851,7 @@ public class GameController implements Disposable {
     public ScoreManager getScoreManager() { return scoreManager; }
     public boolean isGameOver() { return gameOver; }
     public float getGameOverTimer() { return gameOverTimer; }
+    public boolean isQuitToMenuRequested() { return quitToMenuRequested; }
     public boolean isLevelComplete() { return levelComplete; }
     public int getLevelCompleteBombBonus() { return levelCompleteBombBonus; }
     public int getLevelCompleteLivesMultiplier() { return levelCompleteLivesMultiplier; }
