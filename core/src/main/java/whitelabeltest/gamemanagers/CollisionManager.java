@@ -217,7 +217,15 @@ public class CollisionManager {
                     ObjectPools.freeWeapon(bullet);
                 }
 
-                if (bullet.shouldDestroyOnCollision() || !enemy.isActive()) break;
+                // Only stop checking bullets against THIS enemy once it's actually gone - a
+                // destroyed bullet just means that one bullet is done, not that every other bullet
+                // already overlapping the same enemy this frame should be skipped. That distinction
+                // barely matters for small enemies (rarely more than one bullet overlaps at once),
+                // but a large stationary boss can have many rapid-fire bullets overlapping it in a
+                // single frame - breaking here after the first one meant every other bullet already
+                // touching it got skipped entirely, and fast bullets had already flown past its
+                // hitbox by the next frame, i.e. they'd visibly "pass through" without ever hitting.
+                if (!enemy.isActive()) break;
             }
         }
     }
