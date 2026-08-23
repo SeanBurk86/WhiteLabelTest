@@ -15,8 +15,8 @@ import whitelabeltest.enemy.movementpatterns.SplineMovement;
 import whitelabeltest.enemy.movementpatterns.SquadronMovement;
 import whitelabeltest.enemy.firingpatterns.*;
 import whitelabeltest.enemy.movementpatterns.ZigZagMovement;
-import whitelabeltest.gamemanagers.AnimationCache;
-import whitelabeltest.gamemanagers.EnemySpawnRegistry;
+import whitelabeltest.gamemanagers.effects.AnimationCache;
+import whitelabeltest.gamemanagers.spawning.EnemySpawnRegistry;
 
 public class PatternFactory {
     public static MovementPattern createMovement(MovementPatternDef def, float worldHeight, float spawnCenterX) {

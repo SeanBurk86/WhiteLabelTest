@@ -1,4 +1,8 @@
 package whitelabeltest.gamemanagers;
+import whitelabeltest.gamemanagers.effects.AnimationCache;
+import whitelabeltest.gamemanagers.spawning.GameBalance;
+import whitelabeltest.gamemanagers.spawning.StageDefinition;
+import whitelabeltest.gamemanagers.spawning.StageSequenceDefinition;
 
 import com.badlogic.gdx.Gdx;
 import com.badlogic.gdx.graphics.Color;

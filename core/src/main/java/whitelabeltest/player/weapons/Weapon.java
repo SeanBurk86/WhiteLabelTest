@@ -10,7 +10,7 @@ import com.badlogic.gdx.math.Vector2;
 import com.badlogic.gdx.utils.Array;
 import com.badlogic.gdx.utils.Pool;
 import whitelabeltest.gamemanagers.AssetManager;
-import whitelabeltest.gamemanagers.AudioManager;
+import whitelabeltest.gamemanagers.audio.AudioManager;
 import whitelabeltest.enemy.Enemy;
 import whitelabeltest.player.Player;
 

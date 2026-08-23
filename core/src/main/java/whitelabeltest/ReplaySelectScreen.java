@@ -15,9 +15,9 @@ import com.badlogic.gdx.graphics.g2d.freetype.FreeTypeFontGenerator;
 import com.badlogic.gdx.graphics.g2d.freetype.FreeTypeFontGenerator.FreeTypeFontParameter;
 import com.badlogic.gdx.utils.Array;
 import com.badlogic.gdx.utils.Disposable;
-import whitelabeltest.gamemanagers.AudioSettings;
-import whitelabeltest.gamemanagers.ReplayBrowser;
-import whitelabeltest.gamemanagers.ReplayData;
+import whitelabeltest.gamemanagers.audio.AudioSettings;
+import whitelabeltest.gamemanagers.replay.ReplayBrowser;
+import whitelabeltest.gamemanagers.replay.ReplayData;
 
 /** Reached from StartScreen's REPLAYS item - lets the player pick one of their own recorded runs
  *  (see ReplayBrowser/ReplayRecorder) and watch it play back. Polls input directly the same way

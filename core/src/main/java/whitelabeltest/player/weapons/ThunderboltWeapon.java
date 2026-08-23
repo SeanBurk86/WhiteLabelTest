@@ -12,7 +12,7 @@ import com.badlogic.gdx.utils.Array;
 import com.badlogic.gdx.utils.FloatArray;
 import whitelabeltest.enemy.Enemy;
 import whitelabeltest.gamemanagers.AssetManager;
-import whitelabeltest.gamemanagers.AudioManager;
+import whitelabeltest.gamemanagers.audio.AudioManager;
 import whitelabeltest.gamemanagers.ObjectPools;
 import whitelabeltest.player.Player;
 

@@ -1,4 +1,7 @@
 package whitelabeltest.gamemanagers;
+import whitelabeltest.gamemanagers.effects.HitEffect;
+import whitelabeltest.gamemanagers.audio.AudioManager;
+import whitelabeltest.gamemanagers.effects.PointGem;
 
 import com.badlogic.gdx.graphics.g2d.Animation;
 import com.badlogic.gdx.graphics.g2d.Sprite;

@@ -5,7 +5,7 @@ import com.badlogic.gdx.graphics.g2d.Animation;
 import com.badlogic.gdx.graphics.g2d.Sprite;
 import com.badlogic.gdx.graphics.g2d.TextureRegion;
 import com.badlogic.gdx.math.MathUtils;
-import whitelabeltest.gamemanagers.AnimationCache;
+import whitelabeltest.gamemanagers.effects.AnimationCache;
 import whitelabeltest.gamemanagers.ObjectPools;
 import whitelabeltest.enemy.firingpatterns.SelfDestructFiring;
 

@@ -17,9 +17,9 @@ import com.badlogic.gdx.graphics.g2d.TextureRegion;
 import com.badlogic.gdx.graphics.g2d.freetype.FreeTypeFontGenerator;
 import com.badlogic.gdx.graphics.g2d.freetype.FreeTypeFontGenerator.FreeTypeFontParameter;
 import com.badlogic.gdx.utils.Disposable;
-import whitelabeltest.gamemanagers.AnimationCache;
-import whitelabeltest.gamemanagers.AudioSettings;
-import whitelabeltest.gamemanagers.InputType;
+import whitelabeltest.gamemanagers.effects.AnimationCache;
+import whitelabeltest.gamemanagers.audio.AudioSettings;
+import whitelabeltest.gamemanagers.input.InputType;
 
 public class StartScreen implements Disposable {
     private enum Phase { SELECTING, MENU, FADING, DONE }

@@ -11,10 +11,10 @@ import com.badlogic.gdx.math.MathUtils;
 import com.badlogic.gdx.math.Vector2;
 import com.badlogic.gdx.utils.Array;
 import whitelabeltest.enemy.Enemy;
-import whitelabeltest.gamemanagers.AnimationCache;
+import whitelabeltest.gamemanagers.effects.AnimationCache;
 import whitelabeltest.gamemanagers.AssetManager;
-import whitelabeltest.gamemanagers.AudioManager;
-import whitelabeltest.gamemanagers.InputManager;
+import whitelabeltest.gamemanagers.audio.AudioManager;
+import whitelabeltest.gamemanagers.input.InputManager;
 import whitelabeltest.player.weapons.*;
 
 public class Player {

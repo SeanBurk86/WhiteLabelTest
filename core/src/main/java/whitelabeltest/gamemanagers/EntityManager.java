@@ -1,4 +1,13 @@
 package whitelabeltest.gamemanagers;
+import whitelabeltest.gamemanagers.spawning.EnemySpawnRegistry;
+import whitelabeltest.gamemanagers.audio.AudioManager;
+import whitelabeltest.gamemanagers.effects.BulletCancelEffect;
+import whitelabeltest.gamemanagers.effects.ExplosionEffect;
+import whitelabeltest.gamemanagers.effects.HitEffect;
+import whitelabeltest.gamemanagers.input.InputManager;
+import whitelabeltest.gamemanagers.effects.PlayerTrailEffect;
+import whitelabeltest.gamemanagers.effects.PointGem;
+import whitelabeltest.gamemanagers.effects.ScheduledSpriteEffect;
 
 import com.badlogic.gdx.Gdx;
 import com.badlogic.gdx.graphics.GL20;

@@ -1,4 +1,13 @@
 package whitelabeltest.gamemanagers;
+import whitelabeltest.gamemanagers.effects.AnimationCache;
+import whitelabeltest.gamemanagers.effects.ChainFireEffect;
+import whitelabeltest.gamemanagers.effects.CircleMeterEffect;
+import whitelabeltest.gamemanagers.effects.DataStreamEffect;
+import whitelabeltest.gamemanagers.replay.DebugSaveState;
+import whitelabeltest.gamemanagers.spawning.LevelRank;
+import whitelabeltest.gamemanagers.spawning.PatternPreviewer;
+import whitelabeltest.gamemanagers.replay.ReplayBrowser;
+import whitelabeltest.gamemanagers.input.InputType;
 
 import com.badlogic.gdx.Gdx;
 import com.badlogic.gdx.graphics.Color;
@@ -23,10 +32,10 @@ public class UIManager implements Disposable {
     // on the reference mockup (Screenshot 2026-08-06 131050.png): green/amber readouts over dim
     // dividers and borders on a near-black panel. Package-visible (not private) so ChainFireEffect
     // can reuse these exact colors for its own ramp instead of duplicating hand-picked literals.
-    static final Color HUD_GREEN = new Color(0.35f, 1f, 0.55f, 1f);
-    static final Color HUD_GREEN_DIM = new Color(0.16f, 0.4f, 0.24f, 1f);
-    static final Color HUD_AMBER = new Color(1f, 0.72f, 0.18f, 1f);
-    static final Color HUD_RED = new Color(1f, 0.32f, 0.26f, 1f);
+    public static final Color HUD_GREEN = new Color(0.35f, 1f, 0.55f, 1f);
+    public static final Color HUD_GREEN_DIM = new Color(0.16f, 0.4f, 0.24f, 1f);
+    public static final Color HUD_AMBER = new Color(1f, 0.72f, 0.18f, 1f);
+    public static final Color HUD_RED = new Color(1f, 0.32f, 0.26f, 1f);
     private static final Color HUD_LABEL = new Color(0.5f, 0.62f, 0.55f, 1f);
     private static final Color HUD_GAUGE_BG = new Color(0.05f, 0.12f, 0.08f, 1f);
     // Bright near-white "hot head" leading each DATA_STREAM column - see drawRightHudPanel().

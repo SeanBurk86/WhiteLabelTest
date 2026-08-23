@@ -7,7 +7,7 @@ import com.badlogic.gdx.graphics.g2d.SpriteBatch;
 import com.badlogic.gdx.graphics.g2d.TextureRegion;
 import com.badlogic.gdx.math.Rectangle;
 import com.badlogic.gdx.math.Vector2;
-import whitelabeltest.gamemanagers.AnimationCache;
+import whitelabeltest.gamemanagers.effects.AnimationCache;
 import whitelabeltest.player.Player;
 
 public class WeaponPowerup implements Powerup {

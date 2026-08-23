@@ -6,9 +6,9 @@ import com.badlogic.gdx.graphics.g2d.Sprite;
 import com.badlogic.gdx.graphics.g2d.TextureRegion;
 import com.badlogic.gdx.utils.Array;
 import whitelabeltest.enemy.Enemy;
-import whitelabeltest.gamemanagers.AnimationCache;
+import whitelabeltest.gamemanagers.effects.AnimationCache;
 import whitelabeltest.gamemanagers.AssetManager;
-import whitelabeltest.gamemanagers.AudioManager;
+import whitelabeltest.gamemanagers.audio.AudioManager;
 import whitelabeltest.gamemanagers.ObjectPools;
 import whitelabeltest.player.Player;
 

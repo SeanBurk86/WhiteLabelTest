@@ -1,4 +1,10 @@
 package whitelabeltest.gamemanagers;
+import whitelabeltest.gamemanagers.effects.BulletCancelEffect;
+import whitelabeltest.gamemanagers.effects.ExplosionEffect;
+import whitelabeltest.gamemanagers.effects.HitEffect;
+import whitelabeltest.gamemanagers.effects.PlayerTrailEffect;
+import whitelabeltest.gamemanagers.effects.PointGem;
+import whitelabeltest.gamemanagers.effects.ScheduledSpriteEffect;
 
 import com.badlogic.gdx.utils.Pool;
 import whitelabeltest.enemy.*;

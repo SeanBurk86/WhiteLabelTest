@@ -10,7 +10,7 @@ import com.badlogic.gdx.math.Vector2;
 import com.badlogic.gdx.utils.Array;
 import whitelabeltest.enemy.Enemy;
 import whitelabeltest.gamemanagers.AssetManager;
-import whitelabeltest.gamemanagers.AudioManager;
+import whitelabeltest.gamemanagers.audio.AudioManager;
 import whitelabeltest.player.Player;
 
 /** A homing projectile launched by WaveBlastWeapon's Hyper Attack (see

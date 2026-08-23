@@ -30,10 +30,10 @@ import com.badlogic.gdx.scenes.scene2d.utils.TextureRegionDrawable;
 import com.badlogic.gdx.utils.Array;
 import com.badlogic.gdx.utils.Disposable;
 import com.badlogic.gdx.utils.viewport.ExtendViewport;
-import whitelabeltest.gamemanagers.AudioSettings;
-import whitelabeltest.gamemanagers.KeyBindings;
-import whitelabeltest.gamemanagers.KeyBindings.Action;
-import whitelabeltest.gamemanagers.KeyBindings.GamepadButton;
+import whitelabeltest.gamemanagers.audio.AudioSettings;
+import whitelabeltest.gamemanagers.input.KeyBindings;
+import whitelabeltest.gamemanagers.input.KeyBindings.Action;
+import whitelabeltest.gamemanagers.input.KeyBindings.GamepadButton;
 
 import java.util.EnumMap;
 import java.util.Map;

@@ -8,7 +8,7 @@ import com.badlogic.gdx.math.Rectangle;
 import com.badlogic.gdx.utils.Array;
 import whitelabeltest.enemy.Enemy;
 import whitelabeltest.enemy.bullets.EnemyBullet;
-import whitelabeltest.gamemanagers.EnemySpawnRegistry;
+import whitelabeltest.gamemanagers.spawning.EnemySpawnRegistry;
 
 /** Periodically spawns another enemy (by type id) at this enemy's position, instead of firing bullets. */
 public class SpawnEnemyFiring implements FiringPattern {

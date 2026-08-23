@@ -14,7 +14,7 @@ import com.badlogic.gdx.graphics.g2d.SpriteBatch;
 import com.badlogic.gdx.graphics.g2d.freetype.FreeTypeFontGenerator;
 import com.badlogic.gdx.graphics.g2d.freetype.FreeTypeFontGenerator.FreeTypeFontParameter;
 import com.badlogic.gdx.utils.Disposable;
-import whitelabeltest.gamemanagers.AudioSettings;
+import whitelabeltest.gamemanagers.audio.AudioSettings;
 import whitelabeltest.player.WeaponLoadout;
 
 /** Shown once, right after StartScreen's "press any key", so the player can pick which two
