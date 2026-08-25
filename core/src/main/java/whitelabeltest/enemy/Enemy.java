@@ -10,7 +10,12 @@ import whitelabeltest.enemy.bullets.EnemyBullet;
 
 public interface Enemy extends Pool.Poolable {
     void init(Texture texture, float worldWidth, float worldHeight, float startX, float startY);
-    void update(float delta, Array<EnemyBullet> enemyBullets, Circle playerHitbox, Circle grazeHitbox, boolean firingPaused);
+    // groundScrollSpeed is the current stage schedule's background scroll speed (see
+    // SpawnScheduler.getGroundScrollSpeed()) - only consumed by a ground enemy (isGround()), which
+    // gets shifted down by that same amount every frame on top of its own movement pattern, so it
+    // stays visually planted on the scrolling terrain instead of sliding relative to it. Ignored by
+    // every other enemy.
+    void update(float delta, Array<EnemyBullet> enemyBullets, Circle playerHitbox, Circle grazeHitbox, boolean firingPaused, float groundScrollSpeed);
     void draw(SpriteBatch batch);
     default void drawShadow(SpriteBatch batch) {}
     boolean isOffScreen();

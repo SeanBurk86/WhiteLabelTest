@@ -290,7 +290,7 @@ public class GameController implements Disposable {
         }
 
         background.update(delta);
-        entities.update(delta, input, assets, audio, weaponsDisabled, hyperAttackDisabled);
+        entities.update(delta, input, assets, audio, weaponsDisabled, hyperAttackDisabled, spawnScheduler.getGroundScrollSpeed());
         spawnScheduler.update(delta, entities, audio, input,
             scoreManager.getEnemiesDestroyed(), scoreManager.getGemsCollected(), entities.getPlayer().getGrazePoints());
 

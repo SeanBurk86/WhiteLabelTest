@@ -105,7 +105,7 @@ public class EntityManager {
         scheduledSprites.add(effect);
     }
 
-    public void update(float delta, InputManager input, AssetManager assets, AudioManager audio, boolean weaponsDisabled, boolean hyperAttackDisabled) {
+    public void update(float delta, InputManager input, AssetManager assets, AudioManager audio, boolean weaponsDisabled, boolean hyperAttackDisabled, float groundScrollSpeed) {
         if (bombActive) {
             bombAnimationTime += delta;
             if (bombAnimation.isAnimationFinished(bombAnimationTime)) bombActive = false;
@@ -113,7 +113,7 @@ public class EntityManager {
         player.update(delta, input, assets, audio, bullets, enemies, weaponsDisabled, hyperAttackDisabled);
         updateTrail(delta, input);
 
-        updateCollections(delta, assets, input);
+        updateCollections(delta, assets, input, groundScrollSpeed);
     }
 
     private void updateTrail(float delta, InputManager input) {
@@ -135,7 +135,7 @@ public class EntityManager {
         }
     }
 
-    private void updateCollections(float delta, AssetManager assets, InputManager input) {
+    private void updateCollections(float delta, AssetManager assets, InputManager input, float groundScrollSpeed) {
         for (int i = bullets.size - 1; i >= 0; i--) {
             Weapon b = bullets.get(i);
             b.updateWithEnemies(delta, enemies);
@@ -159,7 +159,7 @@ public class EntityManager {
         boolean firingPaused = player.isDead() || player.isInvincible();
         for (int i = enemies.size - 1; i >= 0; i--) {
             Enemy e = enemies.get(i);
-            e.update(delta, enemyBullets, player.getHitbox(), player.getGrazeHitbox(), firingPaused);
+            e.update(delta, enemyBullets, player.getHitbox(), player.getGrazeHitbox(), firingPaused, groundScrollSpeed);
 
             if (e.isOffScreen()) {
                 if (e.isBoss() && e.isDying()) notifyBossKilled();

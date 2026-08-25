@@ -3,6 +3,7 @@ import whitelabeltest.gamemanagers.effects.AnimationCache;
 import whitelabeltest.gamemanagers.ObjectPools;
 import whitelabeltest.gamemanagers.effects.PointGem;
 import whitelabeltest.gamemanagers.background.Stage2KaleidoscopeShader;
+import whitelabeltest.gamemanagers.background.ScrollingBackground;
 import whitelabeltest.gamemanagers.AssetManager;
 import whitelabeltest.gamemanagers.audio.AudioManager;
 import whitelabeltest.gamemanagers.EntityManager;
@@ -185,6 +186,14 @@ public class SpawnScheduler {
         // below. Null (the default, and the only sensible value for a stage that isn't using that
         // shader background) falls back to Stage2KaleidoscopeShader.DEFAULT_TRANSITION_TIME.
         public Float kaleidoscopeTransitionTime;
+        // Optional world-units/sec the background scrolls (negative = downward, matching the
+        // direction enemies move toward the player) - see ScrollingBackground's own per-layer
+        // scrollSpeed for the parallax visuals, and getGroundScrollSpeed()/EnemyDefinition.isGround
+        // for what this drives: a ground enemy is shifted by this same amount every frame on top of
+        // its own movement pattern, so it stays visually planted on the terrain instead of sliding
+        // relative to it as the world scrolls past. Null (the default) falls back to
+        // ScrollingBackground.DEFAULT_SCROLL_SPEED, matching that class's own default layer speed.
+        public Float groundScrollSpeed;
         // Zero or more [start, end) schedule-time windows - see isInPracticeSection(). A schedule
         // can have several independent drills (e.g. a movement dodge, then later a stand-still
         // dodge), each with its own restart-on-hit range.
@@ -290,6 +299,8 @@ public class SpawnScheduler {
     private boolean scheduleEndTriggered;
     // See ScheduleFile.kaleidoscopeTransitionTime.
     private float kaleidoscopeTransitionTime = Stage2KaleidoscopeShader.DEFAULT_TRANSITION_TIME;
+    // See ScheduleFile.groundScrollSpeed.
+    private float groundScrollSpeed = ScrollingBackground.DEFAULT_SCROLL_SPEED;
     // See isInPracticeSection() - lets a scripted section (e.g. a tutorial dodge drill) tell
     // GameController "a death in here doesn't cost a life, just rewind to the start of this
     // window" instead of the normal hit-handling.
@@ -344,6 +355,7 @@ public class SpawnScheduler {
             if (file != null) this.musicFadeOutTime = file.musicFadeOutTime;
             if (file != null) this.scheduleEndTime = file.scheduleEndTime;
             if (file != null && file.kaleidoscopeTransitionTime != null) this.kaleidoscopeTransitionTime = file.kaleidoscopeTransitionTime;
+            if (file != null && file.groundScrollSpeed != null) this.groundScrollSpeed = file.groundScrollSpeed;
             if (file != null && file.practiceCheckpoints != null) this.practiceCheckpoints = file.practiceCheckpoints;
             if (file != null && file.invincibilityWindows != null) this.invincibilityWindows = file.invincibilityWindows;
             if (file != null && file.weaponsDisabledWindows != null) this.weaponsDisabledWindows = file.weaponsDisabledWindows;
@@ -423,6 +435,11 @@ public class SpawnScheduler {
      *  unless this stage's own schedule overrides it. Meaningless (and unread) for a stage whose
      *  shaderBackground isn't "kaleidoscope". */
     public float getKaleidoscopeTransitionTime() { return kaleidoscopeTransitionTime; }
+
+    /** See ScheduleFile.groundScrollSpeed - ScrollingBackground.DEFAULT_SCROLL_SPEED unless this
+     *  stage's own schedule overrides it. Meaningless (and unread) for a stage with no ground
+     *  enemies (EnemyDefinition.isGround) in its schedule. */
+    public float getGroundScrollSpeed() { return groundScrollSpeed; }
 
     /** True while the schedule clock sits inside any [start, end) practice checkpoint - see
      *  GameController.applyPlayerHit(), which checks this before applying the normal

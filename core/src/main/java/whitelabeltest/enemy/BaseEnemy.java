@@ -101,7 +101,7 @@ public abstract class BaseEnemy implements Enemy {
     public boolean isDying() { return lifecycleState == LifecycleState.DYING; }
 
     @Override
-    public void update(float delta, Array<EnemyBullet> enemyBullets, Circle playerHitbox, Circle grazeHitbox, boolean firingPaused) {
+    public void update(float delta, Array<EnemyBullet> enemyBullets, Circle playerHitbox, Circle grazeHitbox, boolean firingPaused, float groundScrollSpeed) {
         if (sprite == null) return;
 
         if (lifecycleState == LifecycleState.DYING) {
@@ -126,6 +126,7 @@ public abstract class BaseEnemy implements Enemy {
                 movement.update(delta, sprite, rectangle, worldWidth, worldHeight, playerHitbox, invertMovement);
                 if (!rotateWithMovement) sprite.setRotation(0);
             }
+            applyGroundScroll(delta, groundScrollSpeed);
             if (lifecycleTime >= spawnDuration) {
                 lifecycleState = LifecycleState.ACTIVE;
                 lifecycleTime = 0f;
@@ -150,6 +151,7 @@ public abstract class BaseEnemy implements Enemy {
             movement.update(delta, sprite, rectangle, worldWidth, worldHeight, playerHitbox, invertMovement);
             if (!rotateWithMovement) sprite.setRotation(0);
         }
+        applyGroundScroll(delta, groundScrollSpeed);
 
         if (healthRegenPerSecond > 0f && health < maxHealth) {
             healthRegenAccumulator += healthRegenPerSecond * delta;
@@ -176,6 +178,18 @@ public abstract class BaseEnemy implements Enemy {
     @Override
     public void silenceFiring() {
         firing = null;
+    }
+
+    // Shifts a ground enemy (isGround()) down by the stage's current background scroll speed, on
+    // top of whatever its own movement pattern already did this frame - same translate-then-sync
+    // idiom every MovementPattern uses (see e.g. StraightMovement) - so it stays visually planted on
+    // the scrolling terrain (a "Stationary" ground enemy scrolls down screen right along with the
+    // ground instead of floating in a fixed screen position) instead of sliding relative to it.
+    // No-op for every other enemy.
+    private void applyGroundScroll(float delta, float groundScrollSpeed) {
+        if (!isGround()) return;
+        sprite.translate(0f, groundScrollSpeed * delta);
+        rectangle.setPosition(sprite.getX(), sprite.getY());
     }
 
     private void updateSpawnAnimation() {

@@ -202,7 +202,10 @@ public class PatternPreviewer {
 
         if (previewEnemy == null) return;
 
-        previewEnemy.update(delta, entities.getEnemyBullets(), entities.getPlayer().getHitbox(), entities.getPlayer().getGrazeHitbox(), false);
+        // No background scroll to sync a ground enemy against in this isolated preview - 0 leaves
+        // even a ground-flagged enemy's own movement pattern as the only thing moving it, same as
+        // every non-ground enemy here.
+        previewEnemy.update(delta, entities.getEnemyBullets(), entities.getPlayer().getHitbox(), entities.getPlayer().getGrazeHitbox(), false, 0f);
 
         Array<EnemyBullet> enemyBullets = entities.getEnemyBullets();
         for (int i = enemyBullets.size - 1; i >= 0; i--) {
