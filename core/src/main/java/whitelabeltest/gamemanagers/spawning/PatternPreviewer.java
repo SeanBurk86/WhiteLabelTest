@@ -470,6 +470,7 @@ public class PatternPreviewer {
             d.rotateWithMovement = src.rotateWithMovement;
             d.isBoss = src.isBoss;
             d.isGround = src.isGround;
+            d.backgroundLayer = src.backgroundLayer;
             d.sealable = src.sealable;
             d.defiant = src.defiant;
             d.damageableByEnemyBullets = src.damageableByEnemyBullets;
@@ -788,6 +789,7 @@ public class PatternPreviewer {
         rows.add(toggleRow(1, "Rotate With Movement", () -> d.rotateWithMovement, v -> d.rotateWithMovement = v));
         rows.add(toggleRow(1, "Is Boss", () -> d.isBoss, v -> d.isBoss = v));
         rows.add(toggleRow(1, "Is Ground", () -> d.isGround, v -> d.isGround = v));
+        rows.add(numberRow(1, "Background Layer (-1 = none)", () -> (float) d.backgroundLayer, v -> d.backgroundLayer = Math.round(v), 1f, true));
         rows.add(toggleRow(1, "Sealable", () -> d.sealable, v -> d.sealable = v));
         rows.add(toggleRow(1, "Defiant", () -> d.defiant, v -> d.defiant = v));
         rows.add(toggleRow(1, "Damageable By Enemy Bullets", () -> d.damageableByEnemyBullets, v -> d.damageableByEnemyBullets = v));

@@ -23,6 +23,12 @@ public interface Enemy extends Pool.Poolable {
     boolean takeDamage(int amount);
     default boolean isBoss() { return false; }
     default boolean isGround() { return false; }
+    // See EnemyDefinition.backgroundLayer - -1 (the default) means not attached to any background
+    // layer, drawn in front of the whole stack as before this existed. GameController.draw()/
+    // EntityManager use this both to decide draw order (sandwiched right after that layer instead
+    // of after the whole background) and, for a ground enemy, which layer's scrollSpeed drives its
+    // implicit movement instead of the schedule-wide one.
+    default int getBackgroundLayer() { return -1; }
     // Sealable enemies hold their fire while the player's graze halo overlaps their hitbox - see
     // BaseEnemy.update's firing gate.
     default boolean isSealable() { return false; }

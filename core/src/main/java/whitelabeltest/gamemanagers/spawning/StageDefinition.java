@@ -5,6 +5,16 @@ import com.badlogic.gdx.utils.Array;
 public class StageDefinition {
     public static class BackgroundLayerDef {
         public String texture;
+        // Alternative to texture (ignored if this is set and non-empty): a relay of several images
+        // played one after another as this SAME layer scrolls, not several layers scrolling at once.
+        // The first image scrolls through its own full height exactly like a single-texture layer
+        // would (see ScrollingBackground.Layer/clampToTopOfImage) - normally that just freezes once
+        // fully revealed, but a sequence instead hands off to the next image at that point (resetting
+        // to its own top) and keeps scrolling, continuing through every entry in order. Only the
+        // LAST image actually freezes at the end, same as a normal single-texture layer. Lets one
+        // parallax layer read as a single long continuous piece of art across several separate files
+        // instead of needing one giant image.
+        public Array<String> textureSequence;
         // NaN = unset -> ScrollingBackground.DEFAULT_SCROLL_SPEED, since 0 is a valid (static) speed.
         public float scrollSpeed = Float.NaN;
 
@@ -29,6 +39,12 @@ public class StageDefinition {
     // are somehow set. null (the default) means no shader background; otherwise must be one of the
     // ids createShaderBackground() recognizes ("boxTunnel", "kaleidoscope").
     public String shaderBackground = null;
+    // When true, the stage's ordinary backgroundLayers (NOT shaderBackground/backgroundVideo, which
+    // this has no effect on) are drawn with a hue-rotating shader instead of their native colors -
+    // see HueCycleShader. The rotation's period is set to exactly
+    // SpawnScheduler.getBackgroundVideoTime() (see GameController.loadStage()), so it completes one
+    // full cycle - ending back at the image's original colors - right as the boss video cuts in.
+    public boolean hueCycleBackground = false;
 
     public StageDefinition() {}
 }

@@ -420,6 +420,21 @@ public class SpawnScheduler {
      *  hand-off exactly once - see GameController.update(). */
     public boolean isBackgroundVideoTriggered() { return backgroundVideoTriggered; }
 
+    // Fallback for getBackgroundVideoTime() when a schedule has no backgroundVideoTime at all (most
+    // don't, and hueCycleBackground - the only current consumer - is meaningless without a boss
+    // video to sync against anyway) - an arbitrary but reasonable cycle length rather than 0, which
+    // would make every frame flash back to the image's native colors.
+    private static final float DEFAULT_BACKGROUND_VIDEO_TIME = 60f;
+
+    /** Seconds until this schedule's boss video cue (see isBackgroundVideoTriggered()) fires, or
+     *  DEFAULT_BACKGROUND_VIDEO_TIME if this schedule has none. Currently only consumed by
+     *  ScrollingBackground.setHueCyclePeriod() - see StageDefinition.hueCycleBackground - so a hue
+     *  cycle always completes its one full rotation exactly as the boss video cuts in, without
+     *  needing its own separately-authored duration that could drift out of sync with the actual cue. */
+    public float getBackgroundVideoTime() {
+        return backgroundVideoTime != null ? backgroundVideoTime : DEFAULT_BACKGROUND_VIDEO_TIME;
+    }
+
     /** True once the schedule clock has crossed musicFadeOutTime - same permanent-latch pattern as
      *  isBackgroundVideoTriggered(), edge-detected by GameController to fade out the stage music
      *  exactly once - see GameController.update(). */

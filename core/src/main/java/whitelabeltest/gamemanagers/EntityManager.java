@@ -1,6 +1,7 @@
 package whitelabeltest.gamemanagers;
 import whitelabeltest.gamemanagers.spawning.EnemySpawnRegistry;
 import whitelabeltest.gamemanagers.audio.AudioManager;
+import whitelabeltest.gamemanagers.background.ScrollingBackground;
 import whitelabeltest.gamemanagers.effects.BulletCancelEffect;
 import whitelabeltest.gamemanagers.effects.ExplosionEffect;
 import whitelabeltest.gamemanagers.effects.HitEffect;
@@ -105,7 +106,14 @@ public class EntityManager {
         scheduledSprites.add(effect);
     }
 
-    public void update(float delta, InputManager input, AssetManager assets, AudioManager audio, boolean weaponsDisabled, boolean hyperAttackDisabled, float groundScrollSpeed) {
+    /** @param groundScrollSpeed the current stage schedule's default background scroll speed (see
+     *  SpawnScheduler.getGroundScrollSpeed()) - only actually used by a ground enemy (isGround())
+     *  that isn't attached to a specific background layer (EnemyDefinition.backgroundLayer == -1);
+     *  one that IS attached instead moves at THAT layer's own scrollSpeed - see
+     *  resolveGroundScrollSpeed()/background's getLayerScrollSpeed(). background may be null (e.g.
+     *  PatternPreviewer's isolated preview never reaches this method at all - see its own tick()),
+     *  in which case every ground enemy just falls back to groundScrollSpeed. */
+    public void update(float delta, InputManager input, AssetManager assets, AudioManager audio, boolean weaponsDisabled, boolean hyperAttackDisabled, float groundScrollSpeed, ScrollingBackground background) {
         if (bombActive) {
             bombAnimationTime += delta;
             if (bombAnimation.isAnimationFinished(bombAnimationTime)) bombActive = false;
@@ -113,7 +121,7 @@ public class EntityManager {
         player.update(delta, input, assets, audio, bullets, enemies, weaponsDisabled, hyperAttackDisabled);
         updateTrail(delta, input);
 
-        updateCollections(delta, assets, input, groundScrollSpeed);
+        updateCollections(delta, assets, input, groundScrollSpeed, background);
     }
 
     private void updateTrail(float delta, InputManager input) {
@@ -135,7 +143,7 @@ public class EntityManager {
         }
     }
 
-    private void updateCollections(float delta, AssetManager assets, InputManager input, float groundScrollSpeed) {
+    private void updateCollections(float delta, AssetManager assets, InputManager input, float groundScrollSpeed, ScrollingBackground background) {
         for (int i = bullets.size - 1; i >= 0; i--) {
             Weapon b = bullets.get(i);
             b.updateWithEnemies(delta, enemies);
@@ -159,7 +167,7 @@ public class EntityManager {
         boolean firingPaused = player.isDead() || player.isInvincible();
         for (int i = enemies.size - 1; i >= 0; i--) {
             Enemy e = enemies.get(i);
-            e.update(delta, enemyBullets, player.getHitbox(), player.getGrazeHitbox(), firingPaused, groundScrollSpeed);
+            e.update(delta, enemyBullets, player.getHitbox(), player.getGrazeHitbox(), firingPaused, resolveGroundScrollSpeed(e, groundScrollSpeed, background));
 
             if (e.isOffScreen()) {
                 if (e.isBoss() && e.isDying()) notifyBossKilled();
@@ -242,7 +250,26 @@ public class EntityManager {
         }
     }
 
+    /** See EnemyDefinition.backgroundLayer - null (e.g. PatternPreviewer's isolated preview) or an
+     *  out-of-range index (see ScrollingBackground.getLayerScrollSpeed's own doc on why that's a
+     *  graceful fallback rather than an error) both just leave the enemy at groundScrollSpeed. */
+    private float resolveGroundScrollSpeed(Enemy e, float groundScrollSpeed, ScrollingBackground background) {
+        if (background == null || e.getBackgroundLayer() < 0) return groundScrollSpeed;
+        return background.getLayerScrollSpeed(e.getBackgroundLayer(), groundScrollSpeed);
+    }
+
     public void draw(SpriteBatch batch) {
+        draw(batch, false);
+    }
+
+    /** @param skipLayerAttached true while GameController.draw() has already drawn every
+     *  EnemyDefinition.backgroundLayer-attached enemy itself, sandwiched between its layer and the
+     *  next (see drawEnemiesAttachedToLayer()) - those must be skipped here to avoid a double draw.
+     *  false whenever there's no layer stack to sandwich against this frame (a boss/background
+     *  video or shader background is covering the screen instead - see
+     *  ScrollingBackground.isDrawingLayerStack()), so every enemy just draws normally regardless of
+     *  its backgroundLayer. */
+    public void draw(SpriteBatch batch, boolean skipLayerAttached) {
         for (Powerup p : powerups) p.draw(batch);
         for (PointGem g : pointGems) g.draw(batch);
         for (PlayerTrailEffect t : trails) t.draw(batch);
@@ -251,10 +278,10 @@ public class EntityManager {
         }
         drawThunderboltBolts(batch);
 
-        for (Enemy e : enemies) e.drawShadow(batch);
-        for (Enemy e : enemies) if (e.isGround()) e.draw(batch);
+        for (Enemy e : enemies) if (!skipLayerAttached || e.getBackgroundLayer() < 0) e.drawShadow(batch);
+        for (Enemy e : enemies) if (e.isGround() && (!skipLayerAttached || e.getBackgroundLayer() < 0)) e.draw(batch);
         for (ExplosionEffect e : explosions) e.draw(batch);
-        for (Enemy e : enemies) if (!e.isGround()) e.draw(batch);
+        for (Enemy e : enemies) if (!e.isGround() && (!skipLayerAttached || e.getBackgroundLayer() < 0)) e.draw(batch);
         for (HitEffect h : hitEffects) h.draw(batch);
         for (BulletCancelEffect e : bulletCancelEffects) e.draw(batch);
         for (GreenLightningBurst b : greenLightningBursts) b.draw(batch);
@@ -273,6 +300,16 @@ public class EntityManager {
         for (EnemyBullet eb : enemyBullets) eb.draw(batch);
 
         for (ScheduledSpriteEffect s : scheduledSprites) s.draw(batch);
+    }
+
+    /** Draws (shadow then sprite) every enemy attached to backgroundLayers[layerIndex] - see
+     *  EnemyDefinition.backgroundLayer. Called by GameController.draw() right after it draws that
+     *  layer itself, sandwiching these enemies between it and the next layer instead of always
+     *  drawing in front of the whole background stack (draw()'s ordinary path, still used by every
+     *  enemy that leaves backgroundLayer unset). */
+    public void drawEnemiesAttachedToLayer(SpriteBatch batch, int layerIndex) {
+        for (Enemy e : enemies) if (e.getBackgroundLayer() == layerIndex) e.drawShadow(batch);
+        for (Enemy e : enemies) if (e.getBackgroundLayer() == layerIndex) e.draw(batch);
     }
 
     /** Draws every active Thunderbolt strike's dark outline sprites first (normal alpha blend, the

@@ -146,6 +146,9 @@ public class GenericEnemy extends BaseEnemy {
     public boolean isGround() { return def != null && def.isGround; }
 
     @Override
+    public int getBackgroundLayer() { return def != null ? def.backgroundLayer : -1; }
+
+    @Override
     public boolean isSealable() { return def != null && def.sealable; }
 
     @Override

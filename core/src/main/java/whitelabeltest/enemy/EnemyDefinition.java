@@ -15,6 +15,22 @@ public class EnemyDefinition {
     public boolean rotateWithMovement = true;
     public boolean isBoss = false;
     public boolean isGround = false;
+    // Index (declaration order in the stage's backgroundLayers - see StageDefinition.
+    // BackgroundLayerDef/ScrollingBackground's own "far-to-near" doc) of the background layer this
+    // enemy is drawn against, or -1 (the default) for "not attached to any layer" - the ordinary
+    // behavior of drawing in front of the WHOLE background stack, same as before this field
+    // existed. When set, GameController.draw() sandwiches this enemy's shadow+sprite between that
+    // layer and the next one instead, so e.g. a ground enemy can sit visually behind a closer
+    // foreground parallax layer instead of always drawing on top of it - see
+    // EntityManager.drawEnemiesAttachedToLayer(). If isGround is also set, this enemy's implicit
+    // scroll (see BaseEnemy.applyGroundScroll) is driven by THIS layer's own scrollSpeed instead of
+    // the schedule-wide SpawnScheduler.groundScrollSpeed - see EntityManager's ground-scroll
+    // resolution - so it stays planted on the specific layer it's attached to, even if that layer
+    // scrolls at a different speed than the rest of the background. Out-of-range for a given
+    // stage's actual layer count falls back to "unattached" (z-order) / the schedule-wide speed
+    // (scroll), rather than throwing, so one enemy definition can be safely reused across stages
+    // with different numbers of background layers.
+    public int backgroundLayer = -1;
     public boolean sealable = false;
     public boolean defiant = false;
     // See Enemy.isDamageableByEnemyBullets() - opts this enemy into being damaged by other

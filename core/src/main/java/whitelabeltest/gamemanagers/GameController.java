@@ -290,7 +290,7 @@ public class GameController implements Disposable {
         }
 
         background.update(delta);
-        entities.update(delta, input, assets, audio, weaponsDisabled, hyperAttackDisabled, spawnScheduler.getGroundScrollSpeed());
+        entities.update(delta, input, assets, audio, weaponsDisabled, hyperAttackDisabled, spawnScheduler.getGroundScrollSpeed(), background);
         spawnScheduler.update(delta, entities, audio, input,
             scoreManager.getEnemiesDestroyed(), scoreManager.getGemsCollected(), entities.getPlayer().getGrazePoints());
 
@@ -535,10 +535,11 @@ public class GameController implements Disposable {
     private void loadStage(int index) {
         StageDefinition stageDef = assets.getStageDefinition(stageSequence.get(index));
         if (background != null) background.dispose();
-        background = new ScrollingBackground(worldWidth, worldHeight, audioSettings, assets, stageDef.backgroundLayers, stageDef.bossVideo, stageDef.backgroundVideo, stageDef.shaderBackground);
+        background = new ScrollingBackground(worldWidth, worldHeight, audioSettings, assets, stageDef.backgroundLayers, stageDef.bossVideo, stageDef.backgroundVideo, stageDef.shaderBackground, stageDef.hueCycleBackground);
         background.setMuted(audio.isMuted());
         spawnScheduler = new SpawnScheduler(worldWidth, worldHeight, assets, stageDef.spawnSchedule);
         background.setKaleidoscopeTransitionTime(spawnScheduler.getKaleidoscopeTransitionTime());
+        background.setHueCyclePeriod(spawnScheduler.getBackgroundVideoTime());
         audio.loadStageMusic(stageDef.music);
         totalEnemiesAcrossRun += spawnScheduler.getSchedule().size;
         bossVideoTriggered = false;
@@ -778,9 +779,27 @@ public class GameController implements Disposable {
         powerups.add(wp);
     }
 
+    /** Interleaves EnemyDefinition.backgroundLayer-attached enemies between individual background
+     *  layers (see ScrollingBackground.drawLayer()/EntityManager.drawEnemiesAttachedToLayer())
+     *  whenever there's an ordinary layer stack to sandwich them against - see
+     *  ScrollingBackground.isDrawingLayerStack(). Falls back to the plain "background fully behind
+     *  everything" draw whenever there isn't (a boss/background video or shader background is
+     *  covering the screen instead, or this stage simply has no backgroundLayers at all) - a
+     *  layer-attached enemy just draws normally in that case, same as before this feature existed. */
     public void draw(com.badlogic.gdx.graphics.g2d.SpriteBatch batch) {
-        background.draw(batch);
-        entities.draw(batch);
+        int layerCount = background.getLayerCount();
+        if (background.isDrawingLayerStack() && layerCount > 0) {
+            background.beginLayeredDraw(batch);
+            for (int i = 0; i < layerCount; i++) {
+                background.drawLayer(batch, i);
+                entities.drawEnemiesAttachedToLayer(batch, i);
+            }
+            background.endLayeredDraw(batch);
+            entities.draw(batch, true);
+        } else {
+            background.draw(batch);
+            entities.draw(batch, false);
+        }
         interstitialPlayer.draw(batch, worldWidth, worldHeight);
     }
 
