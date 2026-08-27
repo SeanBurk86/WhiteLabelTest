@@ -272,6 +272,11 @@ public abstract class BaseEnemy implements Enemy {
         return rectangle;
     }
 
+    @Override
+    public float getRotation() {
+        return sprite.getRotation();
+    }
+
     // True once the enemy's whole hitbox - not just some overlap with it - sits within the play
     // area, so an enemy sliding/dropping in from off-screen can't be shot before it's fully in
     // view (see takeDamage()).

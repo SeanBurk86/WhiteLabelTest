@@ -20,6 +20,19 @@ public interface Enemy extends Pool.Poolable {
     default void drawShadow(SpriteBatch batch) {}
     boolean isOffScreen();
     Rectangle getRectangle();
+    // Sprite-space rotation (degrees, same convention as Sprite.getRotation()/EnemyBullet.
+    // getRotation()) getRectangle() itself is drawn/rotated at - see GenericEnemy.getRotation() and
+    // StraightMovement (and friends) which call sprite.setRotation() to visually face movement
+    // direction while getRectangle() stays an unrotated axis-aligned box. 0 for every enemy that
+    // doesn't rotate (rotateWithMovement=false, or a movement pattern that never turns the sprite
+    // away from upright) - CollisionManager's enemy collision checks fall back to a plain AABB test
+    // whenever this is 0, same cost as before this existed.
+    default float getRotation() { return 0f; }
+    // World-space point getRotation() rotates getRectangle() around - see GenericEnemy's
+    // sprite.setOriginCenter(), the only origin an enemy sprite is ever given, so this is always
+    // getRectangle()'s own center regardless of enemy type.
+    default float getRotationPivotX() { Rectangle r = getRectangle(); return r.x + r.width / 2f; }
+    default float getRotationPivotY() { Rectangle r = getRectangle(); return r.y + r.height / 2f; }
     boolean takeDamage(int amount);
     default boolean isBoss() { return false; }
     default boolean isGround() { return false; }

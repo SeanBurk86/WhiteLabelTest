@@ -140,11 +140,16 @@ public class PatternPreviewer {
         this.selectedRow = 0;
         this.textureFilesCache = null;
 
+        // workingBullet must be populated before selectEnemy() below, since selectEnemy() ends in
+        // applyChange() -> rebuildRows(), and rebuildRows() always builds the bullet section
+        // (appendBulletFieldRows) too, regardless of what triggered the rebuild. loadBulletDef()
+        // (unlike selectBulletId()) only sets workingBullet without itself calling applyChange(),
+        // so it doesn't force a premature rebuild while workingEnemy is still unset.
+        Array<String> bulletIds = PatternRegistry.getBulletIds();
+        loadBulletDef(bulletIds.size > 0 ? bulletIds.first() : null);
+
         Array<String> ids = assets.getEnemyIds();
         selectEnemy(ids.size > 0 ? ids.first() : null);
-
-        Array<String> bulletIds = PatternRegistry.getBulletIds();
-        selectBulletId(bulletIds.size > 0 ? bulletIds.first() : null);
     }
 
     public void close(EntityManager entities) {

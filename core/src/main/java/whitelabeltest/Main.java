@@ -411,7 +411,11 @@ public class Main extends ApplicationAdapter {
 
         shapeRenderer.setColor(Color.RED);
         for (Enemy enemy : em.getEnemies()) {
-            shapeRenderer.rect(enemy.getRectangle().x, enemy.getRectangle().y, enemy.getRectangle().width, enemy.getRectangle().height);
+            // Enemy.getRotationPivotX/Y() is always this rectangle's own center (see its own doc
+            // comment - GenericEnemy's sprite always uses setOriginCenter()), so the origin offset
+            // passed to this rotated overload is always exactly half its width/height.
+            Rectangle r = enemy.getRectangle();
+            shapeRenderer.rect(r.x, r.y, r.width / 2f, r.height / 2f, r.width, r.height, 1f, 1f, enemy.getRotation());
         }
 
         shapeRenderer.setColor(Color.ORANGE);

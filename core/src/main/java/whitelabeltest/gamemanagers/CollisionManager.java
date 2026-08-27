@@ -37,7 +37,7 @@ public class CollisionManager {
             Enemy enemy = enemies.get(i);
             if (!enemy.isActive()) continue;
             if (enemy.isGround()) continue;
-            if (Intersector.overlaps(player.getHitbox(), enemy.getRectangle())) {
+            if (overlaps(player.getHitbox(), enemy)) {
                 collisionHighlight.set(enemy.getRectangle());
                 return true;
             }
@@ -194,7 +194,7 @@ public class CollisionManager {
             if (!enemy.isActive()) continue; // bullets pass through entering/dying enemies
             for (int j = bullets.size - 1; j >= 0; j--) {
                 Weapon bullet = bullets.get(j);
-                if (!overlaps(enemy.getRectangle(), bullet)) continue;
+                if (!overlaps(enemy, bullet)) continue;
 
                 if (!bullet.hasDamaged(enemy)) {
                     bullet.markDamaged(enemy);
@@ -248,7 +248,7 @@ public class CollisionManager {
             for (int j = enemies.size - 1; j >= 0; j--) {
                 Enemy enemy = enemies.get(j);
                 if (!enemy.isActive() || enemy == source || !enemy.isDamageableByEnemyBullets()) continue;
-                if (!overlaps(enemy.getRectangle(), bullet)) continue;
+                if (!overlaps(enemy, bullet)) continue;
 
                 if (enemy.takeDamage(bullet.getDamage()) && enemy.getPairId() == null) {
                     scoreManager.addScore(GameController.destroyEnemy(audio, entityManager, assets, worldWidth, worldHeight, enemy, scoreManager), 1f);
@@ -277,7 +277,7 @@ public class CollisionManager {
             Enemy enemy = enemies.get(i);
             if (!enemy.isActive()) continue;
             if (player.hasHaloDamaged(enemy)) continue;
-            if (!Intersector.overlaps(haloHitbox, enemy.getRectangle())) continue;
+            if (!overlaps(haloHitbox, enemy)) continue;
 
             player.markHaloDamaged(enemy);
             player.triggerHaloBashFlash();
@@ -308,7 +308,7 @@ public class CollisionManager {
         for (int i = enemies.size - 1; i >= 0; i--) {
             Enemy enemy = enemies.get(i);
             if (!enemy.isActive()) continue;
-            if (!Intersector.overlaps(blast, enemy.getRectangle())) continue;
+            if (!overlaps(blast, enemy)) continue;
 
             Rectangle rect = enemy.getRectangle();
             hitPoints.add(new Vector2(rect.x + rect.width / 2f, rect.y + rect.height / 2f));
@@ -460,6 +460,159 @@ public class CollisionManager {
             && projectionsOverlap(ax, ay, bx, by, 0f, 1f)
             && projectionsOverlap(ax, ay, bx, by, cos, sin)
             && projectionsOverlap(ax, ay, bx, by, -sin, cos);
+    }
+
+    /** Same SAT test as overlapsRotated() above, but for two rectangles that may BOTH be rotated
+     *  (e.g. a spinning IceSkull hit by an AimedEnemyBullet, which turns to face its target) -
+     *  overlapsRotated() only handles one rotated side against a plain axis-aligned one. Tests all
+     *  4 axes (one pair of edge normals per rectangle) instead of overlapsRotated()'s world-axes +
+     *  one rotated pair, which is what actually changes: each rectangle's own edges are always
+     *  perpendicular to each other, so a 0-degree rotation's axes reduce to the same (1,0)/(0,1)
+     *  pair overlapsRotated() hardcodes for its unrotated side - this is a strict generalization,
+     *  just written separately to avoid touching overlapsRotated()'s already-proven bullet-collision
+     *  callers. */
+    private static boolean overlapsRotatedRects(float x1, float y1, float w1, float h1, float pivotX1, float pivotY1, float rot1,
+                                                 float x2, float y2, float w2, float h2, float pivotX2, float pivotY2, float rot2) {
+        float[] ax = new float[4];
+        float[] ay = new float[4];
+        rotatedCorners(x1, y1, w1, h1, pivotX1, pivotY1, rot1, ax, ay);
+        float[] bx = new float[4];
+        float[] by = new float[4];
+        rotatedCorners(x2, y2, w2, h2, pivotX2, pivotY2, rot2, bx, by);
+
+        float cos1 = MathUtils.cosDeg(rot1), sin1 = MathUtils.sinDeg(rot1);
+        float cos2 = MathUtils.cosDeg(rot2), sin2 = MathUtils.sinDeg(rot2);
+        return projectionsOverlap(ax, ay, bx, by, cos1, sin1)
+            && projectionsOverlap(ax, ay, bx, by, -sin1, cos1)
+            && projectionsOverlap(ax, ay, bx, by, cos2, sin2)
+            && projectionsOverlap(ax, ay, bx, by, -sin2, cos2);
+    }
+
+    private static void rotatedCorners(float x, float y, float w, float h, float pivotX, float pivotY, float rotationDeg, float[] outX, float[] outY) {
+        float[] lx = {x, x + w, x + w, x};
+        float[] ly = {y, y, y + h, y + h};
+        if (rotationDeg == 0f) {
+            System.arraycopy(lx, 0, outX, 0, 4);
+            System.arraycopy(ly, 0, outY, 0, 4);
+            return;
+        }
+        float cos = MathUtils.cosDeg(rotationDeg);
+        float sin = MathUtils.sinDeg(rotationDeg);
+        for (int i = 0; i < 4; i++) {
+            float dx = lx[i] - pivotX, dy = ly[i] - pivotY;
+            outX[i] = pivotX + dx * cos - dy * sin;
+            outY[i] = pivotY + dx * sin + dy * cos;
+        }
+    }
+
+    /** Same closest-point-on-box math as the rotation branch of overlaps(Circle, EnemyBullet)
+     *  above, generalized to any rotated rectangle/pivot pair - used for a circular hitbox (the
+     *  player's ship, the halo dash, a thunderbolt blast, or a circular enemy-bullet hitRadius)
+     *  against a possibly-rotated enemy. */
+    private static boolean overlapsCircleRotatedRect(float cx, float cy, float radius,
+                                                       float rectX, float rectY, float rectW, float rectH,
+                                                       float pivotX, float pivotY, float rotationDeg) {
+        if (rotationDeg == 0f) {
+            float closestX = MathUtils.clamp(cx, rectX, rectX + rectW);
+            float closestY = MathUtils.clamp(cy, rectY, rectY + rectH);
+            float dx = cx - closestX, dy = cy - closestY;
+            return dx * dx + dy * dy <= radius * radius;
+        }
+
+        float dx = cx - pivotX, dy = cy - pivotY;
+        float cos = MathUtils.cosDeg(-rotationDeg);
+        float sin = MathUtils.sinDeg(-rotationDeg);
+        float localX = dx * cos - dy * sin;
+        float localY = dx * sin + dy * cos;
+
+        float minX = rectX - pivotX;
+        float minY = rectY - pivotY;
+        float closestX = MathUtils.clamp(localX, minX, minX + rectW);
+        float closestY = MathUtils.clamp(localY, minY, minY + rectH);
+
+        float distX = localX - closestX;
+        float distY = localY - closestY;
+        return distX * distX + distY * distY <= radius * radius;
+    }
+
+    /** Circle vs a (possibly rotated) enemy hitbox - see Enemy.getRotation()/getRotationPivotX/Y().
+     *  Falls back to a plain circle-vs-AABB test (Intersector.overlaps' own fast path) whenever the
+     *  enemy isn't rotated, i.e. every enemy as before this method existed. */
+    private boolean overlaps(Circle circle, Enemy enemy) {
+        Rectangle r = enemy.getRectangle();
+        float rotation = enemy.getRotation();
+        if (rotation == 0f) return Intersector.overlaps(circle, r);
+        return overlapsCircleRotatedRect(circle.x, circle.y, circle.radius, r.x, r.y, r.width, r.height,
+            enemy.getRotationPivotX(), enemy.getRotationPivotY(), rotation);
+    }
+
+    /** enemy.getRectangle() vs a player weapon bullet, both accounted for their own rotation (see
+     *  Enemy.getRotation()/Weapon.getRotation()). Reuses the existing single-rotated-side
+     *  overlapsRotated() for the (overwhelmingly common) case where at most one side is actually
+     *  rotated, only falling through to the full two-sided SAT when both are. */
+    private boolean overlaps(Enemy enemy, Weapon bullet) {
+        Rectangle enemyRect = enemy.getRectangle();
+        float enemyRot = enemy.getRotation();
+        Rectangle bulletRect = bullet.getRectangle();
+        float bulletRot = bullet.getRotation();
+
+        if (enemyRot == 0f && bulletRot == 0f) return enemyRect.overlaps(bulletRect);
+        if (enemyRot == 0f) return overlapsRotated(enemyRect, bulletRect, bullet.getRotationPivotX(), bullet.getRotationPivotY(), bulletRot);
+        if (bulletRot == 0f) return overlapsRotated(bulletRect, enemyRect, enemy.getRotationPivotX(), enemy.getRotationPivotY(), enemyRot);
+        return overlapsRotatedRects(
+            enemyRect.x, enemyRect.y, enemyRect.width, enemyRect.height, enemy.getRotationPivotX(), enemy.getRotationPivotY(), enemyRot,
+            bulletRect.x, bulletRect.y, bulletRect.width, bulletRect.height, bullet.getRotationPivotX(), bullet.getRotationPivotY(), bulletRot);
+    }
+
+    /** Same hitbox math as overlaps(Rectangle, EnemyBullet) above (scale/offset/hitRadius/rotation
+     *  on the bullet's side), but also accounts for the enemy's own rotation (see
+     *  Enemy.getRotation()) instead of assuming it's always an axis-aligned box. */
+    private boolean overlaps(Enemy enemy, EnemyBullet bullet) {
+        Rectangle enemyRect = enemy.getRectangle();
+        float enemyRot = enemy.getRotation();
+
+        Rectangle rect = bullet.getRectangle();
+        float rotation = bullet.getRotation();
+
+        float offsetX = bullet.getHitboxOffsetX();
+        float offsetY = bullet.getHitboxOffsetY();
+        float cosR = MathUtils.cosDeg(rotation);
+        float sinR = MathUtils.sinDeg(rotation);
+        float worldOffsetX = offsetX * cosR - offsetY * sinR;
+        float worldOffsetY = offsetX * sinR + offsetY * cosR;
+
+        float scale = bullet.getHitboxScale();
+        float effWidth = rect.width * scale;
+        float effHeight = rect.height * scale;
+        float effX = rect.x + (rect.width - effWidth) / 2f + worldOffsetX;
+        float effY = rect.y + (rect.height - effHeight) / 2f + worldOffsetY;
+
+        float hitRadius = bullet.getHitRadius();
+        if (hitRadius >= 0f) {
+            float cx = effX + effWidth / 2f;
+            float cy = effY + effHeight / 2f;
+            return overlapsCircleRotatedRect(cx, cy, hitRadius * scale, enemyRect.x, enemyRect.y, enemyRect.width, enemyRect.height,
+                enemy.getRotationPivotX(), enemy.getRotationPivotY(), enemyRot);
+        }
+
+        if (enemyRot == 0f && rotation == 0f) {
+            scratchHitbox.set(effX, effY, effWidth, effHeight);
+            return enemyRect.overlaps(scratchHitbox);
+        }
+        if (enemyRot == 0f) {
+            float pivotX = bullet.getRotationPivotX() + worldOffsetX;
+            float pivotY = bullet.getRotationPivotY() + worldOffsetY;
+            return overlapsRotated(enemyRect, new Rectangle(effX, effY, effWidth, effHeight), pivotX, pivotY, rotation);
+        }
+        if (rotation == 0f) {
+            scratchHitbox.set(effX, effY, effWidth, effHeight);
+            return overlapsRotated(scratchHitbox, enemyRect, enemy.getRotationPivotX(), enemy.getRotationPivotY(), enemyRot);
+        }
+        float pivotX = bullet.getRotationPivotX() + worldOffsetX;
+        float pivotY = bullet.getRotationPivotY() + worldOffsetY;
+        return overlapsRotatedRects(
+            enemyRect.x, enemyRect.y, enemyRect.width, enemyRect.height, enemy.getRotationPivotX(), enemy.getRotationPivotY(), enemyRot,
+            effX, effY, effWidth, effHeight, pivotX, pivotY, rotation);
     }
 
     private static boolean projectionsOverlap(float[] ax, float[] ay, float[] bx, float[] by, float axisX, float axisY) {

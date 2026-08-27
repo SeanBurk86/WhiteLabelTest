@@ -795,10 +795,10 @@ public class GameController implements Disposable {
                 entities.drawEnemiesAttachedToLayer(batch, i);
             }
             background.endLayeredDraw(batch);
-            entities.draw(batch, true);
+            entities.draw(batch, layerCount);
         } else {
             background.draw(batch);
-            entities.draw(batch, false);
+            entities.draw(batch, 0);
         }
         interstitialPlayer.draw(batch, worldWidth, worldHeight);
     }

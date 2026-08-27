@@ -259,17 +259,21 @@ public class EntityManager {
     }
 
     public void draw(SpriteBatch batch) {
-        draw(batch, false);
+        draw(batch, 0);
     }
 
-    /** @param skipLayerAttached true while GameController.draw() has already drawn every
-     *  EnemyDefinition.backgroundLayer-attached enemy itself, sandwiched between its layer and the
-     *  next (see drawEnemiesAttachedToLayer()) - those must be skipped here to avoid a double draw.
-     *  false whenever there's no layer stack to sandwich against this frame (a boss/background
-     *  video or shader background is covering the screen instead - see
+    /** @param attachedLayerCount the stage's current background layer count while GameController.
+     *  draw() has already drawn every EnemyDefinition.backgroundLayer-attached enemy itself,
+     *  sandwiched between its layer and the next (see drawEnemiesAttachedToLayer()) - an enemy
+     *  attached to an in-range layer (0 <= backgroundLayer < attachedLayerCount) must be skipped
+     *  here to avoid a double draw. Pass 0 whenever there's no layer stack to sandwich against this
+     *  frame (a boss/background video or shader background is covering the screen instead - see
      *  ScrollingBackground.isDrawingLayerStack()), so every enemy just draws normally regardless of
-     *  its backgroundLayer. */
-    public void draw(SpriteBatch batch, boolean skipLayerAttached) {
+     *  its backgroundLayer - 0 also naturally covers an enemy attached to an out-of-range layer
+     *  index (e.g. reused across a stage with fewer layers than it was authored against): such an
+     *  enemy is never visited by drawEnemiesAttachedToLayer() either, so it must fall back to this
+     *  normal pass instead of never being drawn at all. */
+    public void draw(SpriteBatch batch, int attachedLayerCount) {
         for (Powerup p : powerups) p.draw(batch);
         for (PointGem g : pointGems) g.draw(batch);
         for (PlayerTrailEffect t : trails) t.draw(batch);
@@ -278,10 +282,10 @@ public class EntityManager {
         }
         drawThunderboltBolts(batch);
 
-        for (Enemy e : enemies) if (!skipLayerAttached || e.getBackgroundLayer() < 0) e.drawShadow(batch);
-        for (Enemy e : enemies) if (e.isGround() && (!skipLayerAttached || e.getBackgroundLayer() < 0)) e.draw(batch);
+        for (Enemy e : enemies) if (!isAttached(e, attachedLayerCount)) e.drawShadow(batch);
+        for (Enemy e : enemies) if (e.isGround() && !isAttached(e, attachedLayerCount)) e.draw(batch);
         for (ExplosionEffect e : explosions) e.draw(batch);
-        for (Enemy e : enemies) if (!e.isGround() && (!skipLayerAttached || e.getBackgroundLayer() < 0)) e.draw(batch);
+        for (Enemy e : enemies) if (!e.isGround() && !isAttached(e, attachedLayerCount)) e.draw(batch);
         for (HitEffect h : hitEffects) h.draw(batch);
         for (BulletCancelEffect e : bulletCancelEffects) e.draw(batch);
         for (GreenLightningBurst b : greenLightningBursts) b.draw(batch);
@@ -310,6 +314,13 @@ public class EntityManager {
     public void drawEnemiesAttachedToLayer(SpriteBatch batch, int layerIndex) {
         for (Enemy e : enemies) if (e.getBackgroundLayer() == layerIndex) e.drawShadow(batch);
         for (Enemy e : enemies) if (e.getBackgroundLayer() == layerIndex) e.draw(batch);
+    }
+
+    /** True if e.getBackgroundLayer() names an in-range layer index (0 <= layer < layerCount) that
+     *  drawEnemiesAttachedToLayer() will therefore already have drawn - see draw(SpriteBatch, int). */
+    private boolean isAttached(Enemy e, int layerCount) {
+        int layer = e.getBackgroundLayer();
+        return layer >= 0 && layer < layerCount;
     }
 
     /** Draws every active Thunderbolt strike's dark outline sprites first (normal alpha blend, the
