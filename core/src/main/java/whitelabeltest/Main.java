@@ -380,6 +380,8 @@ public class Main extends ApplicationAdapter {
                 ui.drawPatternPreview(spriteBatch, PLAY_AREA_WIDTH, PLAY_AREA_HEIGHT, game.getPatternPreviewer());
             } else if (game.isReplayBrowserActive()) {
                 ui.drawReplayBrowser(spriteBatch, PLAY_AREA_WIDTH, PLAY_AREA_HEIGHT, game.getReplayBrowser());
+            } else if (game.isSpawnScheduleEditorActive()) {
+                ui.drawSpawnScheduleEditor(spriteBatch, PLAY_AREA_WIDTH, PLAY_AREA_HEIGHT, game.getSpawnScheduleEditor());
             } else {
                 ui.drawDebugMenu(spriteBatch, PLAY_AREA_WIDTH, PLAY_AREA_HEIGHT, game.getSpawnScheduleTotalTime(),
                     game.getDebugMenuSeekTime(), game.getDebugMenuSelectedIndex(), game.getDebugSaveStates(),

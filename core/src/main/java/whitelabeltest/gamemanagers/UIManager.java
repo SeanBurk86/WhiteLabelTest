@@ -6,6 +6,7 @@ import whitelabeltest.gamemanagers.effects.DataStreamEffect;
 import whitelabeltest.gamemanagers.replay.DebugSaveState;
 import whitelabeltest.gamemanagers.spawning.LevelRank;
 import whitelabeltest.gamemanagers.spawning.PatternPreviewer;
+import whitelabeltest.gamemanagers.spawning.SpawnScheduleEditor;
 import whitelabeltest.gamemanagers.replay.ReplayBrowser;
 import whitelabeltest.gamemanagers.input.InputType;
 
@@ -492,7 +493,8 @@ public class UIManager implements Disposable {
     private static final int DEBUG_ROW_PATTERN_PREVIEW = DEBUG_ROW_LIVES + 1;
     private static final int DEBUG_ROW_REPLAY_BROWSER = DEBUG_ROW_PATTERN_PREVIEW + 1;
     private static final int DEBUG_ROW_STAGE_SELECT = DEBUG_ROW_REPLAY_BROWSER + 1;
-    private static final int DEBUG_ROW_BOOKMARKS_START = DEBUG_ROW_STAGE_SELECT + 1;
+    private static final int DEBUG_ROW_SPAWN_SCHEDULE_EDITOR = DEBUG_ROW_STAGE_SELECT + 1;
+    private static final int DEBUG_ROW_BOOKMARKS_START = DEBUG_ROW_SPAWN_SCHEDULE_EDITOR + 1;
 
     // Debug-only: shows a "MUTED" badge in the left panel when audio is silenced.
     public void drawDebugMuteIndicator(SpriteBatch batch, float leftPanelX, float worldHeight) {
@@ -644,6 +646,14 @@ public class UIManager implements Disposable {
         font.draw(batch, "  </> cycle stage   Enter = load", x, y);
         y -= lineHeight * 1.5f;
 
+        boolean scheduleEditorSelected = selectedIndex == DEBUG_ROW_SPAWN_SCHEDULE_EDITOR;
+        font.setColor(scheduleEditorSelected ? Color.YELLOW : Color.WHITE);
+        font.draw(batch, (scheduleEditorSelected ? "> " : "  ") + "Spawn Schedule Editor", x, y);
+        y -= lineHeight;
+        font.setColor(Color.GRAY);
+        font.draw(batch, "  Enter = edit the current stage's spawn events live", x, y);
+        y -= lineHeight * 1.5f;
+
         font.setColor(Color.WHITE);
         font.draw(batch, "Bookmarks:", x, y);
         y -= lineHeight;
@@ -787,6 +797,90 @@ public class UIManager implements Disposable {
 
         font.setColor(Color.WHITE);
         font.draw(batch, "> " + previewer.getTextEntryText() + "_", x, y);
+        y -= lineHeight * 1.5f;
+
+        font.setColor(Color.GRAY);
+        font.draw(batch, "Enter = confirm   Esc = cancel   Backspace = delete", x, y);
+
+        font.setColor(Color.WHITE);
+    }
+
+    // Debug-only: the spawn event editor opened from the "Spawn Schedule Editor" row of the main
+    // debug menu - see SpawnScheduleEditor for the row model (same header/number/toggle/id-pick/
+    // action row shapes as PatternPreviewer, just over one SpawnEvent at a time).
+    private static final int SCHEDULE_EDITOR_VISIBLE_ROWS = 24;
+
+    public void drawSpawnScheduleEditor(SpriteBatch batch, float worldWidth, float worldHeight, SpawnScheduleEditor editor) {
+        batch.setColor(0f, 0f, 0f, 0.75f);
+        batch.draw(whitePixel, 0, 0, worldWidth, worldHeight);
+        batch.setColor(Color.WHITE);
+
+        if (editor.isTextEntryActive()) {
+            drawScheduleEditorTextEntryPrompt(batch, worldWidth, worldHeight, editor);
+            return;
+        }
+
+        float x = 0.4f;
+        float y = worldHeight - 0.5f;
+        float lineHeight = 0.35f;
+
+        font.setColor(Color.YELLOW);
+        font.draw(batch, "SPAWN SCHEDULE EDITOR", x, y);
+        y -= lineHeight * 1.5f;
+
+        Array<SpawnScheduleEditor.DisplayRow> displayRows = editor.getDisplayRows();
+        int selectedRow = editor.getSelectedRow();
+
+        int start = 0;
+        if (displayRows.size > SCHEDULE_EDITOR_VISIBLE_ROWS) {
+            start = MathUtils.clamp(selectedRow - SCHEDULE_EDITOR_VISIBLE_ROWS / 2, 0, displayRows.size - SCHEDULE_EDITOR_VISIBLE_ROWS);
+        }
+        int end = Math.min(displayRows.size, start + SCHEDULE_EDITOR_VISIBLE_ROWS);
+
+        if (start > 0) {
+            font.setColor(Color.GRAY);
+            font.draw(batch, "  ^ more above ^", x, y);
+            y -= lineHeight;
+        }
+
+        for (int i = start; i < end; i++) {
+            SpawnScheduleEditor.DisplayRow row = displayRows.get(i);
+            boolean selected = i == selectedRow;
+            font.setColor(selected ? Color.YELLOW : Color.WHITE);
+            font.draw(batch, (selected ? "> " : "  ") + "  ".repeat(row.indent) + row.label, x, y);
+            y -= lineHeight;
+        }
+
+        if (end < displayRows.size) {
+            font.setColor(Color.GRAY);
+            font.draw(batch, "  v more below v", x, y);
+            y -= lineHeight;
+        }
+
+        y -= lineHeight * 0.5f;
+        font.setColor(Color.GRAY);
+        font.draw(batch, "Up/Down select   </> adjust or cycle   Enter = confirm/type value", x, y);
+        y -= lineHeight;
+        font.draw(batch, "Del (on the Event row) = remove event, else close screen", x, y);
+
+        font.setColor(Color.WHITE);
+    }
+
+    /** Modal number-entry field shown in place of the row list while SpawnScheduleEditor is
+     *  waiting on typed input (see SpawnScheduleEditor.promptNumber) - same modal as
+     *  drawTextEntryPrompt below, just reading from SpawnScheduleEditor instead of PatternPreviewer
+     *  since the two screens' text-entry state isn't shared. */
+    private void drawScheduleEditorTextEntryPrompt(SpriteBatch batch, float worldWidth, float worldHeight, SpawnScheduleEditor editor) {
+        float x = 0.4f;
+        float y = worldHeight / 2f + 0.7f;
+        float lineHeight = 0.4f;
+
+        font.setColor(Color.YELLOW);
+        font.draw(batch, editor.getTextEntryTitle() + ":", x, y);
+        y -= lineHeight;
+
+        font.setColor(Color.WHITE);
+        font.draw(batch, "> " + editor.getTextEntryText() + "_", x, y);
         y -= lineHeight * 1.5f;
 
         font.setColor(Color.GRAY);

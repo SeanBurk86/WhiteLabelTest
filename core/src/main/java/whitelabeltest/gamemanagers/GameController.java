@@ -15,6 +15,7 @@ import whitelabeltest.gamemanagers.input.InputType;
 import whitelabeltest.gamemanagers.input.KeyBindings;
 import whitelabeltest.gamemanagers.spawning.LevelRank;
 import whitelabeltest.gamemanagers.spawning.PatternPreviewer;
+import whitelabeltest.gamemanagers.spawning.SpawnScheduleEditor;
 import whitelabeltest.gamemanagers.replay.ReplayBrowser;
 import whitelabeltest.gamemanagers.replay.ReplayData;
 import whitelabeltest.gamemanagers.replay.ReplayPlayer;
@@ -103,6 +104,7 @@ public class GameController implements Disposable {
 
     private final DebugSaveStateManager debugSaveStateManager;
     private final PatternPreviewer patternPreviewer = new PatternPreviewer();
+    private final SpawnScheduleEditor spawnScheduleEditor = new SpawnScheduleEditor();
     private boolean debugMenuOpen;
     private int debugMenuSelectedIndex;
     private float debugMenuSeekTime;
@@ -122,7 +124,8 @@ public class GameController implements Disposable {
     private static final int ROW_PATTERN_PREVIEW = ROW_LIVES + 1;
     private static final int ROW_REPLAY_BROWSER = ROW_PATTERN_PREVIEW + 1;
     private static final int ROW_STAGE_SELECT = ROW_REPLAY_BROWSER + 1;
-    private static final int ROW_BOOKMARKS_START = ROW_STAGE_SELECT + 1;
+    private static final int ROW_SPAWN_SCHEDULE_EDITOR = ROW_STAGE_SELECT + 1;
+    private static final int ROW_BOOKMARKS_START = ROW_SPAWN_SCHEDULE_EDITOR + 1;
     private static final String[] SLOT_WEAPON_OPTIONS = {null, "BasicWeapon", "WaveBlastWeapon", "OrbitWeapon", "Thunderbolt"};
     private static final int MAX_DEBUG_LIVES = 9;
 
@@ -244,6 +247,7 @@ public class GameController implements Disposable {
             } else {
                 patternPreviewer.close(entities);
                 replayBrowser.close();
+                spawnScheduleEditor.close();
             }
         }
 
@@ -386,6 +390,14 @@ public class GameController implements Disposable {
             return;
         }
 
+        if (spawnScheduleEditor.isActive()) {
+            boolean deleteConsumed = spawnScheduleEditor.handleInput(input);
+            if (input.isDebugMenuDeleteJustPressed() && !deleteConsumed) {
+                spawnScheduleEditor.close();
+            }
+            return;
+        }
+
         int bookmarkCount = debugSaveStateManager.getSaveStates().size;
         int totalRows = ROW_BOOKMARKS_START + bookmarkCount;
 
@@ -431,6 +443,17 @@ public class GameController implements Disposable {
             }
             if (input.isDebugMenuConfirmJustPressed()) {
                 debugLoadStage(stageIds.get(debugMenuStageIndex));
+            }
+        } else if (debugMenuSelectedIndex == ROW_SPAWN_SCHEDULE_EDITOR) {
+            if (input.isDebugMenuConfirmJustPressed()) {
+                spawnScheduleEditor.open(assets, spawnScheduler.getScheduleFilePath(), worldWidth, worldHeight,
+                    // Saving must reach the currently-running game immediately (see
+                    // SpawnScheduleEditor.onSavedToDisk's doc) - reuses the same full stage reload
+                    // the Stage Select row already does, for the stage that's currently active.
+                    () -> {
+                        spawnScheduleEditor.close();
+                        debugLoadStage(stageSequence.get(stageIndex));
+                    });
             }
         } else if (debugMenuSelectedIndex < ROW_BOOKMARKS_START) {
             String weaponId = WEAPON_LEVEL_IDS[debugMenuSelectedIndex - ROW_LEVELS_START];
@@ -838,6 +861,7 @@ public class GameController implements Disposable {
         loadStage(0);
         audio.stopVictory();
         patternPreviewer.close(entities);
+        spawnScheduleEditor.close();
         entities.reset(loadout);
         if (sequenceDef.startingLoadout != null) applyStartingLoadout(sequenceDef.startingLoadout);
         collisionManager.reset();
@@ -914,6 +938,8 @@ public class GameController implements Disposable {
     public EntityManager getEntities() { return entities; }
     public boolean isPatternPreviewActive() { return patternPreviewer.isActive(); }
     public PatternPreviewer getPatternPreviewer() { return patternPreviewer; }
+    public boolean isSpawnScheduleEditorActive() { return spawnScheduleEditor.isActive(); }
+    public SpawnScheduleEditor getSpawnScheduleEditor() { return spawnScheduleEditor; }
     public CollisionManager getCollisionManager() { return collisionManager; }
     public boolean isAudioMuted() { return audio.isMuted(); }
     public boolean isReplaying() { return replayPlayer != null; }

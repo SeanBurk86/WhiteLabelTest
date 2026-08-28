@@ -159,7 +159,10 @@ public class SpawnScheduler {
         public GateCue() {}
     }
 
-    private static class ScheduleFile {
+    // Public so SpawnScheduleEditor can load/edit/save the whole file directly (not just the
+    // events list this class exposes via getSchedule()) without losing every other cue type it
+    // doesn't edit - see that class's open()/saveToDisk().
+    public static class ScheduleFile {
         public Array<TextCue> textCues;
         public Array<SpawnEvent> events;
         public Array<SoundCue> soundCues;
@@ -322,6 +325,7 @@ public class SpawnScheduler {
     private TextCue awaitingConfirmCue;
     private final ObjectMap<String, EnemyDefinition> enemyDefinitions;
     private final AssetManager assets;
+    private final String scheduleFilePath;
 
     public SpawnScheduler(float worldWidth, float worldHeight, AssetManager assets, String scheduleFilePath) {
         this.worldWidth = worldWidth;
@@ -329,9 +333,15 @@ public class SpawnScheduler {
         this.assets = assets;
         this.totalTime = 0;
         this.enemyDefinitions = new ObjectMap<>();
+        this.scheduleFilePath = scheduleFilePath;
         loadDefinitions();
         loadSchedule(scheduleFilePath);
     }
+
+    /** Asset-relative path (e.g. "data/stages/stage1_schedule.json") this schedule was loaded
+     *  from - see StageDefinition.spawnSchedule. Lets SpawnScheduleEditor edit whichever stage is
+     *  currently loaded without GameController needing to separately track it. */
+    public String getScheduleFilePath() { return scheduleFilePath; }
 
     private void loadDefinitions() {
         Json json = new Json();
