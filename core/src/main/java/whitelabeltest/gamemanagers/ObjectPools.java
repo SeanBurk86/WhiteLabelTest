@@ -2,7 +2,6 @@ package whitelabeltest.gamemanagers;
 import whitelabeltest.gamemanagers.effects.BulletCancelEffect;
 import whitelabeltest.gamemanagers.effects.ExplosionEffect;
 import whitelabeltest.gamemanagers.effects.HitEffect;
-import whitelabeltest.gamemanagers.effects.PlayerTrailEffect;
 import whitelabeltest.gamemanagers.effects.PointGem;
 import whitelabeltest.gamemanagers.effects.ScheduledSpriteEffect;
 
@@ -70,9 +69,6 @@ public class ObjectPools {
     public static final Pool<ExplosionEffect> explosionPool = new Pool<ExplosionEffect>() {
         @Override protected ExplosionEffect newObject() { return new ExplosionEffect(); }
     };
-    public static final Pool<PlayerTrailEffect> trailPool = new Pool<PlayerTrailEffect>() {
-        @Override protected PlayerTrailEffect newObject() { return new PlayerTrailEffect(); }
-    };
     public static final Pool<HitEffect> hitEffectPool = new Pool<HitEffect>() {
         @Override protected HitEffect newObject() { return new HitEffect(); }
     };
@@ -118,10 +114,6 @@ public class ObjectPools {
 
     public static void freeExplosion(ExplosionEffect e) {
         explosionPool.free(e);
-    }
-
-    public static void freeTrail(PlayerTrailEffect t) {
-        trailPool.free(t);
     }
 
     public static void freeHitEffect(HitEffect e) {

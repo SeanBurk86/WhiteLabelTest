@@ -558,7 +558,7 @@ public class GameController implements Disposable {
     private void loadStage(int index) {
         StageDefinition stageDef = assets.getStageDefinition(stageSequence.get(index));
         if (background != null) background.dispose();
-        background = new ScrollingBackground(worldWidth, worldHeight, audioSettings, assets, stageDef.backgroundLayers, stageDef.bossVideo, stageDef.backgroundVideo, stageDef.shaderBackground, stageDef.hueCycleBackground);
+        background = new ScrollingBackground(worldWidth, worldHeight, audioSettings, assets, stageDef.backgroundLayers, stageDef.bossVideo, stageDef.backgroundVideo, stageDef.shaderBackground, stageDef.hueCycleBackground, stageDef.playerFeedbackBackground);
         background.setMuted(audio.isMuted());
         spawnScheduler = new SpawnScheduler(worldWidth, worldHeight, assets, stageDef.spawnSchedule);
         background.setKaleidoscopeTransitionTime(spawnScheduler.getKaleidoscopeTransitionTime());
@@ -810,6 +810,16 @@ public class GameController implements Disposable {
      *  covering the screen instead, or this stage simply has no backgroundLayers at all) - a
      *  layer-attached enemy just draws normally in that case, same as before this feature existed. */
     public void draw(com.badlogic.gdx.graphics.g2d.SpriteBatch batch) {
+        // No-op unless this stage set StageDefinition.playerFeedbackBackground - see
+        // ScrollingBackground.updatePlayer()/updateHalo(). Must happen before background.draw()/
+        // beginLayeredDraw() below so the feedback overlay composites THIS frame's player position,
+        // not last frame's.
+        Player feedbackPlayer = entities.getPlayer();
+        background.updatePlayer(feedbackPlayer.getCurrentFrame(), feedbackPlayer.getX(), feedbackPlayer.getY(),
+            feedbackPlayer.getWidth(), feedbackPlayer.getHeight());
+        background.updateHalo(feedbackPlayer.getHaloFrame(), feedbackPlayer.getHaloX(), feedbackPlayer.getHaloY(),
+            feedbackPlayer.getHaloWidth(), feedbackPlayer.getHaloHeight());
+
         int layerCount = background.getLayerCount();
         if (background.isDrawingLayerStack() && layerCount > 0) {
             background.beginLayeredDraw(batch);
@@ -818,6 +828,9 @@ public class GameController implements Disposable {
                 entities.drawEnemiesAttachedToLayer(batch, i);
             }
             background.endLayeredDraw(batch);
+            // draw() itself isn't called on this branch, so the feedback overlay (which draw() would
+            // otherwise apply on top of the layer stack) needs its own explicit call here.
+            background.drawPlayerFeedbackOverlay(batch);
             entities.draw(batch, layerCount);
         } else {
             background.draw(batch);

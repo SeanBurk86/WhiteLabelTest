@@ -6,7 +6,6 @@ import whitelabeltest.gamemanagers.effects.BulletCancelEffect;
 import whitelabeltest.gamemanagers.effects.ExplosionEffect;
 import whitelabeltest.gamemanagers.effects.HitEffect;
 import whitelabeltest.gamemanagers.input.InputManager;
-import whitelabeltest.gamemanagers.effects.PlayerTrailEffect;
 import whitelabeltest.gamemanagers.effects.PointGem;
 import whitelabeltest.gamemanagers.effects.ScheduledSpriteEffect;
 
@@ -33,7 +32,6 @@ public class EntityManager {
     private final Array<EnemyBullet> enemyBullets;
     private final Array<Powerup> powerups;
     private final Array<ExplosionEffect> explosions;
-    private final Array<PlayerTrailEffect> trails;
     private final Array<HitEffect> hitEffects;
     private final Array<BulletCancelEffect> bulletCancelEffects;
     private final Array<PointGem> pointGems;
@@ -49,8 +47,6 @@ public class EntityManager {
     private boolean bombActive;
     private boolean bossKilled;
 
-    private float trailSpawnTimer;
-    private static final float TRAIL_SPAWN_INTERVAL = 0.02f;
     private static final float BULLET_CANCEL_SIZE_SCALE = 4f;
 
     public EntityManager(AssetManager assets, float worldWidth, float worldHeight) {
@@ -81,7 +77,6 @@ public class EntityManager {
         this.enemyBullets = new Array<>();
         this.powerups = new Array<>();
         this.explosions = new Array<>();
-        this.trails = new Array<>();
         this.hitEffects = new Array<>();
         this.bulletCancelEffects = new Array<>();
         this.pointGems = new Array<>();
@@ -119,28 +114,8 @@ public class EntityManager {
             if (bombAnimation.isAnimationFinished(bombAnimationTime)) bombActive = false;
         }
         player.update(delta, input, assets, audio, bullets, enemies, weaponsDisabled, hyperAttackDisabled);
-        updateTrail(delta, input);
 
         updateCollections(delta, assets, input, groundScrollSpeed, background);
-    }
-
-    private void updateTrail(float delta, InputManager input) {
-        if (player.isDead() || input.getMoveDirection().len2() < 0.0001f) {
-            trailSpawnTimer = 0f;
-            return;
-        }
-
-        trailSpawnTimer += delta;
-        if (trailSpawnTimer >= TRAIL_SPAWN_INTERVAL) {
-            trailSpawnTimer = 0f;
-            PlayerTrailEffect trail = ObjectPools.trailPool.obtain();
-            trail.init(player.getCurrentFrame(), player.getX(), player.getY(), player.getWidth(), player.getHeight());
-            trails.add(trail);
-
-            PlayerTrailEffect haloTrail = ObjectPools.trailPool.obtain();
-            haloTrail.init(player.getHaloFrame(), player.getHaloX(), player.getHaloY(), player.getHaloWidth(), player.getHaloHeight());
-            trails.add(haloTrail);
-        }
     }
 
     private void updateCollections(float delta, AssetManager assets, InputManager input, float groundScrollSpeed, ScrollingBackground background) {
@@ -191,15 +166,6 @@ public class EntityManager {
             if (e.isFinished()) {
                 explosions.removeIndex(i);
                 ObjectPools.freeExplosion(e);
-            }
-        }
-
-        for (int i = trails.size - 1; i >= 0; i--) {
-            PlayerTrailEffect t = trails.get(i);
-            t.update(delta);
-            if (t.isFinished()) {
-                trails.removeIndex(i);
-                ObjectPools.freeTrail(t);
             }
         }
 
@@ -276,7 +242,6 @@ public class EntityManager {
     public void draw(SpriteBatch batch, int attachedLayerCount) {
         for (Powerup p : powerups) p.draw(batch);
         for (PointGem g : pointGems) g.draw(batch);
-        for (PlayerTrailEffect t : trails) t.draw(batch);
         for (Weapon b : bullets) {
             if (!(b instanceof ThunderboltWeapon)) b.draw(batch);
         }
@@ -369,8 +334,6 @@ public class EntityManager {
         powerups.clear();
         for (ExplosionEffect e : explosions) ObjectPools.freeExplosion(e);
         explosions.clear();
-        for (PlayerTrailEffect t : trails) ObjectPools.freeTrail(t);
-        trails.clear();
         for (HitEffect h : hitEffects) ObjectPools.freeHitEffect(h);
         hitEffects.clear();
         for (BulletCancelEffect e : bulletCancelEffects) ObjectPools.freeBulletCancelEffect(e);
@@ -381,7 +344,6 @@ public class EntityManager {
         greenLightningBursts.clear();
         for (ScheduledSpriteEffect s : scheduledSprites) ObjectPools.freeScheduledSpriteEffect(s);
         scheduledSprites.clear();
-        trailSpawnTimer = 0f;
         player.reset(loadout);
     }
 

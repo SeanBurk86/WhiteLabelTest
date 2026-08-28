@@ -45,6 +45,13 @@ public class StageDefinition {
     // SpawnScheduler.getBackgroundVideoTime() (see GameController.loadStage()), so it completes one
     // full cycle - ending back at the image's original colors - right as the boss video cuts in.
     public boolean hueCycleBackground = false;
+    // When true, overlays PlayerFeedbackShader's analog "video feedback" trail (the player's own
+    // sprite endlessly re-fed into a zooming/rotating/fading accumulation buffer) on top of whatever
+    // this stage's background actually is - ordinary backgroundLayers, backgroundVideo/bossVideo, or
+    // even a shaderBackground - rather than replacing it. Independent of shaderBackground/
+    // hueCycleBackground: any combination of the three is valid, same "opt-in overlay" role as
+    // hueCycleBackground, just applied after ALL background content instead of just the layer stack.
+    public boolean playerFeedbackBackground = false;
 
     public StageDefinition() {}
 }
