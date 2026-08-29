@@ -1,0 +1,25 @@
+plugins {
+  id "application"
+  id "org.openjfx.javafxplugin" version "0.1.0"
+}
+
+eclipse.project.name = appName + '-editor'
+
+javafx {
+  version = "21"
+  modules = ['javafx.controls']
+}
+
+application.mainClass = 'whitelabeltest.editor.EditorApp'
+
+dependencies {
+  implementation project(':core')
+}
+
+// Same reasoning as lwjgl3/build.gradle's own run task - the editor reads/writes data/enemies.json,
+// data/stages.json, data/stages/*_triggers.json etc. with plain relative paths (no Gdx.files, since
+// there's no live LibGDX Application here), so it needs the same working directory the game itself
+// resolves those paths against.
+run {
+  workingDir = rootProject.file('assets').path
+}
