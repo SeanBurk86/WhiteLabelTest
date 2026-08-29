@@ -23,6 +23,7 @@ import whitelabeltest.gamemanagers.replay.ReplayRecorder;
 import whitelabeltest.gamemanagers.background.ScrollingBackground;
 import whitelabeltest.gamemanagers.spawning.SpawnScheduler;
 import whitelabeltest.gamemanagers.spawning.StartingLoadoutDefinition;
+import whitelabeltest.gamemanagers.trigger.TriggerManager;
 
 import com.badlogic.gdx.Gdx;
 import com.badlogic.gdx.Input;
@@ -49,6 +50,9 @@ public class GameController implements Disposable {
     private final CollisionManager collisionManager;
     private ScrollingBackground background;
     private SpawnScheduler spawnScheduler;
+    // Camera-position-driven counterpart to spawnScheduler - see TriggerManager's class doc. Null
+    // for any stage whose StageDefinition.triggerFile is unset (every stage but stage1, for now).
+    private TriggerManager triggerManager;
     private final InputManager input;
     private final AudioSettings audioSettings;
     // Which named ordering of stages (see StageSequenceDefinition/AssetManager.getStageSequence())
@@ -196,6 +200,7 @@ public class GameController implements Disposable {
             frame = replayPlayer.next();
             if (!Float.isNaN(frame.seekToTime)) {
                 spawnScheduler.seekTo(frame.seekToTime, audio);
+                if (triggerManager != null) triggerManager.seekTo(frame.seekToTime);
                 entities.clearWorld();
                 background.seekTo(frame.seekToTime);
                 return; // instantaneous - consumes no simulated time, resume on the next update() call
@@ -297,6 +302,7 @@ public class GameController implements Disposable {
         entities.update(delta, input, assets, audio, weaponsDisabled, hyperAttackDisabled, spawnScheduler.getGroundScrollSpeed(), background);
         spawnScheduler.update(delta, entities, audio, input,
             scoreManager.getEnemiesDestroyed(), scoreManager.getGemsCollected(), entities.getPlayer().getGrazePoints());
+        if (triggerManager != null) triggerManager.update(delta, entities, audio, input, scoreManager);
 
         if (!bossVideoTriggered && spawnScheduler.isBackgroundVideoTriggered()) {
             bossVideoTriggered = true;
@@ -485,6 +491,7 @@ public class GameController implements Disposable {
 
     private void seekToTime(float targetTime) {
         spawnScheduler.seekTo(targetTime, audio);
+        if (triggerManager != null) triggerManager.seekTo(targetTime);
         entities.clearWorld();
         background.seekTo(targetTime);
         debugMenuOpen = false;
@@ -502,6 +509,10 @@ public class GameController implements Disposable {
         if (levelCompleteBombBonus > 0) scoreManager.addBonus(levelCompleteBombBonus);
 
         float bossSpawnTime = spawnScheduler.getBossSpawnTime();
+        // Falls back to the trigger-driven boss spawn (see TriggerManager.getBossSpawnDistance())
+        // once a stage's boss spawns via a trigger instead of a SpawnEvent - otherwise this stays -1
+        // forever and the boss time bonus/rank contribution below silently zeroes out.
+        if (bossSpawnTime < 0f && triggerManager != null) bossSpawnTime = triggerManager.getBossSpawnDistance();
         if (bossDefeatedScheduleTime >= 0f && bossSpawnTime >= 0f) {
             levelCompleteBossFightSeconds = Math.max(0f, bossDefeatedScheduleTime - bossSpawnTime);
             levelCompleteTimeBonus = Math.max(0,
@@ -561,10 +572,13 @@ public class GameController implements Disposable {
         background = new ScrollingBackground(worldWidth, worldHeight, audioSettings, assets, stageDef.backgroundLayers, stageDef.bossVideo, stageDef.backgroundVideo, stageDef.shaderBackground, stageDef.hueCycleBackground, stageDef.playerFeedbackBackground);
         background.setMuted(audio.isMuted());
         spawnScheduler = new SpawnScheduler(worldWidth, worldHeight, assets, stageDef.spawnSchedule);
+        triggerManager = stageDef.triggerFile != null
+            ? new TriggerManager(worldWidth, worldHeight, assets, stageDef.triggerFile, spawnScheduler.getEnemyDefinitions())
+            : null;
         background.setKaleidoscopeTransitionTime(spawnScheduler.getKaleidoscopeTransitionTime());
         background.setHueCyclePeriod(spawnScheduler.getBackgroundVideoTime());
         audio.loadStageMusic(stageDef.music);
-        totalEnemiesAcrossRun += spawnScheduler.getSchedule().size;
+        totalEnemiesAcrossRun += spawnScheduler.getSchedule().size + (triggerManager != null ? triggerManager.getEnemySpawnCount() : 0);
         bossVideoTriggered = false;
         musicFadeTriggered = false;
         stageIndex = index;
@@ -726,7 +740,9 @@ public class GameController implements Disposable {
     private void restartPracticeSection() {
         audio.playPlayerDeath();
         entities.destroyAllPlayerBullets();
-        spawnScheduler.seekTo(spawnScheduler.getPracticeCheckpointStart(spawnScheduler.getTotalTime()), audio);
+        float checkpointStart = spawnScheduler.getPracticeCheckpointStart(spawnScheduler.getTotalTime());
+        spawnScheduler.seekTo(checkpointStart, audio);
+        if (triggerManager != null) triggerManager.seekTo(checkpointStart);
         entities.clearWorld();
     }
 
@@ -742,7 +758,7 @@ public class GameController implements Disposable {
     }
 
     public static int destroyEnemy(AudioManager audio, EntityManager entityManager, AssetManager assets, float worldWidth, float worldHeight, Enemy enemy, ScoreManager scoreManager) {
-        scoreManager.registerEnemyDestroyed();
+        scoreManager.registerEnemyDestroyed(enemy.getDefinitionId());
         int scoreValue = enemy.getScore();
 
         if (enemy.cancelsBulletsOnDeath()) entityManager.destroyEnemyBullets(enemy, assets);
@@ -814,10 +830,22 @@ public class GameController implements Disposable {
         // ScrollingBackground.updatePlayer()/updateHalo(). Must happen before background.draw()/
         // beginLayeredDraw() below so the feedback overlay composites THIS frame's player position,
         // not last frame's.
+        //
+        // While the player is dead, Player.update() early-returns (see its own isDead branch), so
+        // sprite/position are frozen for the whole DEATH_WAIT window - feeding that same frozen frame
+        // into the feedback trail every frame at full opacity would reinforce it faster than
+        // PlayerFeedbackShader's own decay can fade it, leaving a solid, non-blinking "statue" sitting
+        // at the respawn point for roughly as long as the invincibility window that follows lasts (a
+        // "reappears without blinking and can't move" bug report - the real player CAN move, a stale
+        // feedback copy is just stuck on top of them). Passing a null frame (but the real position, so
+        // the shader's zoom/warp pivot doesn't snap to the origin) skips that reinforcement entirely,
+        // so any already-accumulated trail just decays normally through the death window instead.
         Player feedbackPlayer = entities.getPlayer();
-        background.updatePlayer(feedbackPlayer.getCurrentFrame(), feedbackPlayer.getX(), feedbackPlayer.getY(),
+        TextureRegion feedbackFrame = feedbackPlayer.isDead() ? null : feedbackPlayer.getCurrentFrame();
+        TextureRegion feedbackHaloFrame = feedbackPlayer.isDead() ? null : feedbackPlayer.getHaloFrame();
+        background.updatePlayer(feedbackFrame, feedbackPlayer.getX(), feedbackPlayer.getY(),
             feedbackPlayer.getWidth(), feedbackPlayer.getHeight());
-        background.updateHalo(feedbackPlayer.getHaloFrame(), feedbackPlayer.getHaloX(), feedbackPlayer.getHaloY(),
+        background.updateHalo(feedbackHaloFrame, feedbackPlayer.getHaloX(), feedbackPlayer.getHaloY(),
             feedbackPlayer.getHaloWidth(), feedbackPlayer.getHaloHeight());
 
         int layerCount = background.getLayerCount();

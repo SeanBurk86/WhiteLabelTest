@@ -1,7 +1,4 @@
 package whitelabeltest.gamemanagers.spawning;
-import whitelabeltest.gamemanagers.effects.AnimationCache;
-import whitelabeltest.gamemanagers.ObjectPools;
-import whitelabeltest.gamemanagers.effects.PointGem;
 import whitelabeltest.gamemanagers.background.Stage2KaleidoscopeShader;
 import whitelabeltest.gamemanagers.background.ScrollingBackground;
 import whitelabeltest.gamemanagers.AssetManager;
@@ -11,16 +8,11 @@ import whitelabeltest.gamemanagers.input.InputManager;
 import whitelabeltest.gamemanagers.TextCue;
 
 import com.badlogic.gdx.Gdx;
-import com.badlogic.gdx.graphics.Texture;
-import com.badlogic.gdx.graphics.g2d.Animation;
-import com.badlogic.gdx.graphics.g2d.TextureRegion;
 import com.badlogic.gdx.utils.Array;
 import com.badlogic.gdx.utils.Json;
 import com.badlogic.gdx.utils.ObjectMap;
 import com.badlogic.gdx.utils.SerializationException;
-import whitelabeltest.enemy.Enemy;
 import whitelabeltest.enemy.EnemyDefinition;
-import whitelabeltest.enemy.GenericEnemy;
 
 import java.util.Comparator;
 import java.util.Objects;
@@ -342,6 +334,10 @@ public class SpawnScheduler {
      *  from - see StageDefinition.spawnSchedule. Lets SpawnScheduleEditor edit whichever stage is
      *  currently loaded without GameController needing to separately track it. */
     public String getScheduleFilePath() { return scheduleFilePath; }
+
+    /** The enemy definitions this schedule already parsed from data/enemies.json - handed to
+     *  TriggerManager so it doesn't need to parse that file a second time for the same stage. */
+    public ObjectMap<String, EnemyDefinition> getEnemyDefinitions() { return enemyDefinitions; }
 
     private void loadDefinitions() {
         Json json = new Json();
@@ -760,74 +756,29 @@ public class SpawnScheduler {
         };
     }
 
+    // Enemy/sprite-cue instantiation itself lives in EnemySpawnOps now, shared with TriggerManager
+    // - see that class's doc.
     private void spawnEnemy(EntityManager entityManager, SpawnEvent event) {
-        EnemyDefinition def = enemyDefinitions.get(event.type);
-        if (def == null) return;
-
-        Texture tex = assets.getTexture(def.texture);
-        Texture bulletTex = assets.getTexture(def.bulletTexture);
-        Texture spawnTex = def.spawnTexture != null ? assets.getTexture(def.spawnTexture) : null;
-        Texture deathTex = def.deathTexture != null ? assets.getTexture(def.deathTexture) : null;
-
-        GenericEnemy enemy = ObjectPools.genericEnemyPool.obtain();
-
-        def.inverseMovement = event.inverseMovement;
-
-        enemy.initWithDefinition(def, tex, bulletTex, spawnTex, deathTex, worldWidth, worldHeight, event.x, event.y, event.offsetX, event.offsetY, event.movementPattern, event.firingPattern);
-
-        if (event.powerup != null) enemy.setGuaranteedPowerup(event.powerup);
-        entityManager.getEnemies().add(enemy);
+        EnemySpawnOps.spawnEnemy(entityManager, enemyDefinitions, assets, worldWidth, worldHeight,
+            event.type, event.x, event.y, event.offsetX, event.offsetY, event.movementPattern, event.firingPattern,
+            event.inverseMovement, event.powerup);
     }
 
-    /** See SpawnEvent.silence - stops every currently active enemy whose EnemyDefinition id
-     *  matches defId from firing any further, without otherwise touching it (still on-screen,
-     *  still alive, just quiet). */
     private void silenceMatching(EntityManager entityManager, String defId) {
-        for (Enemy enemy : entityManager.getEnemies()) {
-            if (enemy.isActive() && defId.equals(enemy.getDefinitionId())) enemy.silenceFiring();
-        }
+        EnemySpawnOps.silenceMatching(entityManager, defId);
     }
 
-    /** See SpawnEvent.despawn - silently removes every currently active enemy whose
-     *  EnemyDefinition id matches defId, with no death animation/score/drops (unlike actually
-     *  killing it via Enemy.takeDamage(), which GameController.destroyEnemy would treat as a real
-     *  kill for scoring/gem-drop/gate-counting purposes - this is scripted cleanup, not a kill). */
     private void despawnMatching(EntityManager entityManager, String defId) {
-        Array<Enemy> enemies = entityManager.getEnemies();
-        for (int i = enemies.size - 1; i >= 0; i--) {
-            Enemy enemy = enemies.get(i);
-            if (enemy.isActive() && defId.equals(enemy.getDefinitionId())) {
-                ObjectPools.freeEnemy(enemy);
-                enemies.removeIndex(i);
-            }
-        }
+        EnemySpawnOps.despawnMatching(entityManager, defId);
     }
 
-    /** See SpawnEvent.waypointGem - drops a stationary PointGem at (event.x, event.y), same
-     *  animation as a gem an enemy would drop, but with none of that gem's pop/gravity/homing (see
-     *  PointGem.init's stationary overload), so it just waits in place until the player flies into
-     *  it. */
     private void spawnWaypointGem(EntityManager entityManager, SpawnEvent event) {
-        Animation<TextureRegion> gemAnimation =
-            AnimationCache.get(assets.pointGemTexture, 6, 4, 24, 0.05f, Animation.PlayMode.LOOP);
-        PointGem gem = ObjectPools.pointGemPool.obtain();
-        gem.init(gemAnimation, event.x, event.y, worldWidth, worldHeight, true);
-        entityManager.getPointGems().add(gem);
+        EnemySpawnOps.spawnWaypointGem(entityManager, assets, worldWidth, worldHeight, event.x, event.y);
     }
 
     private void spawnSpriteCue(EntityManager entityManager, SpriteCue cue) {
-        Texture texture = assets.ensureTexture(cue.texture);
-        if (texture == null) return;
-
-        Animation<TextureRegion> animation =
-            AnimationCache.get(texture, cue.columns, cue.rows, cue.frameCount, cue.frameDuration, Animation.PlayMode.NORMAL);
-
-        // cue.size sets the draw height; width is derived from the sheet's per-frame aspect ratio
-        // so non-square art (e.g. a wide banner like WarningSign.png) isn't squashed into a square.
-        float frameAspect = (texture.getWidth() / (float) cue.columns) / (texture.getHeight() / (float) cue.rows);
-        float height = cue.size;
-        float width = height * frameAspect;
-        entityManager.spawnScheduledSprite(animation, cue.x, cue.y, width, height);
+        EnemySpawnOps.spawnSpriteCue(entityManager, assets, cue.texture, cue.x, cue.y, cue.size,
+            cue.columns, cue.rows, cue.frameCount, cue.frameDuration);
     }
 
     public void reset() {

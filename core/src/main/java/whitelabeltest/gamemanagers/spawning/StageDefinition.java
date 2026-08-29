@@ -24,6 +24,11 @@ public class StageDefinition {
     public String id;
     public String name;
     public String spawnSchedule;
+    // Optional companion to spawnSchedule - path to a camera-position-driven trigger file (see
+    // whitelabeltest.gamemanagers.trigger.TriggerManager) for this stage's enemy spawns/sound/
+    // sprite cues. null (the default) means this stage has no trigger-driven content yet and runs
+    // entirely off spawnSchedule, same as before this field existed.
+    public String triggerFile = null;
     public String music;
     public Array<BackgroundLayerDef> backgroundLayers;
     public String bossVideo;

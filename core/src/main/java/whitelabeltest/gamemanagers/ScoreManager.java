@@ -1,5 +1,7 @@
 package whitelabeltest.gamemanagers;
 
+import com.badlogic.gdx.utils.ObjectMap;
+
 public class ScoreManager {
     // Fallback chain window used until the first addScore(basePoints, chainWindow)/registerWeaponHit
     // call establishes a real per-weapon one - see GameBalance.defaultChainWindow (balance.json).
@@ -23,6 +25,10 @@ public class ScoreManager {
     // (the only call site) and SpawnScheduler's "gemsCollected" gate condition, which is the
     // reason this is tracked at all (nothing else currently reads it).
     private int gemsCollected;
+    // Kills broken down by EnemyDefinition id, alongside the flat enemiesDestroyed total above - see
+    // whitelabeltest.gamemanagers.trigger.Condition's "enemyTypeDestroyed" type, the reason this
+    // exists at all (nothing else currently reads it).
+    private final ObjectMap<String, Integer> enemiesDestroyedByType = new ObjectMap<>();
 
     public ScoreManager(float defaultChainWindow) {
         this.defaultChainWindow = defaultChainWindow;
@@ -76,8 +82,11 @@ public class ScoreManager {
         if (score > highScore) highScore = score;
     }
 
-    public void registerEnemyDestroyed() {
+    public void registerEnemyDestroyed(String definitionId) {
         enemiesDestroyed++;
+        if (definitionId != null) {
+            enemiesDestroyedByType.put(definitionId, enemiesDestroyedByType.get(definitionId, 0) + 1);
+        }
     }
 
     public void registerGemCollected() {
@@ -93,6 +102,7 @@ public class ScoreManager {
         enemiesDestroyed = 0;
         maxChainCount = 0;
         gemsCollected = 0;
+        enemiesDestroyedByType.clear();
     }
 
     public int getScore() { return score; }
@@ -102,4 +112,5 @@ public class ScoreManager {
     public int getEnemiesDestroyed() { return enemiesDestroyed; }
     public int getMaxChainCount() { return maxChainCount; }
     public int getGemsCollected() { return gemsCollected; }
+    public int getEnemiesDestroyedByType(String definitionId) { return enemiesDestroyedByType.get(definitionId, 0); }
 }
