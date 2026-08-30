@@ -54,6 +54,16 @@ public class StageLibrary {
         return null;
     }
 
+    /** Writes the current in-memory enemy list back to data/enemies.json - see
+     *  EnemyDefinitionPanel, the only caller. Every EnemyDefinition instance here is shared by
+     *  reference with whatever a placed Trigger's TriggerNode looked up (findEnemy()), so edits
+     *  already show up live on the canvas before this is even called; this just persists them. */
+    public void saveEnemies() {
+        Json json = new Json();
+        json.setOutputType(JsonWriter.OutputType.json);
+        writeText(ENEMIES_JSON, json.prettyPrint(json.toJson(enemies, Array.class, EnemyDefinition.class)));
+    }
+
     /** For a stage with no triggerFile yet: writes a fresh, empty trigger JSON at the conventional
      *  data/stages/&lt;id&gt;_triggers.json path and patches only that one stage's triggerFile field
      *  into stages.json (re-serializing the whole array - every other field/stage round-trips

@@ -2,26 +2,46 @@ package whitelabeltest.editor;
 
 import javafx.geometry.Insets;
 import javafx.scene.control.Button;
-import javafx.scene.control.CheckBox;
 import javafx.scene.control.ComboBox;
-import javafx.scene.control.Label;
 import javafx.scene.control.ScrollPane;
 import javafx.scene.control.Separator;
-import javafx.scene.control.TextField;
 import javafx.scene.layout.HBox;
 import javafx.scene.layout.VBox;
-import javafx.scene.paint.Color;
 import whitelabeltest.gamemanagers.trigger.Condition;
 import whitelabeltest.gamemanagers.trigger.Trigger;
 
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 
-/** Right-hand editing form for whichever Trigger is currently selected on the StageCanvas - shown
- *  fields depend on which action the trigger performs (mirrors TriggerManager.fire()'s own dispatch
- *  order - see that method). Every field commits straight back onto the live Trigger object, then
- *  tells the canvas to reposition/relabel that one node and mark the document dirty - see
- *  StageCanvas.refreshTrigger(). */
+import static whitelabeltest.editor.FormControls.comboRow;
+import static whitelabeltest.editor.FormControls.numberRow;
+import static whitelabeltest.editor.FormControls.numberRowNullable;
+import static whitelabeltest.editor.FormControls.sectionLabel;
+import static whitelabeltest.editor.FormControls.textRow;
+import static whitelabeltest.editor.FormControls.withBlank;
+
+/** Right-hand editing form for whichever Trigger is currently selected on the StageCanvas.
+ *
+ * A trigger is edited in two independent parts, deliberately in this order: **Conditions** first -
+ * the same gate vocabulary the tutorial stage's SpawnScheduler.GateCue already uses (shoot/bomb/
+ * moved/enemiesDestroyed/etc. - see CONDITION_TYPES), which decide WHEN this trigger fires once the
+ * camera reaches its distance - then the **Action** it's linked to - what actually happens once
+ * those conditions are met: an enemy spawn, sound cue, sprite cue, camera-speed change, or one of
+ * the scripted enemy-list actions (despawn/silence/waypoint gem/weapon swap). The Action combo lets
+ * you change (or start with none - see ActionPalette's "Trigger Event" tile) which of those a
+ * trigger is linked to at any time, clearing whichever fields the previous action used - so a
+ * trigger's gating logic and its effect are edited/authored as separable concerns, matching how
+ * TriggerManager.fire() itself already treats them (arm on distance+conditions, dispatch on action
+ * fields - see that class).
+ *
+ * Every field commits straight back onto the live Trigger object, then tells the canvas to
+ * reposition/relabel that one node and mark the document dirty - see StageCanvas.refreshTrigger().
+ * See FormControls for the shared field-row builders, and EnemyDefinitionPanel for the sibling panel
+ * that edits an enemy's own template stats instead of a placed instance - EditorApp swaps whichever
+ * of the two is relevant into the same dock slot, depending on whether you clicked a canvas trigger
+ * or a palette entry. */
 public class PropertiesPanel extends ScrollPane {
     private static final String[] CONDITION_TYPES = {
         "shoot", "bomb", "weaponSwitch", "moved", "movedLeft", "movedRight",
@@ -29,14 +49,27 @@ public class PropertiesPanel extends ScrollPane {
         "gemsCollected", "grazed"
     };
 
-    private final EditorDocument document;
+    // Ordered key -> display label for the Action combo - see applyActionKind()/actionKindKey().
+    // LinkedHashMap so the combo's option order matches declaration order here.
+    private static final Map<String, String> ACTION_KINDS = new LinkedHashMap<>();
+    static {
+        ACTION_KINDS.put("none", "(unlinked)");
+        ACTION_KINDS.put("enemy", "Enemy Spawn");
+        ACTION_KINDS.put("sound", "Sound Cue");
+        ACTION_KINDS.put("sprite", "Sprite Cue");
+        ACTION_KINDS.put("speed", "Set Camera Speed");
+        ACTION_KINDS.put("despawn", "Despawn Enemies");
+        ACTION_KINDS.put("silence", "Silence Enemies");
+        ACTION_KINDS.put("waypointGem", "Waypoint Gem");
+        ACTION_KINDS.put("swapWeapon", "Swap Weapon");
+    }
+
     private final StageLibrary library;
     private final StageCanvas canvas;
     private final VBox root = new VBox(8);
     private Trigger trigger;
 
-    public PropertiesPanel(EditorDocument document, StageLibrary library, StageCanvas canvas) {
-        this.document = document;
+    public PropertiesPanel(StageLibrary library, StageCanvas canvas) {
         this.library = library;
         this.canvas = canvas;
         root.setPadding(new Insets(8));
@@ -50,32 +83,26 @@ public class PropertiesPanel extends ScrollPane {
         this.trigger = trigger;
         root.getChildren().clear();
         if (trigger == null) {
-            root.getChildren().add(themedLabel("No trigger selected - drag one from the palette, or click a placed trigger."));
+            root.getChildren().add(sectionLabel("No trigger selected - drag one from the palette, or click a placed trigger."));
             return;
         }
 
-        root.getChildren().add(themedLabel(actionKindLabel(trigger)));
+        root.getChildren().add(sectionLabel("Trigger Event"));
         root.getChildren().add(numberRow("Distance", trigger.distance, v -> { trigger.distance = v; onEdited(); }));
-
-        if (trigger.sound != null) {
-            buildSoundFields();
-        } else if (trigger.spriteTexture != null) {
-            buildSpriteFields();
-        } else if (trigger.setSpeed != null) {
-            root.getChildren().add(numberRow("New camera speed", trigger.setSpeed, v -> { trigger.setSpeed = v; onEdited(); }));
-        } else if (trigger.silence || trigger.despawn) {
-            root.getChildren().add(textRow("Enemy type", trigger.type, v -> { trigger.type = v; onEdited(); }));
-        } else if (trigger.waypointGem) {
-            buildWaypointGemFields();
-        } else if (trigger.swapWeaponId != null) {
-            root.getChildren().add(textRow("Weapon id", trigger.swapWeaponId, v -> { trigger.swapWeaponId = v; onEdited(); }));
-            root.getChildren().add(numberRow("Weapon slot", trigger.weaponSlot, v -> { trigger.weaponSlot = v.intValue(); onEdited(); }));
-        } else {
-            buildEnemySpawnFields();
-        }
 
         root.getChildren().add(new Separator());
         buildConditionsSection();
+
+        root.getChildren().add(new Separator());
+        root.getChildren().add(sectionLabel("Action"));
+        String currentKey = actionKindKey(trigger);
+        root.getChildren().add(comboRow("Linked to", new ArrayList<>(ACTION_KINDS.values()), ACTION_KINDS.get(currentKey),
+            label -> {
+                applyActionKind(trigger, keyForLabel(label));
+                onEdited();
+                showTrigger(trigger);
+            }));
+        buildActionFields(currentKey);
 
         root.getChildren().add(new Separator());
         Button delete = new Button("Delete Trigger");
@@ -90,15 +117,79 @@ public class PropertiesPanel extends ScrollPane {
         canvas.refreshTrigger(trigger);
     }
 
-    private static String actionKindLabel(Trigger trigger) {
-        if (trigger.sound != null) return "Sound Cue";
-        if (trigger.spriteTexture != null) return "Sprite Cue";
-        if (trigger.setSpeed != null) return "Set Camera Speed";
-        if (trigger.silence) return "Silence Enemies";
-        if (trigger.despawn) return "Despawn Enemies";
-        if (trigger.waypointGem) return "Waypoint Gem";
-        if (trigger.swapWeaponId != null) return "Swap Weapon";
-        return "Enemy Spawn: " + trigger.type;
+    /** Which action-kind key a trigger's current field state represents - see ACTION_KINDS. Mirrors
+     *  TriggerManager.fire()'s own dispatch order. */
+    private static String actionKindKey(Trigger trigger) {
+        if (trigger.sound != null) return "sound";
+        if (trigger.spriteTexture != null) return "sprite";
+        if (trigger.setSpeed != null) return "speed";
+        if (trigger.silence) return "silence";
+        if (trigger.despawn) return "despawn";
+        if (trigger.waypointGem) return "waypointGem";
+        if (trigger.swapWeaponId != null) return "swapWeapon";
+        if (trigger.type != null) return "enemy";
+        return "none";
+    }
+
+    private static String keyForLabel(String label) {
+        for (Map.Entry<String, String> entry : ACTION_KINDS.entrySet()) {
+            if (entry.getValue().equals(label)) return entry.getKey();
+        }
+        return "none";
+    }
+
+    /** Resets every action-defining field to "unset" then applies sensible defaults for `key` - see
+     *  the Action combo in showTrigger(). Always starts from a clean slate so switching, say, Sound
+     *  Cue -> Enemy Spawn can't leave a stale `sound` value the game would never read but that would
+     *  otherwise still win TriggerManager.fire()'s dispatch (sound is checked first). */
+    private void applyActionKind(Trigger trigger, String key) {
+        trigger.type = null;
+        trigger.sound = null;
+        trigger.spriteTexture = null;
+        trigger.setSpeed = null;
+        trigger.silence = false;
+        trigger.despawn = false;
+        trigger.waypointGem = false;
+        trigger.swapWeaponId = null;
+
+        switch (key) {
+            case "enemy" -> {
+                trigger.type = library.getEnemies().size > 0 ? library.getEnemies().first().id : null;
+                if (Float.isNaN(trigger.y)) trigger.y = StageCanvas.DEFAULT_SPAWN_Y;
+            }
+            case "sound" -> trigger.sound = "audio/sfx/CHANGE_ME.mp3";
+            case "sprite" -> {
+                trigger.spriteTexture = "images/ui/CHANGE_ME.png";
+                if (Float.isNaN(trigger.y)) trigger.y = StageCanvas.DEFAULT_SPAWN_Y;
+            }
+            case "speed" -> trigger.setSpeed = 1f;
+            case "despawn" -> { trigger.despawn = true; trigger.type = firstEnemyIdOrNull(); }
+            case "silence" -> { trigger.silence = true; trigger.type = firstEnemyIdOrNull(); }
+            case "waypointGem" -> trigger.waypointGem = true;
+            case "swapWeapon" -> trigger.swapWeaponId = "BasicWeapon";
+            default -> { } // "none" - stays unlinked
+        }
+    }
+
+    private String firstEnemyIdOrNull() {
+        return library.getEnemies().size > 0 ? library.getEnemies().first().id : null;
+    }
+
+    private void buildActionFields(String key) {
+        switch (key) {
+            case "enemy" -> buildEnemySpawnFields();
+            case "sound" -> buildSoundFields();
+            case "sprite" -> buildSpriteFields();
+            case "speed" -> root.getChildren().add(numberRow("New camera speed", trigger.setSpeed, v -> { trigger.setSpeed = v; onEdited(); }));
+            case "despawn", "silence" -> root.getChildren().add(
+                comboRow("Enemy type", enemyIdOptions(), trigger.type, v -> { trigger.type = v; onEdited(); }));
+            case "waypointGem" -> buildWaypointGemFields();
+            case "swapWeapon" -> {
+                root.getChildren().add(textRow("Weapon id", trigger.swapWeaponId, v -> { trigger.swapWeaponId = v; onEdited(); }));
+                root.getChildren().add(numberRow("Weapon slot", trigger.weaponSlot, v -> { trigger.weaponSlot = v.intValue(); onEdited(); }));
+            }
+            default -> root.getChildren().add(sectionLabel("Pick an action above to link this event to an enemy spawn, sound, sprite, etc."));
+        }
     }
 
     private void buildSoundFields() {
@@ -137,11 +228,7 @@ public class PropertiesPanel extends ScrollPane {
         root.getChildren().add(comboRow("Guaranteed powerup", List.of("", "1", "2", "3"),
             trigger.powerup == null ? "" : String.valueOf(trigger.powerup),
             v -> { trigger.powerup = v.isEmpty() ? null : Integer.valueOf(v); onEdited(); }));
-        CheckBox inverseMovement = new CheckBox("Inverse movement");
-        inverseMovement.setSelected(trigger.inverseMovement);
-        inverseMovement.setTextFill(Color.WHITE);
-        inverseMovement.setOnAction(e -> { trigger.inverseMovement = inverseMovement.isSelected(); onEdited(); });
-        root.getChildren().add(inverseMovement);
+        root.getChildren().add(FormControls.checkBox("Inverse movement", trigger.inverseMovement, v -> { trigger.inverseMovement = v; onEdited(); }));
     }
 
     private List<String> enemyIdOptions() {
@@ -150,15 +237,8 @@ public class PropertiesPanel extends ScrollPane {
         return ids;
     }
 
-    private static List<String> withBlank(List<String> options) {
-        List<String> result = new ArrayList<>();
-        result.add("");
-        result.addAll(options);
-        return result;
-    }
-
     private void buildConditionsSection() {
-        root.getChildren().add(themedLabel("Conditions"));
+        root.getChildren().add(sectionLabel("Conditions (when this fires)"));
         if (trigger.conditions == null) trigger.conditions = new com.badlogic.gdx.utils.Array<>();
 
         root.getChildren().add(comboRow("Match", List.of("ALL", "ANY"),
@@ -210,78 +290,5 @@ public class PropertiesPanel extends ScrollPane {
             box.getChildren().add(numberRow("Count", condition.count, v -> { condition.count = v.intValue(); onEdited(); }));
         }
         return box;
-    }
-
-    // --- small field-row builders -------------------------------------------------------------
-
-    private Label themedLabel(String text) {
-        Label label = new Label(text);
-        label.setTextFill(Color.WHITE);
-        label.setWrapText(true);
-        label.setStyle("-fx-font-weight: bold;");
-        return label;
-    }
-
-    private HBox textRow(String label, String initial, java.util.function.Consumer<String> onCommit) {
-        Label l = fieldLabel(label);
-        TextField field = new TextField(initial != null ? initial : "");
-        field.setOnAction(e -> onCommit.accept(field.getText()));
-        field.focusedProperty().addListener((obs, was, is) -> { if (!is) onCommit.accept(field.getText()); });
-        HBox row = new HBox(6, l, field);
-        row.setStyle("-fx-alignment: center-left;");
-        return row;
-    }
-
-    private HBox numberRow(String label, float initial, java.util.function.Consumer<Float> onCommit) {
-        return numberRowNullable(label, initial, onCommit);
-    }
-
-    private HBox numberRow(String label, int initial, java.util.function.Consumer<Float> onCommit) {
-        return numberRow(label, (float) initial, onCommit);
-    }
-
-    /** Same as numberRow but treats a non-numeric/empty entry as NaN (used for offsetX/offsetY,
-     *  whose NaN default means "not a formation member" - see Trigger's own field doc) rather than
-     *  refusing the edit. */
-    private HBox numberRowNullable(String label, float initial, java.util.function.Consumer<Float> onCommit) {
-        Label l = fieldLabel(label);
-        TextField field = new TextField(Float.isNaN(initial) ? "" : formatFloat(initial));
-        Runnable commit = () -> {
-            String text = field.getText().trim();
-            try {
-                onCommit.accept(text.isEmpty() ? Float.NaN : Float.parseFloat(text));
-            } catch (NumberFormatException ignored) {
-                // leave the field as typed - no crash on a stray non-numeric edit mid-keystroke
-            }
-        };
-        field.setOnAction(e -> commit.run());
-        field.focusedProperty().addListener((obs, was, is) -> { if (!is) commit.run(); });
-        HBox row = new HBox(6, l, field);
-        row.setStyle("-fx-alignment: center-left;");
-        return row;
-    }
-
-    private static String formatFloat(float value) {
-        return value == Math.floor(value) ? String.valueOf((int) value) : String.valueOf(value);
-    }
-
-    private HBox comboRow(String label, List<String> options, String initial, java.util.function.Consumer<String> onCommit) {
-        Label l = fieldLabel(label);
-        ComboBox<String> combo = new ComboBox<>(javafx.collections.FXCollections.observableArrayList(options));
-        combo.setEditable(false);
-        combo.setValue(initial != null ? initial : "");
-        combo.setOnAction(e -> onCommit.accept(combo.getValue() == null ? "" : combo.getValue()));
-        HBox row = new HBox(6, l, combo);
-        row.setStyle("-fx-alignment: center-left;");
-        return row;
-    }
-
-    private Label fieldLabel(String text) {
-        Label label = new Label(text + ":");
-        label.setTextFill(Color.LIGHTGRAY);
-        label.setStyle("-fx-font-size: 10px;");
-        label.setMinWidth(90);
-        label.setWrapText(true);
-        return label;
     }
 }

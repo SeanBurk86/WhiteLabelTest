@@ -1,0 +1,129 @@
+/* Dark theme for the stage editor - applied once, app-wide, via EditorApp's Scene. Overrides the
+ * default JavaFX (Modena) light chrome so the whole window reads consistently with
+ * StageCanvas/TriggerNode's already-dark canvas, instead of a dark canvas sitting inside light
+ * panels/menus/fields. Palette: #1e1f24 app background, #2a2b30 panel surfaces, #34353c fields,
+ * #e6e6ea text, #ffd54a accent (matches TriggerNode's own selection-highlight color). */
+
+.root {
+    -fx-base: #2a2b30;
+    -fx-background: #1e1f24;
+    -fx-background-color: #1e1f24;
+    -fx-control-inner-background: #26272c;
+    -fx-text-base-color: #e6e6ea;
+    -fx-accent: #ffd54a;
+    -fx-focus-color: #ffd54a;
+    -fx-faint-focus-color: #ffd54a33;
+    -fx-selection-bar: #4a4d2e;
+    -fx-font-size: 12px;
+}
+
+.border-pane {
+    -fx-background-color: #1e1f24;
+}
+
+.label {
+    -fx-text-fill: #e6e6ea;
+}
+
+.split-pane {
+    -fx-background-color: #1e1f24;
+}
+.split-pane-divider {
+    -fx-background-color: #34353c;
+}
+
+.scroll-pane, .scroll-pane .viewport {
+    -fx-background-color: #1e1f24;
+}
+.scroll-bar {
+    -fx-background-color: #1e1f24;
+}
+.scroll-bar .thumb {
+    -fx-background-color: #45464e;
+    -fx-background-radius: 4;
+}
+.scroll-bar .track {
+    -fx-background-color: #24252a;
+}
+
+.menu-bar {
+    -fx-background-color: #24252a;
+}
+.menu-bar .label, .menu .label {
+    -fx-text-fill: #e6e6ea;
+}
+.menu-item, .context-menu {
+    -fx-background-color: #2a2b30;
+}
+.menu-item:focused, .menu-item:hovered {
+    -fx-background-color: #3a3b42;
+}
+
+.tab-pane .tab-header-area .tab-header-background {
+    -fx-background-color: #24252a;
+}
+.tab {
+    -fx-background-color: #2a2b30;
+}
+.tab:selected {
+    -fx-background-color: #3a3b42;
+}
+.tab .tab-label {
+    -fx-text-fill: #e6e6ea;
+}
+
+.button {
+    -fx-background-color: #34353c;
+    -fx-text-fill: #e6e6ea;
+    -fx-background-radius: 4;
+}
+.button:hover {
+    -fx-background-color: #3f4048;
+}
+.button:armed {
+    -fx-background-color: #4a4b54;
+}
+
+.text-field, .combo-box, .combo-box-base, .choice-box {
+    -fx-background-color: #34353c;
+    -fx-text-fill: #e6e6ea;
+    -fx-prompt-text-fill: #8b8c94;
+    -fx-mark-color: #e6e6ea;
+}
+.combo-box .list-cell, .choice-box .label {
+    -fx-text-fill: #e6e6ea;
+}
+.combo-box-popup .list-view, .context-menu {
+    -fx-background-color: #2a2b30;
+    -fx-border-color: #45464e;
+}
+.combo-box-popup .list-view .list-cell {
+    -fx-background-color: #2a2b30;
+    -fx-text-fill: #e6e6ea;
+}
+.combo-box-popup .list-view .list-cell:filled:hover,
+.combo-box-popup .list-view .list-cell:filled:selected {
+    -fx-background-color: #4a4d2e;
+    -fx-text-fill: #ffffff;
+}
+
+.check-box .box {
+    -fx-background-color: #34353c;
+    -fx-border-color: #55565e;
+}
+.check-box .mark {
+    -fx-background-color: #ffd54a;
+}
+
+.separator .line {
+    -fx-border-color: #3a3b42;
+    -fx-background-color: #3a3b42;
+}
+
+.choice-dialog .header-panel, .alert .header-panel,
+.dialog-pane {
+    -fx-background-color: #24252a;
+}
+.dialog-pane .content.label, .dialog-pane .header-panel .label {
+    -fx-text-fill: #e6e6ea;
+}
