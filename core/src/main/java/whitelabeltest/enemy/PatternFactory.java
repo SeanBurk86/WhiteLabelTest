@@ -13,6 +13,7 @@ import whitelabeltest.enemy.movementpatterns.SeekingMovement;
 import whitelabeltest.enemy.movementpatterns.SequencedMovementPattern;
 import whitelabeltest.enemy.movementpatterns.SplineMovement;
 import whitelabeltest.enemy.movementpatterns.SquadronMovement;
+import whitelabeltest.enemy.movementpatterns.WaypointPathMovement;
 import whitelabeltest.enemy.firingpatterns.*;
 import whitelabeltest.enemy.movementpatterns.ZigZagMovement;
 import whitelabeltest.gamemanagers.effects.AnimationCache;
@@ -31,6 +32,14 @@ public class PatternFactory {
      *  offset at spawn time instead of needing its own copy of the pattern (see
      *  GenericEnemy.initWithDefinition and SpawnScheduler.SpawnEvent.offsetX/offsetY). */
     public static MovementPattern createMovement(MovementPatternDef def, float worldHeight, float spawnCenterX, float formationOffsetX, float formationOffsetY) {
+        return createMovement(def, Float.NaN, worldHeight, spawnCenterX, formationOffsetX, formationOffsetY);
+    }
+
+    /** @param worldWidth only consulted by "WaypointPath"'s flipX (mirrors a reusable path across
+     *  the play area's centerline - see WaypointPathMovement) - NaN is fine for every other type,
+     *  same "unused unless this specific type needs it" convention worldHeight already has for most
+     *  types here. */
+    public static MovementPattern createMovement(MovementPatternDef def, float worldWidth, float worldHeight, float spawnCenterX, float formationOffsetX, float formationOffsetY) {
         if (def == null || "None".equals(def.type)) return new NoMovement();
 
         if ("Sequence".equals(def.type)) {
@@ -39,7 +48,7 @@ public class PatternFactory {
             float[] durations = new float[def.patterns.size];
             for (int i = 0; i < def.patterns.size; i++) {
                 MovementPatternDef sub = def.patterns.get(i);
-                mps.add(createMovement(sub, worldHeight, spawnCenterX, formationOffsetX, formationOffsetY));
+                mps.add(createMovement(sub, worldWidth, worldHeight, spawnCenterX, formationOffsetX, formationOffsetY));
                 durations[i] = sub.duration > 0 ? sub.duration : 3.0f;
             }
             return new SequencedMovementPattern(mps, durations);
@@ -49,8 +58,27 @@ public class PatternFactory {
             if (def.pattern == null) return new NoMovement();
             float offsetX = !Float.isNaN(formationOffsetX) ? formationOffsetX : def.offsetX;
             float offsetY = !Float.isNaN(formationOffsetY) ? formationOffsetY : def.offsetY;
-            MovementPattern leader = createMovement(def.pattern, worldHeight, spawnCenterX - offsetX);
+            MovementPattern leader = createMovement(def.pattern, worldWidth, worldHeight, spawnCenterX - offsetX, Float.NaN, Float.NaN);
             return new SquadronMovement(leader, offsetX, offsetY);
+        }
+
+        if ("WaypointPath".equals(def.type)) {
+            if (def.patterns == null || def.patterns.size == 0) return new NoMovement();
+            Array<WaypointPathMovement.Leg> legs = new Array<>();
+            float mirrorX = !Float.isNaN(worldWidth) ? worldWidth / 2f : spawnCenterX;
+            for (MovementPatternDef leg : def.patterns) {
+                if (!"MoveToPoint".equals(leg.type)) continue;
+                float targetX = !Float.isNaN(leg.targetX) ? leg.targetX : spawnCenterX;
+                float targetY = !Float.isNaN(leg.targetY) ? leg.targetY : 0f;
+                if (def.flipX) targetX = 2f * mirrorX - targetX;
+                if (def.flipY) targetY = worldHeight - targetY;
+                float speed = leg.speed > 0 ? leg.speed : 0f;
+                legs.add(new WaypointPathMovement.Leg(targetX, targetY, leg.tension, speed, leg.waitSeconds,
+                    leg.orientation, leg.aimSpeed, leg.fixedAngle, leg.soundName, leg.soundVolume, leg.soundPitch,
+                    leg.soundPitchVariation, leg.changeWeaponSet, leg.weaponSet));
+            }
+            if (legs.size == 0) return new NoMovement();
+            return new WaypointPathMovement(legs, def.closePath, def.globalSpeed > 0 ? def.globalSpeed : 1f);
         }
 
         float speed = def.speed > 0 ? def.speed : 0f;

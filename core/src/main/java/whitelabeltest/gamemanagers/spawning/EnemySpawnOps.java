@@ -14,6 +14,7 @@ import com.badlogic.gdx.utils.ObjectMap;
 import whitelabeltest.enemy.Enemy;
 import whitelabeltest.enemy.EnemyDefinition;
 import whitelabeltest.enemy.GenericEnemy;
+import whitelabeltest.gamemanagers.trigger.Trigger;
 
 /** Enemy-instantiation and sprite-cue mechanics shared by SpawnScheduler (wall-clock-timed spawn
  *  events) and TriggerManager (camera-position-timed triggers - see whitelabeltest.gamemanagers.
@@ -26,6 +27,19 @@ public final class EnemySpawnOps {
     public static void spawnEnemy(EntityManager entityManager, ObjectMap<String, EnemyDefinition> enemyDefinitions, AssetManager assets,
                                    float worldWidth, float worldHeight, String type, float x, float y, float offsetX, float offsetY,
                                    String movementPattern, String firingPattern, boolean inverseMovement, Integer powerup) {
+        spawnEnemy(entityManager, enemyDefinitions, assets, worldWidth, worldHeight, type, x, y, offsetX, offsetY,
+            movementPattern, firingPattern, inverseMovement, powerup, null, 0f);
+    }
+
+    /** @param entranceTrigger non-null only from TriggerManager.fire() - lets GenericEnemy build its
+     *  own EnemyEntranceMovement.build() call once the real spawn sprite's true size is known (see
+     *  that method's own doc on why it can't be built any earlier than that), using entranceTrigger's
+     *  own fields (x/y/distance/spawnLead/enterFromAbove) plus cameraSpeed (the camera's speed AT
+     *  FIRE TIME, unused/irrelevant when entranceTrigger is null). */
+    public static void spawnEnemy(EntityManager entityManager, ObjectMap<String, EnemyDefinition> enemyDefinitions, AssetManager assets,
+                                   float worldWidth, float worldHeight, String type, float x, float y, float offsetX, float offsetY,
+                                   String movementPattern, String firingPattern, boolean inverseMovement, Integer powerup,
+                                   Trigger entranceTrigger, float cameraSpeed) {
         EnemyDefinition def = enemyDefinitions.get(type);
         if (def == null) return;
 
@@ -38,7 +52,7 @@ public final class EnemySpawnOps {
 
         def.inverseMovement = inverseMovement;
 
-        enemy.initWithDefinition(def, tex, bulletTex, spawnTex, deathTex, worldWidth, worldHeight, x, y, offsetX, offsetY, movementPattern, firingPattern);
+        enemy.initWithDefinition(def, tex, bulletTex, spawnTex, deathTex, worldWidth, worldHeight, x, y, offsetX, offsetY, movementPattern, firingPattern, entranceTrigger, cameraSpeed);
 
         if (powerup != null) enemy.setGuaranteedPowerup(powerup);
         entityManager.getEnemies().add(enemy);

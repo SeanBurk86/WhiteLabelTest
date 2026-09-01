@@ -115,10 +115,10 @@ public class EntityManager {
         }
         player.update(delta, input, assets, audio, bullets, enemies, weaponsDisabled, hyperAttackDisabled);
 
-        updateCollections(delta, assets, input, groundScrollSpeed, background);
+        updateCollections(delta, assets, input, groundScrollSpeed, background, audio);
     }
 
-    private void updateCollections(float delta, AssetManager assets, InputManager input, float groundScrollSpeed, ScrollingBackground background) {
+    private void updateCollections(float delta, AssetManager assets, InputManager input, float groundScrollSpeed, ScrollingBackground background, AudioManager audio) {
         for (int i = bullets.size - 1; i >= 0; i--) {
             Weapon b = bullets.get(i);
             b.updateWithEnemies(delta, enemies);
@@ -142,7 +142,7 @@ public class EntityManager {
         boolean firingPaused = player.isDead() || player.isInvincible();
         for (int i = enemies.size - 1; i >= 0; i--) {
             Enemy e = enemies.get(i);
-            e.update(delta, enemyBullets, player.getHitbox(), player.getGrazeHitbox(), firingPaused, resolveGroundScrollSpeed(e, groundScrollSpeed, background));
+            e.update(delta, enemyBullets, player.getHitbox(), player.getGrazeHitbox(), firingPaused, resolveGroundScrollSpeed(e, groundScrollSpeed, background), audio);
 
             if (e.isOffScreen()) {
                 if (e.isBoss() && e.isDying()) notifyBossKilled();

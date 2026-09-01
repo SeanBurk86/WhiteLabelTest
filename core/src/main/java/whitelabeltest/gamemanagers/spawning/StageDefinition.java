@@ -23,12 +23,26 @@ public class StageDefinition {
 
     public String id;
     public String name;
+    // Only actually consulted for gameplay when triggerFile is null (see that field's own doc) -
+    // GameController.loadStage() doesn't even construct a SpawnScheduler for a stage that has a
+    // triggerFile, so the level editor (which only ever reads/writes triggerFile) and gameplay stay
+    // in full parity. Kept around (rather than removed) purely so SpawnScheduleEditor's debug tool
+    // still has something to point at for a stage already carrying old schedule content.
     public String spawnSchedule;
-    // Optional companion to spawnSchedule - path to a camera-position-driven trigger file (see
-    // whitelabeltest.gamemanagers.trigger.TriggerManager) for this stage's enemy spawns/sound/
-    // sprite cues. null (the default) means this stage has no trigger-driven content yet and runs
-    // entirely off spawnSchedule, same as before this field existed.
+    // Path to a camera-position-driven trigger file (see whitelabeltest.gamemanagers.trigger.
+    // TriggerManager) for this stage's enemy spawns/sound/sprite/text cues - EXCLUSIVE with
+    // spawnSchedule once set (see that field's own doc): every stage as of this session has one, so
+    // spawnSchedule no longer drives any actual gameplay. null (the default) is the fallback path
+    // for some hypothetical future stage authored entirely the old way.
     public String triggerFile = null;
+    // Overrides ScrollingBackground's own kaleidoscopeTransitionTime/groundScrollSpeed defaults
+    // (see ScrollingBackground.DEFAULT_SCROLL_SPEED/Stage2KaleidoscopeShader.DEFAULT_TRANSITION_TIME)
+    // for a triggerFile-driven stage - the trigger-file equivalent of SpawnScheduler.ScheduleFile's
+    // same-named fields, which a stage with no SpawnScheduler running can no longer source these
+    // from. null (the default) means "use the engine default", same meaning SpawnScheduler's own
+    // null/unset schedule fields already had.
+    public Float kaleidoscopeTransitionTime;
+    public Float groundScrollSpeed;
     public String music;
     public Array<BackgroundLayerDef> backgroundLayers;
     public String bossVideo;

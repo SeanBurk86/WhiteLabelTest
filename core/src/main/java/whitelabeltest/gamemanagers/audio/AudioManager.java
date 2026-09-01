@@ -319,13 +319,24 @@ public class AudioManager implements Disposable {
      *  the Sound the first time this path is triggered rather than up front, since which cue
      *  sounds exist is entirely down to spawn_schedule.json. */
     public void playCueSound(String path) {
+        playCueSound(path, 1f, 1f);
+    }
+
+    /** Same lazy-load-and-cache cue-sound path as playCueSound(String), plus an explicit
+     *  volume/pitch - see MovementPatternDef's per-waypoint sound fields (soundVolume/soundPitch,
+     *  the latter already jittered by soundPitchVariation before it reaches here - see
+     *  BaseEnemy.resolveMovementCue()) and Sound.play(volume, pitch, pan)'s own libGDX contract:
+     *  pitch 1.0 is unmodified, higher raises it, lower lowers it. `volume` here is multiplied
+     *  into the effective SFX volume exactly like every other cue, not used in place of it, so the
+     *  player's own SFX volume setting still applies on top. */
+    public void playCueSound(String path, float volume, float pitch) {
         if (path == null) return;
         Sound sound = cueSounds.get(path);
         if (sound == null) {
             sound = Gdx.audio.newSound(Gdx.files.internal(path));
             cueSounds.put(path, sound);
         }
-        if (!muted) sound.play(settings.getEffectiveSfxVolume());
+        if (!muted) sound.play(settings.getEffectiveSfxVolume() * volume, pitch, 0f);
     }
 
     @Override

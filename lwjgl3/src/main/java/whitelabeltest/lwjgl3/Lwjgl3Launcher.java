@@ -11,8 +11,37 @@ public class Lwjgl3Launcher {
         createApplication();
     }
 
+    /** Reads the quickPlay.* system properties the JavaFX editor's "Quick Play" button sets when it
+     *  forks this game as a subprocess via `gradlew :lwjgl3:run -PquickPlayStage=... -PquickPlay...`
+     *  (see lwjgl3/build.gradle's own run task, which translates those Gradle project properties
+     *  into these JVM system properties - the same "-D" passthrough pattern that task's existing
+     *  `debug` property already uses). null for every ordinary desktop launch (no quickPlay.stage
+     *  property set), which Main(QuickPlayConfig) already treats identically to the old no-arg
+     *  Main(). */
+    private static Main.QuickPlayConfig readQuickPlayConfig() {
+        String stageId = System.getProperty("quickPlay.stage");
+        if (stageId == null || stageId.isBlank()) return null;
+        float distance = parseFloat(System.getProperty("quickPlay.distance"), 0f);
+        String slotA = System.getProperty("quickPlay.slotA");
+        String slotB = System.getProperty("quickPlay.slotB");
+        return new Main.QuickPlayConfig(stageId, distance, blankToNull(slotA), blankToNull(slotB));
+    }
+
+    private static float parseFloat(String value, float fallback) {
+        if (value == null || value.isBlank()) return fallback;
+        try {
+            return Float.parseFloat(value);
+        } catch (NumberFormatException e) {
+            return fallback;
+        }
+    }
+
+    private static String blankToNull(String value) {
+        return (value == null || value.isBlank()) ? null : value;
+    }
+
     private static Lwjgl3Application createApplication() {
-        return new Lwjgl3Application(new Main(), getDefaultConfiguration());
+        return new Lwjgl3Application(new Main(readQuickPlayConfig()), getDefaultConfiguration());
     }
 
     private static Lwjgl3ApplicationConfiguration getDefaultConfiguration() {

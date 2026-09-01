@@ -210,7 +210,10 @@ public class PatternPreviewer {
         // No background scroll to sync a ground enemy against in this isolated preview - 0 leaves
         // even a ground-flagged enemy's own movement pattern as the only thing moving it, same as
         // every non-ground enemy here.
-        previewEnemy.update(delta, entities.getEnemyBullets(), entities.getPlayer().getHitbox(), entities.getPlayer().getGrazeHitbox(), false, 0f);
+        // No AudioManager in this isolated preview either - a WaypointPath's per-waypoint sound cue
+        // (see BaseEnemy.resolveMovementCue()) is simply skipped here, same as it would be for any
+        // other movement pattern that doesn't queue one.
+        previewEnemy.update(delta, entities.getEnemyBullets(), entities.getPlayer().getHitbox(), entities.getPlayer().getGrazeHitbox(), false, 0f, null);
 
         Array<EnemyBullet> enemyBullets = entities.getEnemyBullets();
         for (int i = enemyBullets.size - 1; i >= 0; i--) {
@@ -231,7 +234,10 @@ public class PatternPreviewer {
         this.enemyId = id;
         EnemyDefinition src = id != null ? assets.getEnemyDefinition(id) : null;
         workingEnemy = cloneEnemy(src, id);
-        loadMovementDef(workingEnemy.movementPattern);
+        // Movement isn't part of EnemyDefinition (see that class's own doc) - this preview always
+        // starts from a blank slate, decoupled from whichever enemy is selected, rather than
+        // inheriting anything enemy-specific.
+        loadMovementDef("None");
         loadFiringDef(workingEnemy.firingPattern);
         applyChange();
     }
@@ -379,7 +385,9 @@ public class PatternPreviewer {
      *  edit; this is a debug tool, not a hot path, so simplicity wins over incremental updates. */
     private void applyChange() {
         dirty = true;
-        workingEnemy.movementPattern = workingMovement.id;
+        // Movement isn't part of EnemyDefinition - respawnPreview() passes workingMovement.id
+        // straight to EnemySpawnRegistry.spawn()'s override param instead, so there's nothing to
+        // stamp onto workingEnemy here the way firingPattern still is.
         workingEnemy.firingPattern = workingFiring.id;
         PatternRegistry.putMovement(workingMovement.id, workingMovement);
         PatternRegistry.putFiring(workingFiring.id, workingFiring);
@@ -414,7 +422,7 @@ public class PatternPreviewer {
         assets.ensureTexture(workingEnemy.spawnTexture);
         assets.ensureTexture(workingEnemy.deathTexture);
 
-        previewEnemy = EnemySpawnRegistry.spawn(workingEnemy.id, spawnX, spawnY);
+        previewEnemy = EnemySpawnRegistry.spawn(workingEnemy.id, spawnX, spawnY, workingMovement.id);
     }
 
     /** Writes every registered movement pattern, firing pattern, enemy definition and bullet
@@ -470,7 +478,6 @@ public class PatternPreviewer {
             d.frameDuration = src.frameDuration;
             d.size = src.size;
             d.health = src.health;
-            d.movementPattern = src.movementPattern;
             d.inverseMovement = src.inverseMovement;
             d.rotateWithMovement = src.rotateWithMovement;
             d.isBoss = src.isBoss;
@@ -507,7 +514,6 @@ public class PatternPreviewer {
             d.frameDuration = 0.1f;
             d.size = 1f;
             d.health = 10;
-            d.movementPattern = "None";
             d.firingPattern = "NoFiring";
             d.explosionPattern = PatternRegistry.getExplosionIds().size > 0 ? PatternRegistry.getExplosionIds().first() : null;
             d.score = 10;

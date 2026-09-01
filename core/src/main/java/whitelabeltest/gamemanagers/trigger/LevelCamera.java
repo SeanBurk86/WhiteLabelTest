@@ -56,4 +56,22 @@ public class LevelCamera {
         position = Math.max(0f, targetDistance);
         previousPosition = position;
     }
+
+    /** Snaps the camera to EXACTLY `distance`, called the instant a gate trigger arms and freezes
+     *  (see TriggerManager.update()'s activeGate handling) - mirrors SpawnScheduler.update()'s own
+     *  "totalTime = nextGate.time" clamp exactly, and for the same reason: the frame a gate arms,
+     *  update() has already run and can leave `position` a hair past the gate's own distance (an
+     *  ordinary one-frame advance, same as any other trigger). Left uncorrected, that overshoot
+     *  becomes PERMANENT once frozen - camera.update() never runs again until the gate clears, so the
+     *  collision box stays pinned to that slightly-past sliver for however long the freeze lasts, and
+     *  once it finally clears, the NEXT box starts from there too. Any other trigger sitting at that
+     *  SAME exact distance, later in trigger order (overwhelmingly common here - a text cue's own
+     *  paired spawn/despawn/silence trigger always shares its distance), would then have
+     *  trigger.distance permanently < the collision box's own minY and never arm at all. Clamping
+     *  back to the gate's exact distance here means the box starts there again the moment it clears,
+     *  same as if the gate had never overshot in the first place. */
+    public void clampTo(float distance) {
+        position = distance;
+        previousPosition = distance;
+    }
 }

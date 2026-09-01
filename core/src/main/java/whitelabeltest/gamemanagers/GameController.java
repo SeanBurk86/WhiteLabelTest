@@ -21,6 +21,8 @@ import whitelabeltest.gamemanagers.replay.ReplayData;
 import whitelabeltest.gamemanagers.replay.ReplayPlayer;
 import whitelabeltest.gamemanagers.replay.ReplayRecorder;
 import whitelabeltest.gamemanagers.background.ScrollingBackground;
+import whitelabeltest.gamemanagers.background.Stage2KaleidoscopeShader;
+import whitelabeltest.enemy.EnemyDefinitionLoader;
 import whitelabeltest.gamemanagers.spawning.SpawnScheduler;
 import whitelabeltest.gamemanagers.spawning.StartingLoadoutDefinition;
 import whitelabeltest.gamemanagers.trigger.TriggerManager;
@@ -53,6 +55,11 @@ public class GameController implements Disposable {
     // Camera-position-driven counterpart to spawnScheduler - see TriggerManager's class doc. Null
     // for any stage whose StageDefinition.triggerFile is unset (every stage but stage1, for now).
     private TriggerManager triggerManager;
+    // spawnScheduler's own (wall-clock) textCues plus triggerManager's (distance-driven) ones,
+    // refreshed every update() - see getTextCues(). A stage like stage1, whose schedule.json no
+    // longer authors any text cues at all, just contributes an empty list here, so UIManager keeps
+    // drawing from one combined source either way.
+    private final Array<TextCue> combinedTextCues = new Array<>();
     private final InputManager input;
     private final AudioSettings audioSettings;
     // Which named ordering of stages (see StageSequenceDefinition/AssetManager.getStageSequence())
@@ -105,6 +112,16 @@ public class GameController implements Disposable {
     private float levelStartTimer;
     private float bombCooldownTimer;
     private final float worldWidth, worldHeight;
+    // The stage currently loaded (see loadStage()) - kept around so the debug Spawn Schedule Editor
+    // can still open the right file (StageDefinition.spawnSchedule) even for a stage whose
+    // spawnScheduler is null (see that field's own doc), without needing a live SpawnScheduler
+    // instance just to ask it for the path it was already constructed from.
+    private StageDefinition currentStageDef;
+    // Resolved once per loadStage() from stageDef.groundScrollSpeed (falling back to
+    // ScrollingBackground.DEFAULT_SCROLL_SPEED) for a stage with no spawnScheduler running -
+    // consulted every frame in update() the same way spawnScheduler.getGroundScrollSpeed() is for
+    // one that still has one. See StageDefinition.groundScrollSpeed's own doc.
+    private float groundScrollSpeed;
 
     private final DebugSaveStateManager debugSaveStateManager;
     private final PatternPreviewer patternPreviewer = new PatternPreviewer();
@@ -199,7 +216,7 @@ public class GameController implements Disposable {
             }
             frame = replayPlayer.next();
             if (!Float.isNaN(frame.seekToTime)) {
-                spawnScheduler.seekTo(frame.seekToTime, audio);
+                if (spawnScheduler != null) spawnScheduler.seekTo(frame.seekToTime, audio);
                 if (triggerManager != null) triggerManager.seekTo(frame.seekToTime);
                 entities.clearWorld();
                 background.seekTo(frame.seekToTime);
@@ -245,7 +262,8 @@ public class GameController implements Disposable {
         if (debugMode && input.isDebugMenuToggleJustPressed()) {
             debugMenuOpen = !debugMenuOpen;
             if (debugMenuOpen) {
-                debugMenuSeekTime = spawnScheduler.getTotalTime();
+                debugMenuSeekTime = spawnScheduler != null ? spawnScheduler.getTotalTime()
+                    : (triggerManager != null ? triggerManager.getCamera().getPosition() : 0f);
                 debugMenuSelectedIndex = 0;
                 int currentStage = assets.getStageIds().indexOf(stageSequence.get(stageIndex), false);
                 debugMenuStageIndex = Math.max(currentStage, 0);
@@ -266,13 +284,17 @@ public class GameController implements Disposable {
 
         // See SpawnScheduler.isWeaponsDisabled() - a scripted "you haven't been taught this yet"
         // window (e.g. the tutorial, before its weapons section) that withholds both firing and
-        // bombing, not just one.
-        boolean weaponsDisabled = spawnScheduler.isWeaponsDisabled(spawnScheduler.getTotalTime());
+        // bombing, not just one. OR'd with TriggerManager's own distance-based equivalent (see
+        // TriggerManager.isWeaponsDisabled()) so a stage can author these windows either way.
+        boolean weaponsDisabled = spawnScheduler != null ? spawnScheduler.isWeaponsDisabled(spawnScheduler.getTotalTime())
+            : (triggerManager != null && triggerManager.isWeaponsDisabled(triggerManager.getCamera().getPosition()));
         // See SpawnScheduler.isHyperAttackDisabled()/isBombDisabled() - separate "not taught yet"
         // windows from weaponsDisabled, since a tutorial teaches normal fire, Hyper Attack, and
         // bombing at three different points rather than all at once.
-        boolean hyperAttackDisabled = spawnScheduler.isHyperAttackDisabled(spawnScheduler.getTotalTime());
-        boolean bombDisabled = spawnScheduler.isBombDisabled(spawnScheduler.getTotalTime());
+        boolean hyperAttackDisabled = spawnScheduler != null ? spawnScheduler.isHyperAttackDisabled(spawnScheduler.getTotalTime())
+            : (triggerManager != null && triggerManager.isHyperAttackDisabled(triggerManager.getCamera().getPosition()));
+        boolean bombDisabled = spawnScheduler != null ? spawnScheduler.isBombDisabled(spawnScheduler.getTotalTime())
+            : (triggerManager != null && triggerManager.isBombDisabled(triggerManager.getCamera().getPosition()));
 
         if (!weaponsDisabled && !bombDisabled && input.isBombJustPressed() && !entities.getPlayer().isDead()) {
             if (tryFireBomb() && hitGraceTimer >= 0f) {
@@ -299,24 +321,33 @@ public class GameController implements Disposable {
         }
 
         background.update(delta);
-        entities.update(delta, input, assets, audio, weaponsDisabled, hyperAttackDisabled, spawnScheduler.getGroundScrollSpeed(), background);
-        spawnScheduler.update(delta, entities, audio, input,
-            scoreManager.getEnemiesDestroyed(), scoreManager.getGemsCollected(), entities.getPlayer().getGrazePoints());
-        if (triggerManager != null) triggerManager.update(delta, entities, audio, input, scoreManager);
+        entities.update(delta, input, assets, audio, weaponsDisabled, hyperAttackDisabled,
+            spawnScheduler != null ? spawnScheduler.getGroundScrollSpeed() : groundScrollSpeed, background);
+        if (spawnScheduler != null) {
+            spawnScheduler.update(delta, entities, audio, input,
+                scoreManager.getEnemiesDestroyed(), scoreManager.getGemsCollected(), entities.getPlayer().getGrazePoints());
+        }
+        if (triggerManager != null) {
+            triggerManager.update(delta, entities, audio, input, scoreManager);
+        }
+        combinedTextCues.clear();
+        if (spawnScheduler != null) combinedTextCues.addAll(spawnScheduler.getTextCues());
+        if (triggerManager != null) combinedTextCues.addAll(triggerManager.getTextCues());
 
-        if (!bossVideoTriggered && spawnScheduler.isBackgroundVideoTriggered()) {
+        if (!bossVideoTriggered && spawnScheduler != null && spawnScheduler.isBackgroundVideoTriggered()) {
             bossVideoTriggered = true;
             background.triggerBossVideo();
         }
 
-        if (!musicFadeTriggered && spawnScheduler.isMusicFadeOutTriggered()) {
+        if (!musicFadeTriggered && spawnScheduler != null && spawnScheduler.isMusicFadeOutTriggered()) {
             musicFadeTriggered = true;
             audio.fadeOutStageMusic();
         }
 
         if (levelCompleteDelayTimer < 0f && entities.consumeBossKilled()) {
             levelCompleteDelayTimer = LEVEL_COMPLETE_DELAY;
-            bossDefeatedScheduleTime = spawnScheduler.getTotalTime();
+            bossDefeatedScheduleTime = spawnScheduler != null ? spawnScheduler.getTotalTime()
+                : (triggerManager != null ? triggerManager.getCamera().getPosition() : 0f);
         }
 
         if (levelCompleteDelayTimer >= 0f) {
@@ -451,8 +482,12 @@ public class GameController implements Disposable {
                 debugLoadStage(stageIds.get(debugMenuStageIndex));
             }
         } else if (debugMenuSelectedIndex == ROW_SPAWN_SCHEDULE_EDITOR) {
-            if (input.isDebugMenuConfirmJustPressed()) {
-                spawnScheduleEditor.open(assets, spawnScheduler.getScheduleFilePath(), worldWidth, worldHeight,
+            // No-op for a stage now driven entirely by its triggerFile (spawnScheduler == null -
+            // see StageDefinition.triggerFile's own doc) - since nothing reads spawnSchedule content
+            // back into live gameplay for one anymore, opening this editor for it would just be
+            // misleading (edits made there would silently have no in-game effect).
+            if (input.isDebugMenuConfirmJustPressed() && spawnScheduler != null) {
+                spawnScheduleEditor.open(assets, currentStageDef.spawnSchedule, worldWidth, worldHeight,
                     // Saving must reach the currently-running game immediately (see
                     // SpawnScheduleEditor.onSavedToDisk's doc) - reuses the same full stage reload
                     // the Stage Select row already does, for the stage that's currently active.
@@ -490,7 +525,7 @@ public class GameController implements Disposable {
     }
 
     private void seekToTime(float targetTime) {
-        spawnScheduler.seekTo(targetTime, audio);
+        if (spawnScheduler != null) spawnScheduler.seekTo(targetTime, audio);
         if (triggerManager != null) triggerManager.seekTo(targetTime);
         entities.clearWorld();
         background.seekTo(targetTime);
@@ -508,7 +543,7 @@ public class GameController implements Disposable {
         levelCompleteBombBonus = player.getNumBombs() * balance.bombBonusPerUnusedBomb;
         if (levelCompleteBombBonus > 0) scoreManager.addBonus(levelCompleteBombBonus);
 
-        float bossSpawnTime = spawnScheduler.getBossSpawnTime();
+        float bossSpawnTime = spawnScheduler != null ? spawnScheduler.getBossSpawnTime() : -1f;
         // Falls back to the trigger-driven boss spawn (see TriggerManager.getBossSpawnDistance())
         // once a stage's boss spawns via a trigger instead of a SpawnEvent - otherwise this stays -1
         // forever and the boss time bonus/rank contribution below silently zeroes out.
@@ -568,17 +603,34 @@ public class GameController implements Disposable {
 
     private void loadStage(int index) {
         StageDefinition stageDef = assets.getStageDefinition(stageSequence.get(index));
+        currentStageDef = stageDef;
         if (background != null) background.dispose();
         background = new ScrollingBackground(worldWidth, worldHeight, audioSettings, assets, stageDef.backgroundLayers, stageDef.bossVideo, stageDef.backgroundVideo, stageDef.shaderBackground, stageDef.hueCycleBackground, stageDef.playerFeedbackBackground);
         background.setMuted(audio.isMuted());
-        spawnScheduler = new SpawnScheduler(worldWidth, worldHeight, assets, stageDef.spawnSchedule);
-        triggerManager = stageDef.triggerFile != null
-            ? new TriggerManager(worldWidth, worldHeight, assets, stageDef.triggerFile, spawnScheduler.getEnemyDefinitions())
-            : null;
-        background.setKaleidoscopeTransitionTime(spawnScheduler.getKaleidoscopeTransitionTime());
-        background.setHueCyclePeriod(spawnScheduler.getBackgroundVideoTime());
+        // A stage with a triggerFile reads ONLY from it for gameplay - see StageDefinition.
+        // triggerFile's own doc - so spawnScheduler isn't even constructed for one, keeping the
+        // level editor (which only ever edits triggerFile) in full parity with what actually runs.
+        // spawnSchedule stays a fallback for some hypothetical future stage authored the old way.
+        if (stageDef.triggerFile != null) {
+            spawnScheduler = null;
+            triggerManager = new TriggerManager(worldWidth, worldHeight, assets, stageDef.triggerFile, EnemyDefinitionLoader.load(), background);
+        } else {
+            spawnScheduler = new SpawnScheduler(worldWidth, worldHeight, assets, stageDef.spawnSchedule);
+            triggerManager = null;
+        }
+        background.setKaleidoscopeTransitionTime(stageDef.kaleidoscopeTransitionTime != null ? stageDef.kaleidoscopeTransitionTime
+            : (spawnScheduler != null ? spawnScheduler.getKaleidoscopeTransitionTime() : Stage2KaleidoscopeShader.DEFAULT_TRANSITION_TIME));
+        groundScrollSpeed = stageDef.groundScrollSpeed != null ? stageDef.groundScrollSpeed
+            : (spawnScheduler != null ? spawnScheduler.getGroundScrollSpeed() : ScrollingBackground.DEFAULT_SCROLL_SPEED);
+        // A trigger-authored boss video (see Trigger.triggerBossVideo) wins over the schedule's own
+        // (wall-clock) backgroundVideoTime when both could apply - see
+        // TriggerManager.getBossVideoDistance()'s own doc on why this period is derived from
+        // whichever source actually drives this stage's boss video now.
+        float bossVideoDistance = triggerManager != null ? triggerManager.getBossVideoDistance() : -1f;
+        background.setHueCyclePeriod(bossVideoDistance >= 0f ? bossVideoDistance : (spawnScheduler != null ? spawnScheduler.getBackgroundVideoTime() : -1f));
         audio.loadStageMusic(stageDef.music);
-        totalEnemiesAcrossRun += spawnScheduler.getSchedule().size + (triggerManager != null ? triggerManager.getEnemySpawnCount() : 0);
+        totalEnemiesAcrossRun += (spawnScheduler != null ? spawnScheduler.getSchedule().size : 0) + (triggerManager != null ? triggerManager.getEnemySpawnCount() : 0);
+        combinedTextCues.clear();
         bossVideoTriggered = false;
         musicFadeTriggered = false;
         stageIndex = index;
@@ -629,6 +681,22 @@ public class GameController implements Disposable {
         audio.stopVictory();
         audio.playStageMusic();
         debugMenuOpen = false;
+    }
+
+    /** The JavaFX editor's "Quick Play" button (see Main.transitionToQuickPlay()) - jumps straight
+     *  into `stageId` (reusing debugLoadStage()'s existing, already-proven "arbitrary stage" path),
+     *  overrides the player's two weapon slots directly (bypassing WeaponLoadout - Player.
+     *  setSlotWeapon() is the same call WeaponLoadout's own application already goes through), then
+     *  seeks to startDistance (reusing seekToTime() - already safe for a triggerFile-only stage, see
+     *  its own null-guards) so testing can start mid-level instead of always from distance 0. A
+     *  slot id of null leaves that slot at whatever the constructor's placeholder WeaponLoadout gave
+     *  it; startDistance <= 0 skips seeking entirely (already at distance 0 from the fresh
+     *  debugLoadStage() above, so nothing to do). */
+    public void quickStartAtStage(String stageId, float startDistance, String slotAWeaponId, String slotBWeaponId) {
+        debugLoadStage(stageId);
+        if (slotAWeaponId != null) entities.getPlayer().setSlotWeapon(0, slotAWeaponId);
+        if (slotBWeaponId != null) entities.getPlayer().setSlotWeapon(1, slotBWeaponId);
+        if (startDistance > 0) seekToTime(startDistance);
     }
 
     public boolean hasNextStage() { return stageIndex + 1 < stageSequence.size; }
@@ -696,12 +764,16 @@ public class GameController implements Disposable {
 
     private void applyPlayerHit() {
         // Scripted "safely stand in this fire" window (see SpawnScheduler.isPlayerInvincible) -
-        // completely consequence-free, not even a chain break, unlike every other branch below.
-        if (spawnScheduler.isPlayerInvincible(spawnScheduler.getTotalTime())) return;
+        // completely consequence-free, not even a chain break, unlike every other branch below. OR'd
+        // with TriggerManager's own distance-based equivalent (see TriggerManager.isPlayerInvincible()).
+        if (spawnScheduler != null ? spawnScheduler.isPlayerInvincible(spawnScheduler.getTotalTime())
+            : (triggerManager != null && triggerManager.isPlayerInvincible(triggerManager.getCamera().getPosition()))) return;
 
         scoreManager.breakChain();
         Player player = entities.getPlayer();
-        if (spawnScheduler.isInPracticeSection(spawnScheduler.getTotalTime())) {
+        boolean inPracticeSection = spawnScheduler != null ? spawnScheduler.isInPracticeSection(spawnScheduler.getTotalTime())
+            : (triggerManager != null && triggerManager.isInPracticeSection(triggerManager.getCamera().getPosition()));
+        if (inPracticeSection) {
             restartPracticeSection();
             return;
         }
@@ -740,8 +812,20 @@ public class GameController implements Disposable {
     private void restartPracticeSection() {
         audio.playPlayerDeath();
         entities.destroyAllPlayerBullets();
-        float checkpointStart = spawnScheduler.getPracticeCheckpointStart(spawnScheduler.getTotalTime());
-        spawnScheduler.seekTo(checkpointStart, audio);
+        // Whichever source's window actually contains the current position wins - same priority
+        // isInPracticeSection() above already checks (spawnScheduler first, then triggerManager).
+        float checkpointStart;
+        if (spawnScheduler != null) {
+            checkpointStart = spawnScheduler.isInPracticeSection(spawnScheduler.getTotalTime())
+                ? spawnScheduler.getPracticeCheckpointStart(spawnScheduler.getTotalTime())
+                : spawnScheduler.getTotalTime();
+        } else if (triggerManager != null) {
+            float position = triggerManager.getCamera().getPosition();
+            checkpointStart = triggerManager.isInPracticeSection(position) ? triggerManager.getPracticeCheckpointStart(position) : position;
+        } else {
+            checkpointStart = 0f;
+        }
+        if (spawnScheduler != null) spawnScheduler.seekTo(checkpointStart, audio);
         if (triggerManager != null) triggerManager.seekTo(checkpointStart);
         entities.clearWorld();
     }
@@ -946,18 +1030,36 @@ public class GameController implements Disposable {
     public int getLevelCompleteTimeBonus() { return levelCompleteTimeBonus; }
     public float getLevelCompleteBossFightSeconds() { return levelCompleteBossFightSeconds; }
     public boolean isDebugMode() { return debugMode; }
+    // Debug-only (see UIManager.drawDebugTriggerInfo()) - null when this stage has no trigger file
+    // at all, so the overlay simply doesn't draw.
+    public Float getTriggerDistance() { return triggerManager != null ? triggerManager.getCamera().getPosition() : null; }
+    public String getTriggerActiveGateInfo() { return triggerManager != null ? triggerManager.describeActiveGate() : null; }
     public boolean isDebugMenuOpen() { return debugMenuOpen; }
     public int getDebugMenuSelectedIndex() { return debugMenuSelectedIndex; }
     public float getDebugMenuSeekTime() { return debugMenuSeekTime; }
     public int getDebugMenuStageIndex() { return debugMenuStageIndex; }
     public Array<String> getDebugMenuStageIds() { return assets.getStageIds(); }
-    public float getSpawnScheduleTotalTime() { return spawnScheduler.getTotalTime(); }
-    public float getSpawnScheduleRealTime() { return spawnScheduler.getRealTime(); }
-    // See SpawnScheduler.isScheduleEndTriggered() - always false for an ordinary arcade stage
-    // (only a schedule that explicitly sets scheduleEndTime, e.g. the tutorial, ever latches this).
-    public boolean isScheduleEndTriggered() { return spawnScheduler.isScheduleEndTriggered(); }
-    // See SpawnScheduler.isTextCuesRequireConfirm()/UIManager.drawTextCues().
-    public boolean isTextCuesRequireConfirm() { return spawnScheduler.isTextCuesRequireConfirm(); }
+    public float getSpawnScheduleTotalTime() {
+        return spawnScheduler != null ? spawnScheduler.getTotalTime() : (triggerManager != null ? triggerManager.getCamera().getPosition() : 0f);
+    }
+    // Falls back to TriggerManager's own clock (see that class's own doc on why it now owns one)
+    // once a stage has no spawnScheduler running - UIManager.drawTextCues() uses this SAME value to
+    // measure every cue's reveal progress regardless of which source actually fired it.
+    public float getSpawnScheduleRealTime() {
+        return spawnScheduler != null ? spawnScheduler.getRealTime() : (triggerManager != null ? triggerManager.getRealTime() : 0f);
+    }
+    // See SpawnScheduler.isScheduleEndTriggered()/TriggerManager.isScheduleEndTriggered() - always
+    // false for an ordinary arcade stage (only a schedule/trigger file that explicitly sets one,
+    // e.g. the tutorial, ever latches this).
+    public boolean isScheduleEndTriggered() {
+        return spawnScheduler != null ? spawnScheduler.isScheduleEndTriggered() : (triggerManager != null && triggerManager.isScheduleEndTriggered());
+    }
+    // See SpawnScheduler.isTextCuesRequireConfirm()/UIManager.drawTextCues(). No whole-file
+    // equivalent exists on the trigger side (Trigger.requireConfirm is already per-trigger, a finer
+    // grain than this global UI hint flag ever was) - false (this flag's own default, same as an
+    // empty/unset schedule already produced for every triggerFile-driven stage today) once
+    // spawnScheduler stops running, so this preserves the exact behavior already in effect.
+    public boolean isTextCuesRequireConfirm() { return spawnScheduler != null && spawnScheduler.isTextCuesRequireConfirm(); }
     // Matches whichever input the player's actually using - a gamepad player dismissing tutorial
     // messages with the SHOOT/RESTART buttons (see SpawnScheduler.update()'s cue-await-confirm
     // block) shouldn't see a keyboard-only "Press SPACE" hint they can't act on.
@@ -969,7 +1071,7 @@ public class GameController implements Disposable {
     }
     public Array<DebugSaveState> getDebugSaveStates() { return debugSaveStateManager.getSaveStates(); }
     public float getLevelStartTimer() { return levelStartTimer; }
-    public Array<TextCue> getTextCues() { return spawnScheduler.getTextCues(); }
+    public Array<TextCue> getTextCues() { return combinedTextCues; }
     public float getBombCooldownTimer() { return Math.max(bombCooldownTimer, 0f); }
     public float getBombCooldownFraction() { return Math.max(bombCooldownTimer, 0f) / assets.getGameBalance().bombCooldown; }
     public int getCurrentFps() { return currentFps; }

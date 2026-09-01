@@ -32,6 +32,29 @@ import whitelabeltest.player.weapons.Weapon;
 public class Main extends ApplicationAdapter {
     private enum AppState { START, WEAPON_SELECT, OPTIONS, REPLAY_SELECT, PLAYING }
 
+    /** Carries the JavaFX editor's "Quick Play" button's chosen stage/distance/weapons through to
+     *  create() - see Lwjgl3Launcher.main(), which builds one from system properties a forked quick-
+     *  play process is launched with, or null for every ordinary desktop launch. */
+    public static class QuickPlayConfig {
+        public final String stageId;
+        public final float startDistance;
+        public final String slotAWeaponId;
+        public final String slotBWeaponId;
+
+        public QuickPlayConfig(String stageId, float startDistance, String slotAWeaponId, String slotBWeaponId) {
+            this.stageId = stageId;
+            this.startDistance = startDistance;
+            this.slotAWeaponId = slotAWeaponId;
+            this.slotBWeaponId = slotBWeaponId;
+        }
+    }
+
+    private final QuickPlayConfig quickPlay;
+
+    public Main() { this(null); }
+
+    public Main(QuickPlayConfig quickPlay) { this.quickPlay = quickPlay; }
+
     private AppState state = AppState.START;
     private StartScreen startScreen;
     private WeaponSelectScreen weaponSelectScreen;
@@ -70,7 +93,11 @@ public class Main extends ApplicationAdapter {
         viewport = new ExtendViewport(PLAY_AREA_WIDTH, PLAY_AREA_HEIGHT);
         keyBindings = new KeyBindings();
         audioSettings = new AudioSettings();
-        startScreen = new StartScreen(PLAY_AREA_WIDTH, PLAY_AREA_HEIGHT, audioSettings);
+        if (quickPlay != null) {
+            transitionToQuickPlay();
+        } else {
+            startScreen = new StartScreen(PLAY_AREA_WIDTH, PLAY_AREA_HEIGHT, audioSettings);
+        }
     }
 
     @Override
@@ -175,6 +202,20 @@ public class Main extends ApplicationAdapter {
             WeaponLoadout.BASIC_THUNDERBOLT, GameController.TUTORIAL_STAGE_SEQUENCE_ID);
         game.setActiveInput(inputType);
         ui = new UIManager(inputType);
+        state = AppState.PLAYING;
+    }
+
+    /** Entry point for the JavaFX editor's "Quick Play" button - see QuickPlayConfig's own doc on
+     *  how quickPlay gets here. Skips StartScreen/WeaponSelectScreen entirely, the same shape
+     *  transitionToTutorial() above already uses for its own skip-weapon-select path: the
+     *  WeaponLoadout passed to the constructor here is just a placeholder, immediately overridden
+     *  by GameController.quickStartAtStage()'s explicit slot ids. Always keyboard input - there's no
+     *  start-screen input detection to read here the way transitionToWeaponSelect()'s does. */
+    private void transitionToQuickPlay() {
+        game = new GameController(PLAY_AREA_WIDTH, PLAY_AREA_HEIGHT, keyBindings, audioSettings, WeaponLoadout.BASIC_THUNDERBOLT);
+        game.quickStartAtStage(quickPlay.stageId, quickPlay.startDistance, quickPlay.slotAWeaponId, quickPlay.slotBWeaponId);
+        game.setActiveInput(InputType.KEYBOARD);
+        ui = new UIManager(InputType.KEYBOARD);
         state = AppState.PLAYING;
     }
 
@@ -373,6 +414,10 @@ public class Main extends ApplicationAdapter {
         if (game.isDebugMode()) {
             ui.drawDebugFpsMonitor(spriteBatch, PLAY_AREA_WIDTH, PLAY_AREA_HEIGHT, game.getCurrentFps(), game.getLowestFps(), game.getHighestFps());
             ui.drawDebugFpsHistogram(spriteBatch, PLAY_AREA_WIDTH, PLAY_AREA_HEIGHT, game.getFpsHistory(), game.getHighestFps());
+            Float triggerDistance = game.getTriggerDistance();
+            if (triggerDistance != null) {
+                ui.drawDebugTriggerInfo(spriteBatch, PLAY_AREA_WIDTH, PLAY_AREA_HEIGHT, triggerDistance, game.getTriggerActiveGateInfo());
+            }
         }
 
         if (game.isDebugMode() && game.isDebugMenuOpen()) {

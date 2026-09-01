@@ -13,6 +13,7 @@ import com.badlogic.gdx.utils.Array;
 import whitelabeltest.enemy.bullets.EnemyBullet;
 import whitelabeltest.enemy.firingpatterns.FiringPattern;
 import whitelabeltest.enemy.movementpatterns.MovementPattern;
+import whitelabeltest.gamemanagers.audio.AudioManager;
 
 public abstract class BaseEnemy implements Enemy {
     protected enum LifecycleState { ENTERING, ACTIVE, DYING }
@@ -101,7 +102,7 @@ public abstract class BaseEnemy implements Enemy {
     public boolean isDying() { return lifecycleState == LifecycleState.DYING; }
 
     @Override
-    public void update(float delta, Array<EnemyBullet> enemyBullets, Circle playerHitbox, Circle grazeHitbox, boolean firingPaused, float groundScrollSpeed) {
+    public void update(float delta, Array<EnemyBullet> enemyBullets, Circle playerHitbox, Circle grazeHitbox, boolean firingPaused, float groundScrollSpeed, AudioManager audio) {
         if (sprite == null) return;
 
         if (lifecycleState == LifecycleState.DYING) {
@@ -125,6 +126,7 @@ public abstract class BaseEnemy implements Enemy {
             if (movement != null) {
                 movement.update(delta, sprite, rectangle, worldWidth, worldHeight, playerHitbox, invertMovement);
                 if (!rotateWithMovement) sprite.setRotation(0);
+                resolveMovementCue(audio);
             }
             applyGroundScroll(delta, groundScrollSpeed);
             if (lifecycleTime >= spawnDuration) {
@@ -150,6 +152,7 @@ public abstract class BaseEnemy implements Enemy {
         if (movement != null) {
             movement.update(delta, sprite, rectangle, worldWidth, worldHeight, playerHitbox, invertMovement);
             if (!rotateWithMovement) sprite.setRotation(0);
+            resolveMovementCue(audio);
         }
         applyGroundScroll(delta, groundScrollSpeed);
 
@@ -179,6 +182,31 @@ public abstract class BaseEnemy implements Enemy {
     public void silenceFiring() {
         firing = null;
     }
+
+    /** Dispatches whatever one-shot event a WaypointPath movement just queued on reaching a
+     *  waypoint (see MovementPattern.consumeCue()/WaypointCue) - plays its sound (if any, and if
+     *  audio is actually available - see Enemy.update()'s own doc) and swaps this enemy's live
+     *  firing pattern (if the waypoint set changeWeaponSet) via resolveWeaponSet(), a plain field
+     *  reassignment safe to do mid-flight since `firing` is already re-read fresh every frame (see
+     *  silenceFiring() already doing exactly that). A no-op for every OTHER movement pattern, whose
+     *  consumeCue() default returns null. */
+    private void resolveMovementCue(AudioManager audio) {
+        MovementPattern.WaypointCue cue = movement.consumeCue();
+        if (cue == null) return;
+        if (cue.soundName != null && audio != null) {
+            audio.playCueSound(cue.soundName, cue.soundVolume, cue.soundPitch);
+        }
+        if (cue.changeWeaponSet) {
+            FiringPattern resolved = resolveWeaponSet(cue.weaponSet);
+            if (resolved != null) firing = resolved;
+        }
+    }
+
+    /** Resolves a "weapon set" name (see MovementPatternDef.weaponSet) to a live FiringPattern for
+     *  THIS enemy - a no-op hook here since BaseEnemy has no EnemyDefinition of its own to resolve
+     *  the name against; GenericEnemy (the only subclass with one) overrides this using its own
+     *  def.weaponSets map. */
+    protected FiringPattern resolveWeaponSet(String weaponSetName) { return null; }
 
     // Shifts a ground enemy (isGround()) down by the stage's current background scroll speed, on
     // top of whatever its own movement pattern already did this frame - same translate-then-sync

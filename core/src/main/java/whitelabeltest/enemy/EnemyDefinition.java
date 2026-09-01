@@ -1,5 +1,7 @@
 package whitelabeltest.enemy;
 
+import com.badlogic.gdx.utils.ObjectMap;
+
 public class EnemyDefinition {
     public String id;
     public String texture;
@@ -10,7 +12,11 @@ public class EnemyDefinition {
     public float frameDuration = 0.1f;
     public float size;
     public int health;
-    public String movementPattern;
+    // Movement is deliberately NOT part of this type definition - see Trigger.movementPattern's own
+    // doc. Every placed spawn gets its own movement (ideally a WaypointPath, authored via the
+    // editor's Movement Path panel) assigned individually; there is no type-level default to fall
+    // back to (GenericEnemy.initWithDefinition() resolves purely from the spawning trigger/event's
+    // own movementPatternId - null there just means this particular spawn doesn't move).
     public boolean inverseMovement = false;
     public boolean rotateWithMovement = true;
     public boolean isBoss = false;
@@ -59,6 +65,14 @@ public class EnemyDefinition {
     public int score = 10;
     public String firingPattern;
     public String explosionPattern;
+    // Named alternates to firingPattern this enemy can be switched to mid-flight - name -> a
+    // firing-pattern id (same ids PatternRegistry.getFiring() resolves data/firing_patterns/ from).
+    // Null/empty means "no alternates" (the default, unchanged behavior). Consumed by a
+    // WaypointPath movement's "change weapon set" waypoints (see MovementPatternDef.weaponSet /
+    // BaseEnemy's WaypointCue handling) - the waypoint stores a KEY into this map, not a firing-
+    // pattern id directly, so the same authored path can be reused by a different enemy definition
+    // whose own weaponSets map that same key to a different pattern.
+    public ObjectMap<String, String> weaponSets;
 
     public String spawnTexture;
     public int spawnFrameCount;

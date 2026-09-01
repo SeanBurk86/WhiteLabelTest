@@ -55,7 +55,7 @@
 .menu-item, .context-menu {
     -fx-background-color: #2a2b30;
 }
-.menu-item:focused, .menu-item:hovered {
+.menu-item:focused, .menu-item:hover {
     -fx-background-color: #3a3b42;
 }
 
@@ -111,7 +111,12 @@
     -fx-background-color: #34353c;
     -fx-border-color: #55565e;
 }
-.check-box .mark {
+/* Scoped to :selected - Modena's own default already keeps an unchecked box's mark transparent
+ * (-fx-background-color: null), so this only needs to color it back in once actually checked.
+ * Un-scoped, the mark's background-color was overridden unconditionally, painting the checkmark
+ * even on an unchecked box - the checked/unchecked states became visually indistinguishable, both
+ * just looking like a small always-filled swatch/button. */
+.check-box:selected .mark {
     -fx-background-color: #ffd54a;
 }
 

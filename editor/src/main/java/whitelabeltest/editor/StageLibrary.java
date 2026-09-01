@@ -64,6 +64,18 @@ public class StageLibrary {
         writeText(ENEMIES_JSON, json.prettyPrint(json.toJson(enemies, Array.class, EnemyDefinition.class)));
     }
 
+    /** Writes the current in-memory stage list back to data/stages.json - see
+     *  StageDefinitionPanel, the only caller. Every StageDefinition instance here is shared by
+     *  reference with whatever OpenStageDialog/StagePalette already listed, so edits already show
+     *  up live (e.g. a stage's own background art updating in EditorDocument.getStageDefinition()-
+     *  driven previews) before this is even called; this just persists them. Mirrors saveEnemies()
+     *  exactly. */
+    public void saveStages() {
+        Json json = new Json();
+        json.setOutputType(JsonWriter.OutputType.json);
+        writeText(STAGES_JSON, json.prettyPrint(json.toJson(stages, Array.class, StageDefinition.class)));
+    }
+
     /** For a stage with no triggerFile yet: writes a fresh, empty trigger JSON at the conventional
      *  data/stages/&lt;id&gt;_triggers.json path and patches only that one stage's triggerFile field
      *  into stages.json (re-serializing the whole array - every other field/stage round-trips

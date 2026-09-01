@@ -503,6 +503,35 @@ public class UIManager implements Disposable {
         font.setColor(Color.WHITE);
     }
 
+    // Debug-only: TriggerManager's current camera distance, plus whichever gate (if any) is
+    // currently freezing it and what it's still waiting on - see TriggerManager.describeActiveGate().
+    // Lets a stuck trigger-driven stage (e.g. the tutorial) be diagnosed on screen instead of
+    // guessing which of several back-to-back gates is the blocker. Drawn as its own solid-backed bar
+    // across the top of the PLAY AREA (not either side panel, both of which are already packed edge
+    // to edge with the real HUD - see drawLeftHudPanel()/drawRightHudPanel() - with nowhere left that
+    // wouldn't just print this on top of/underneath that text) - the backdrop keeps it legible over
+    // gameplay too, the same trick drawTextCue() already uses for its own box. Drawn whenever a
+    // distance is available, gate or no - "not currently blocked" is itself useful information
+    // (confirms the camera really is advancing, not just LOOKING stuck). */
+    public void drawDebugTriggerInfo(SpriteBatch batch, float worldWidth, float worldHeight, float distance, String activeGateInfo) {
+        float boxHeight = activeGateInfo != null ? 0.9f : 0.5f;
+        float x = 0.2f;
+        float yTop = worldHeight - 0.1f;
+        float width = worldWidth - 0.4f;
+
+        batch.setColor(0f, 0f, 0f, 0.75f);
+        batch.draw(whitePixel, x, yTop - boxHeight, width, boxHeight);
+        batch.setColor(Color.WHITE);
+
+        font.setColor(Color.WHITE);
+        font.draw(batch, "Trigger dist: " + String.format("%.2f", distance), x + 0.15f, yTop - 0.15f);
+        if (activeGateInfo != null) {
+            font.setColor(Color.ORANGE);
+            font.draw(batch, "Blocked: " + activeGateInfo, x + 0.15f, yTop - 0.55f);
+            font.setColor(Color.WHITE);
+        }
+    }
+
     // Debug-only: current FPS in the right panel, with the lowest/highest seen since the last
     // reset listed below it - drawn whether or not the F1 debug menu is open, since that menu's
     // own dim overlay only spans the play area, not the side panels.

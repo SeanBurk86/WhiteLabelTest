@@ -64,6 +64,14 @@ run {
   if (os.contains('mac')) jvmArgs += "-XstartOnFirstThread"
   // ./gradlew run -Pdebug turns on GameController's debug tools (F1/F9/F12/M) for this run.
   if (project.hasProperty('debug')) jvmArgs += "-Ddebug"
+  // The JavaFX editor's "Quick Play" button forks this exact task with these Gradle project
+  // properties (-P...) - see Lwjgl3Launcher.readQuickPlayConfig(), which reads the "-D" system
+  // properties this translates them into. Same "-P project property in, -D system property out"
+  // passthrough shape the `debug` property right above already uses.
+  if (project.hasProperty('quickPlayStage')) jvmArgs += "-DquickPlay.stage=${project.property('quickPlayStage')}"
+  if (project.hasProperty('quickPlayDistance')) jvmArgs += "-DquickPlay.distance=${project.property('quickPlayDistance')}"
+  if (project.hasProperty('quickPlaySlotA')) jvmArgs += "-DquickPlay.slotA=${project.property('quickPlaySlotA')}"
+  if (project.hasProperty('quickPlaySlotB')) jvmArgs += "-DquickPlay.slotB=${project.property('quickPlaySlotB')}"
 }
 
 jar {

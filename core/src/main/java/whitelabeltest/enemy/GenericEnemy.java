@@ -7,7 +7,11 @@ import com.badlogic.gdx.graphics.g2d.TextureRegion;
 import com.badlogic.gdx.math.MathUtils;
 import whitelabeltest.gamemanagers.effects.AnimationCache;
 import whitelabeltest.gamemanagers.ObjectPools;
+import whitelabeltest.gamemanagers.trigger.EnemyEntranceMovement;
+import whitelabeltest.gamemanagers.trigger.Trigger;
+import whitelabeltest.enemy.firingpatterns.FiringPattern;
 import whitelabeltest.enemy.firingpatterns.SelfDestructFiring;
+import whitelabeltest.enemy.movementpatterns.MovementPattern;
 
 public class GenericEnemy extends BaseEnemy {
 
@@ -32,10 +36,10 @@ public class GenericEnemy extends BaseEnemy {
         initWithDefinition(def, texture, bulletTexture, spawnTexture, deathTexture, worldWidth, worldHeight, startX, startY, formationOffsetX, formationOffsetY, null);
     }
 
-    /** @param movementPatternId overrides def.movementPattern when non-null - lets several spawn
-     *  events share one enemy definition while still steering each toward a different movement
-     *  pattern (e.g. two squads with the same stats but a different rally point/exit), instead of
-     *  needing a near-duplicate enemy definition that differs only in movementPattern. */
+    /** @param movementPatternId this spawn's own movement pattern id - see Trigger.movementPattern's
+     *  own doc. Movement isn't part of EnemyDefinition at all (unlike firingPatternId below, which
+     *  DOES fall back to def.firingPattern - firing stayed type-level), so null here simply means
+     *  this particular spawn doesn't move, same as any other unset trigger field. */
     public void initWithDefinition(EnemyDefinition def, Texture texture, Texture bulletTexture,
                                     Texture spawnTexture, Texture deathTexture,
                                     float worldWidth, float worldHeight, float startX, float startY,
@@ -51,6 +55,19 @@ public class GenericEnemy extends BaseEnemy {
                                     Texture spawnTexture, Texture deathTexture,
                                     float worldWidth, float worldHeight, float startX, float startY,
                                     float formationOffsetX, float formationOffsetY, String movementPatternId, String firingPatternId) {
+        initWithDefinition(def, texture, bulletTexture, spawnTexture, deathTexture, worldWidth, worldHeight, startX, startY, formationOffsetX, formationOffsetY, movementPatternId, firingPatternId, null, 0f);
+    }
+
+    /** @param entranceTrigger non-null (only ever from EnemySpawnOps.spawnEnemy(), i.e.
+     *  TriggerManager.fire()) builds and applies EnemyEntranceMovement.build() as this spawn's
+     *  movement, replacing whatever movementPatternId would otherwise have resolved to - see that
+     *  method's own doc. Built HERE rather than by the caller because it needs the real spawn
+     *  sprite's true size (set below, before this runs), which isn't known any earlier than this. */
+    public void initWithDefinition(EnemyDefinition def, Texture texture, Texture bulletTexture,
+                                    Texture spawnTexture, Texture deathTexture,
+                                    float worldWidth, float worldHeight, float startX, float startY,
+                                    float formationOffsetX, float formationOffsetY, String movementPatternId, String firingPatternId,
+                                    Trigger entranceTrigger, float cameraSpeed) {
         this.def = def;
         this.worldWidth = worldWidth;
         this.worldHeight = worldHeight;
@@ -79,6 +96,16 @@ public class GenericEnemy extends BaseEnemy {
         }
         sprite.setOriginCenter();
 
+        // See EnemyEntranceMovement.spawnY()'s own doc - overrides the caller-supplied startY with
+        // the real off-screen spawn point ONLY now, because that computation needs this sprite's
+        // actual height (just set above via sprite.setSize()) to stay safely under isOffScreen()'s
+        // own removal tolerance - computing it any earlier (back when the caller only knew
+        // trigger.enterFromAbove, not yet this sprite's true size) is what silently deleted these
+        // spawns before they could visibly enter at all.
+        if (entranceTrigger != null && entranceTrigger.enterFromAbove && !Float.isNaN(entranceTrigger.y)) {
+            startY = EnemyEntranceMovement.spawnY(entranceTrigger, worldHeight, sprite.getHeight());
+        }
+
         if (!Float.isNaN(startX)) {
             sprite.setX(startX);
         } else {
@@ -96,8 +123,14 @@ public class GenericEnemy extends BaseEnemy {
         this.healthRegenPerSecond = def.healthRegenPerSecond;
         this.animationTime = 0;
 
-        String resolvedMovementPattern = movementPatternId != null ? movementPatternId : def.movementPattern;
-        this.movement = PatternFactory.createMovement(PatternRegistry.getMovement(resolvedMovementPattern), worldHeight, sprite.getX() + sprite.getWidth() / 2f, formationOffsetX, formationOffsetY);
+        // No def-level fallback (see EnemyDefinition.java's own doc) - PatternRegistry.getMovement(null)
+        // and PatternFactory.createMovement(null, ...) are both already null-safe, resolving to
+        // NoMovement, so a spawn with no movementPatternId of its own simply doesn't move.
+        this.movement = PatternFactory.createMovement(PatternRegistry.getMovement(movementPatternId), worldWidth, worldHeight, sprite.getX() + sprite.getWidth() / 2f, formationOffsetX, formationOffsetY);
+        if (entranceTrigger != null) {
+            MovementPattern entrance = EnemyEntranceMovement.build(entranceTrigger, cameraSpeed, worldHeight, sprite.getWidth(), sprite.getHeight(), this.movement);
+            if (entrance != null) this.movement = entrance;
+        }
         String resolvedFiringPattern = firingPatternId != null ? firingPatternId : def.firingPattern;
         this.firing = PatternFactory.createFiring(def, PatternRegistry.getFiring(resolvedFiringPattern), worldWidth, worldHeight);
 
@@ -137,6 +170,19 @@ public class GenericEnemy extends BaseEnemy {
         GenericEnemy e = ObjectPools.genericEnemyPool.obtain();
         e.initWithDefinition(this.def, texture, this.bulletTexture, this.spawnTexture, this.deathTexture, worldWidth, worldHeight, Float.NaN, worldHeight);
         return e;
+    }
+
+    /** See BaseEnemy.resolveWeaponSet()'s own doc - looks `weaponSetName` up in this enemy's own
+     *  def.weaponSets to find which firing-pattern id to switch to, then builds it the same way
+     *  initWithDefinition() builds `firing` in the first place. Null (no swap) if this definition
+     *  has no weaponSets at all, doesn't define that name, or the name doesn't resolve to a real
+     *  firing pattern on disk. */
+    @Override
+    protected FiringPattern resolveWeaponSet(String weaponSetName) {
+        if (def == null || def.weaponSets == null || weaponSetName == null) return null;
+        String firingPatternId = def.weaponSets.get(weaponSetName);
+        if (firingPatternId == null) return null;
+        return PatternFactory.createFiring(def, PatternRegistry.getFiring(firingPatternId), worldWidth, worldHeight);
     }
 
     @Override

@@ -32,6 +32,16 @@ public final class EnemySpawnRegistry {
     }
 
     public static GenericEnemy spawn(String enemyTypeId, float x, float y) {
+        return spawn(enemyTypeId, x, y, null);
+    }
+
+    /** @param movementPatternId this spawn's own movement pattern - see
+     *  GenericEnemy.initWithDefinition()'s own doc (movement isn't part of EnemyDefinition, so this
+     *  is the only way a caller here can give the spawned enemy any motion at all). Used by
+     *  PatternPreviewer.respawnPreview() so its live preview enemy actually reflects whichever
+     *  movement pattern is currently being edited; every other caller (e.g. SpawnEnemyFiring, via
+     *  the null-defaulting overload above) doesn't need one. */
+    public static GenericEnemy spawn(String enemyTypeId, float x, float y, String movementPatternId) {
         if (assets == null || enemies == null || enemyTypeId == null) return null;
 
         EnemyDefinition def = assets.getEnemyDefinition(enemyTypeId);
@@ -43,7 +53,7 @@ public final class EnemySpawnRegistry {
         Texture deathTexture = def.deathTexture != null ? assets.getTexture(def.deathTexture) : null;
 
         GenericEnemy enemy = ObjectPools.genericEnemyPool.obtain();
-        enemy.initWithDefinition(def, texture, bulletTexture, spawnTexture, deathTexture, worldWidth, worldHeight, x, y);
+        enemy.initWithDefinition(def, texture, bulletTexture, spawnTexture, deathTexture, worldWidth, worldHeight, x, y, Float.NaN, Float.NaN, movementPatternId);
         enemies.add(enemy);
         return enemy;
     }

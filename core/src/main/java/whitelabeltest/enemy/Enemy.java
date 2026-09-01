@@ -7,6 +7,7 @@ import com.badlogic.gdx.math.Rectangle;
 import com.badlogic.gdx.utils.Array;
 import com.badlogic.gdx.utils.Pool;
 import whitelabeltest.enemy.bullets.EnemyBullet;
+import whitelabeltest.gamemanagers.audio.AudioManager;
 
 public interface Enemy extends Pool.Poolable {
     void init(Texture texture, float worldWidth, float worldHeight, float startX, float startY);
@@ -15,7 +16,10 @@ public interface Enemy extends Pool.Poolable {
     // gets shifted down by that same amount every frame on top of its own movement pattern, so it
     // stays visually planted on the scrolling terrain instead of sliding relative to it. Ignored by
     // every other enemy.
-    void update(float delta, Array<EnemyBullet> enemyBullets, Circle playerHitbox, Circle grazeHitbox, boolean firingPaused, float groundScrollSpeed);
+    // audio lets a WaypointPath movement's per-waypoint sound cue actually play - see
+    // BaseEnemy.update()'s MovementPattern.consumeCue() handling; ignored by every enemy whose
+    // movement pattern never queues one.
+    void update(float delta, Array<EnemyBullet> enemyBullets, Circle playerHitbox, Circle grazeHitbox, boolean firingPaused, float groundScrollSpeed, AudioManager audio);
     void draw(SpriteBatch batch);
     default void drawShadow(SpriteBatch batch) {}
     boolean isOffScreen();

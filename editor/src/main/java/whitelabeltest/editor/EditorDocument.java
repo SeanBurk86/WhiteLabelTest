@@ -5,6 +5,7 @@ import com.badlogic.gdx.utils.Json;
 import com.badlogic.gdx.utils.JsonWriter;
 import javafx.stage.FileChooser;
 import javafx.stage.Stage;
+import whitelabeltest.gamemanagers.spawning.StageDefinition;
 import whitelabeltest.gamemanagers.trigger.Trigger;
 import whitelabeltest.gamemanagers.trigger.TriggerManager;
 
@@ -23,6 +24,11 @@ public class EditorDocument {
     private TriggerManager.TriggerFile file;
     private Path path;
     private boolean dirty;
+    // Which stage this trigger file belongs to - set by OpenStageDialog right after load/create,
+    // purely so StageCanvas can look up its backgroundLayers/music/etc. for context (background-art
+    // preview - see StageCanvas.drawBackgroundArt()). Not persisted - this is derived from
+    // data/stages.json, not part of the trigger file itself.
+    private StageDefinition stageDefinition;
     // Several parts of the UI (canvas, status bar, properties panel) each need to react to a
     // load/save/mutation independently, so this is a list rather than a single Runnable slot.
     private final java.util.List<Runnable> changeListeners = new java.util.ArrayList<>();
@@ -43,6 +49,15 @@ public class EditorDocument {
     public Array<Trigger> getTriggers() { return file.triggers; }
     public Path getPath() { return path; }
     public boolean isDirty() { return dirty; }
+    public StageDefinition getStageDefinition() { return stageDefinition; }
+
+    /** See stageDefinition's own field doc - call right after load()/newTriggerFile(). Fires the
+     *  same change listeners so StageCanvas re-renders its background-art preview for the newly
+     *  associated stage. */
+    public void setStageDefinition(StageDefinition stageDefinition) {
+        this.stageDefinition = stageDefinition;
+        fireChanged();
+    }
 
     public void load(Path p) {
         try {

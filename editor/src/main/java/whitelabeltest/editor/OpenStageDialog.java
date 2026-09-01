@@ -46,9 +46,11 @@ public class OpenStageDialog {
             if (result.isEmpty() || result.get() != ButtonType.YES) return;
             Path created = library.createTriggerFileForStage(stage);
             document.load(created);
+            document.setStageDefinition(stage);
             return;
         }
 
         document.load(Path.of(stage.triggerFile));
+        document.setStageDefinition(stage);
     }
 }

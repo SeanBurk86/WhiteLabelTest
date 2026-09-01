@@ -340,12 +340,7 @@ public class SpawnScheduler {
     public ObjectMap<String, EnemyDefinition> getEnemyDefinitions() { return enemyDefinitions; }
 
     private void loadDefinitions() {
-        Json json = new Json();
-        @SuppressWarnings("unchecked")
-        Array<EnemyDefinition> defs = json.fromJson(Array.class, EnemyDefinition.class, Gdx.files.internal("data/enemies.json"));
-        for (EnemyDefinition def : defs) {
-            enemyDefinitions.put(def.id, def);
-        }
+        enemyDefinitions.putAll(whitelabeltest.enemy.EnemyDefinitionLoader.load());
     }
 
     private void loadSchedule(String scheduleFilePath) {
