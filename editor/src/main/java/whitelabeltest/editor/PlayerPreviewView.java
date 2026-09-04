@@ -126,13 +126,16 @@ public class PlayerPreviewView extends Pane {
             // never drift out of sync with it the way this class's own background rendering once did
             // against StageCanvas's independent reimplementation of the same formula. spawnY() now
             // NEEDS the real sprite height (see its own doc on why a fixed margin was wrong), so the
-            // sprite has to be built first (at its ordinary arrival position) and then repositioned,
-            // mirroring GenericEnemy.initWithDefinition()'s own build-then-reposition order exactly.
+            // sprite has to be built first (at its ordinary arrival position) and then repositioned -
+            // and, same as GenericEnemy.initWithDefinition()'s own order, the movement pattern has to
+            // be resolved BEFORE spawnY() too, so a WaypointPathMovement's own first-leg target can
+            // raise the spawn point above itself, not just above trigger.y - see the 4-arg spawnY()
+            // overload's own doc.
             Sprite sprite = buildSprite(def, trigger, trigger.y);
-            if (trigger.enterFromAbove && !Float.isNaN(trigger.y)) {
-                sprite.setPosition(trigger.x, EnemyEntranceMovement.spawnY(trigger, (float) WORLD_HEIGHT, sprite.getHeight()));
-            }
             MovementPattern afterEntrance = resolveMovement(trigger, sprite);
+            if (trigger.enterFromAbove && !Float.isNaN(trigger.y)) {
+                sprite.setPosition(trigger.x, EnemyEntranceMovement.spawnY(trigger, (float) WORLD_HEIGHT, sprite.getHeight(), afterEntrance));
+            }
             MovementPattern entrance = EnemyEntranceMovement.build(trigger, cameraSpeed, (float) WORLD_HEIGHT, sprite.getWidth(), sprite.getHeight(), afterEntrance);
             MovementPattern movement = entrance != null ? entrance : afterEntrance;
             float groundScrollSpeed = resolveGroundScrollSpeed(def, stageDef);
@@ -232,7 +235,9 @@ public class PlayerPreviewView extends Pane {
                 movement.update(FIXED_DELTA, sprite, rect, (float) WORLD_WIDTH, (float) WORLD_HEIGHT, dummyPlayerHitbox, inverseMovement);
             }
             if (isGround) {
-                sprite.translate(0f, groundScrollSpeed * FIXED_DELTA);
+                float dy = groundScrollSpeed * FIXED_DELTA;
+                movement.applyGroundScroll(dy);
+                sprite.translate(0f, dy);
                 rect.setPosition(sprite.getX(), sprite.getY());
             }
             if (isOffScreen(sprite)) return false;

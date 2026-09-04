@@ -13,6 +13,11 @@ public class SplineMovement implements MovementPattern {
     private final Vector2 tempPos = new Vector2();
     private final Vector2 tempVel = new Vector2();
 
+    // See MovementPattern.applyGroundScroll()'s own doc - this pattern sets the sprite's position
+    // outright from `path` every update(), which would otherwise silently overwrite (and discard)
+    // BaseEnemy's own translate-based ground scroll the very next frame.
+    private float groundScrollOffsetY = 0f;
+
     public SplineMovement(float worldHeight, float duration, float spawnCenterX) {
         this(worldHeight, duration, DEFAULT_ANGLE_DEG, spawnCenterX);
     }
@@ -61,6 +66,7 @@ public class SplineMovement implements MovementPattern {
             finalY = worldHeight - tempPos.y; // Invert Y position
             tempVel.y = -tempVel.y;
         }
+        finalY += groundScrollOffsetY;
 
         sprite.setCenterX(finalX);
         sprite.setCenterY(finalY);
@@ -75,7 +81,13 @@ public class SplineMovement implements MovementPattern {
     }
 
     @Override
+    public void applyGroundScroll(float dy) {
+        groundScrollOffsetY += dy;
+    }
+
+    @Override
     public void reset() {
         pathTime = 0;
+        groundScrollOffsetY = 0f;
     }
 }

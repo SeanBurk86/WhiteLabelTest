@@ -185,7 +185,12 @@ public class EditorApp extends Application {
         saveAs.setOnAction(e -> document.saveAsDialog(stage));
 
         Menu stageMenu = new Menu("Stage", null, openStage, save, saveAs);
-        return new MenuBar(stageMenu);
+
+        MenuItem editFiringPatterns = new MenuItem("Edit Firing Patterns...");
+        editFiringPatterns.setOnAction(e -> FiringPatternEditorDialog.show(stage));
+        Menu firingPatternsMenu = new Menu("Firing Patterns", null, editFiringPatterns);
+
+        return new MenuBar(stageMenu, firingPatternsMenu);
     }
 
     public static void main(String[] args) {

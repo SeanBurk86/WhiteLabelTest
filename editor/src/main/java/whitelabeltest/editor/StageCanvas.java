@@ -14,10 +14,12 @@ import javafx.scene.shape.Line;
 import javafx.scene.shape.Polyline;
 import javafx.scene.shape.Rectangle;
 import javafx.scene.text.Font;
+import com.badlogic.gdx.utils.Array;
 import com.badlogic.gdx.utils.Json;
 import whitelabeltest.enemy.MovementPatternDef;
 import whitelabeltest.gamemanagers.spawning.StageDefinition;
 import whitelabeltest.gamemanagers.trigger.Trigger;
+import whitelabeltest.gamemanagers.trigger.WaveSpawnPlanner;
 
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -113,6 +115,10 @@ public class StageCanvas extends Pane {
     private final Group backgroundLayer = new Group();
     private final Group playAreaLayer = new Group();
     private final Group pathPreviewLayer = new Group();
+    // Small dot markers showing where each member of a Trigger.waveShape-enabled spawn would
+    // actually land - see drawWaveSpawnPreviews(), drawn/refreshed alongside pathPreviewLayer above
+    // (same call sites, piggybacked at the end of drawPathPreviews() - see that method's own doc).
+    private final Group waveSpawnPreviewLayer = new Group();
     private final Group gridLayer = new Group();
     private final Group pathEditLayer = new Group();
     private final Group triggerLayer = new Group();
@@ -184,7 +190,7 @@ public class StageCanvas extends Pane {
         // hidden behind its own path line. pathEditLayer's draggable handles sit just below the
         // triggers themselves - same prominence as a TriggerNode - so they read as "part of the
         // active editing", above the grid but not fighting a trigger's own icon for the top spot.
-        getChildren().addAll(backgroundLayer, playAreaLayer, pathPreviewLayer, gridLayer, pathEditLayer, triggerLayer, selectionRectLayer);
+        getChildren().addAll(backgroundLayer, playAreaLayer, pathPreviewLayer, waveSpawnPreviewLayer, gridLayer, pathEditLayer, triggerLayer, selectionRectLayer);
 
         setOnDragOver(this::handleDragOver);
         setOnDragDropped(this::handleDragDropped);
@@ -319,6 +325,7 @@ public class StageCanvas extends Pane {
         for (Trigger source : clipboard) {
             Trigger copy = cloneTrigger(source);
             copy.distance += offset;
+            forkMovementPattern(copy);
             pasted.add(copy);
             document.addTrigger(copy);
         }
@@ -344,6 +351,26 @@ public class StageCanvas extends Pane {
     private static Trigger cloneTrigger(Trigger source) {
         Json json = new Json();
         return json.fromJson(Trigger.class, json.toJson(source, Trigger.class));
+    }
+
+    /** Gives a just-pasted trigger its own on-disk movement pattern file instead of leaving it
+     *  pointing at the same id `source` (the trigger it was copied from) still resolves to - see
+     *  MovementPatternLibrary.resolveForTrigger(): movementPattern is only ever a file id, so
+     *  cloneTrigger()'s deep copy above still leaves both triggers reading (and, worse, path-edit
+     *  mode WRITING - see savePathEditPattern()) the exact same waypoint file. Without this, dragging
+     *  a waypoint on the pasted enemy silently drags the original's path too, since there was only
+     *  ever one file backing both. Only forks when the id actually resolves to something on disk;
+     *  a blank/dangling movementPattern is left as-is (paste keeps whatever the source had, same as
+     *  every other field). Uses uniqueId() off the same id (rather than re-deriving PropertiesPanel's
+     *  stageId_enemyType hint) so the fork reads as "a copy of X" if the id is ever surfaced to a
+     *  user, and can never collide with the source file it's forked from. */
+    private void forkMovementPattern(Trigger copy) {
+        String id = copy.movementPattern;
+        if (id == null || id.isBlank() || !patternLibrary.exists(id)) return;
+        MovementPatternDef forked = patternLibrary.load(id);
+        forked.id = patternLibrary.uniqueId(id);
+        patternLibrary.save(forked);
+        copy.movementPattern = forked.id;
     }
 
     /** Starts a rubber-band select-drag - only reachable for a press that lands on genuinely empty
@@ -602,6 +629,42 @@ public class StageCanvas extends Pane {
             endDot.setOpacity(0.9);
             pathPreviewLayer.getChildren().add(endDot);
         }
+        drawWaveSpawnPreviews();
+    }
+
+    /** Small orange dot at every member WaveSpawnPlanner.plan() computes for each Trigger.waveShape-
+     *  enabled spawn in the document - piggybacked onto drawPathPreviews()'s own call sites (see that
+     *  method's own doc) rather than wired up separately, so this can never go stale relative to it.
+     *  Same relative-offset-from-the-trigger's-own-canvas-anchor transform drawPathPreviews() itself
+     *  uses (world-x shares this canvas's real horizontal axis; the vertical placement is an anchor
+     *  of convenience against `distance`, not a literal mapping - see that method's own doc), and the
+     *  SAME nominal "player" reference point (worldWidth/2, 1 - PlayerPreviewView's own dummy player
+     *  hitbox convention) TriggerManager.fireWave() itself passes to WaveSpawnPlanner.plan(), so a
+     *  "to the player" wave previews identically to how it actually spawns - NOT DEFAULT_SPAWN_X/Y,
+     *  which is a completely unrelated "where a newly-dropped enemy trigger defaults to" constant. */
+    private void drawWaveSpawnPreviews() {
+        waveSpawnPreviewLayer.getChildren().clear();
+        for (Trigger trigger : document.getTriggers()) {
+            if (trigger.waveShape == null) continue;
+            Array<WaveSpawnPlanner.Slot> slots = WaveSpawnPlanner.plan(trigger, DEFAULT_SPAWN_X, 1f);
+
+            double anchorCanvasX = worldXToCanvasX(trigger.x);
+            double anchorCanvasY = distanceToCanvasY(trigger.distance);
+            for (WaveSpawnPlanner.Slot slot : slots) {
+                double px = anchorCanvasX + (slot.x - trigger.x) * PIXELS_PER_UNIT_X;
+                double py = anchorCanvasY - (slot.y - trigger.y) * PIXELS_PER_UNIT_X;
+                Circle dot = new Circle(px, py, 4, Color.web("#ff9a3c"));
+                dot.setOpacity(0.85);
+                waveSpawnPreviewLayer.getChildren().add(dot);
+
+                double dirRad = Math.toRadians(slot.angleDeg);
+                Line arrow = new Line(px, py, px + Math.cos(dirRad) * 12, py - Math.sin(dirRad) * 12);
+                arrow.setStroke(Color.web("#ff9a3c"));
+                arrow.setStrokeWidth(1.5);
+                arrow.setOpacity(0.85);
+                waveSpawnPreviewLayer.getChildren().add(arrow);
+            }
+        }
     }
 
     /** Re-draws just the static path-preview lines/dots (see drawPathPreviews()) without touching
@@ -639,6 +702,17 @@ public class StageCanvas extends Pane {
     }
 
     public MovementPatternDef getSelectedPathPoint() { return selectedPathPoint; }
+
+    /** The SAME cached pattern object this canvas is actually drawing/mutating/saving for the
+     *  trigger currently in path-edit mode (null if none is) - see setPathEditTrigger()'s own doc on
+     *  why this is cached here rather than re-resolved. PropertiesPanel's "Path Options" and
+     *  "Waypoints" sections must edit THIS object, not a fresh MovementPatternLibrary.resolveForTrigger()
+     *  reload of their own - that method reloads from disk on every call (see its own doc), so editing
+     *  a separately-reloaded copy would silently discard the edit the moment the next UI refresh
+     *  re-reloads the still-unsaved-on-disk original value right back over it - which is exactly what
+     *  made every field except the canvas-click-driven "Selected Waypoint" section look like it
+     *  required first clicking a point on the canvas before edits would actually stick. */
+    public MovementPatternDef getPathEditPattern() { return pathEditPattern; }
 
     /** Call after a PropertiesPanel field edit changes the selected point's targetX/targetY/speed/
      *  duration directly - re-renders the handle's position and the preview line from the (already
@@ -689,6 +763,16 @@ public class StageCanvas extends Pane {
         selectedPathPoint = node.getWaypoint();
         node.setSelected();
         if (pathPointSelectionListener != null) pathPointSelectionListener.accept(selectedPathPoint);
+    }
+
+    /** Same selection as clicking `waypoint`'s handle directly on the canvas - lets PropertiesPanel's
+     *  sidebar waypoint list (which edits every point, not just the canvas-clicked one) also drive
+     *  the "Selected Waypoint" detail section/highlight when a row there is picked instead. A no-op
+     *  if `waypoint` isn't one of pathEditNodes' own handles (e.g. stale reference after a rebuild). */
+    public void selectPathPoint(MovementPatternDef waypoint) {
+        for (PathWaypointNode node : pathEditNodes) {
+            if (node.getWaypoint() == waypoint) { selectPathPoint(node); return; }
+        }
     }
 
     /** Click-to-add for whichever trigger is currently in path-edit mode (see setPathEditTrigger()) -
@@ -904,6 +988,11 @@ public class StageCanvas extends Pane {
             node.updatePosition();
         }
         document.markDirty();
+        // Keeps the wave-formation preview (see drawWaveSpawnPreviews()) live as PropertiesPanel's
+        // "Wave" section fields are edited - every other drawPathPreviews() call site already runs
+        // after a structural change (rebuild()/path-edit), but a plain field edit via
+        // PropertiesPanel.onEdited() only ever reached this method before, never that one.
+        drawPathPreviews();
     }
 
     public void deleteTrigger(Trigger trigger) {

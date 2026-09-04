@@ -16,6 +16,8 @@ import com.badlogic.gdx.utils.Json;
 import com.badlogic.gdx.utils.ObjectMap;
 import com.badlogic.gdx.utils.SerializationException;
 import whitelabeltest.enemy.EnemyDefinition;
+import whitelabeltest.enemy.MovementPatternDef;
+import whitelabeltest.enemy.PatternRegistry;
 import whitelabeltest.player.Player;
 
 import java.util.Comparator;
@@ -120,6 +122,39 @@ public class TriggerManager {
     // ANY trigger arms, same as gemsAtLastWaypointSpawn.
     private int enemiesDestroyedAtLastSpawn = -1;
 
+    /** One still-to-spawn member of an already-fired wave trigger (see Trigger.waveShape/
+     *  fireWave()) - queued rather than spawned immediately since waveSpawnInterval staggers
+     *  members out over real time AFTER the trigger itself fires, and fire() only ever runs once,
+     *  synchronously, at the instant a trigger's conditions/distance are satisfied. */
+    private static final class PendingWaveSpawn {
+        final Trigger source; // the original trigger - type/firingPattern/inverseMovement/powerup
+        final float dueRealTime;
+        final float x, y, offsetX, offsetY;
+        final String movementPatternId; // already registered in PatternRegistry - see fireWave()
+        final Trigger entranceView; // synthetic per-member stand-in - see fireWave()'s own doc
+
+        PendingWaveSpawn(Trigger source, float dueRealTime, float x, float y, float offsetX, float offsetY,
+                          String movementPatternId, Trigger entranceView) {
+            this.source = source;
+            this.dueRealTime = dueRealTime;
+            this.x = x;
+            this.y = y;
+            this.offsetX = offsetX;
+            this.offsetY = offsetY;
+            this.movementPatternId = movementPatternId;
+            this.entranceView = entranceView;
+        }
+    }
+
+    // See PendingWaveSpawn's own doc - drained in update() (BEFORE the activeGate early-return, same
+    // "never freezes" treatment realTime itself already gets) rather than all at once inside fire().
+    private final Array<PendingWaveSpawn> pendingWaveSpawns = new Array<>();
+    // Every synthetic MovementPatternDef id this manager has ever registered into PatternRegistry
+    // (see fireWave()) - just a monotonically-increasing counter, so two different wave triggers (or
+    // two fires of the same repeatable one - not that any currently are) never collide on the same
+    // synthetic id.
+    private int nextSyntheticPatternId = 0;
+
     public TriggerManager(float worldWidth, float worldHeight, AssetManager assets, String triggerFilePath,
                            ObjectMap<String, EnemyDefinition> enemyDefinitions, ScrollingBackground background) {
         this.worldWidth = worldWidth;
@@ -200,6 +235,7 @@ public class TriggerManager {
     public void update(float delta, EntityManager entityManager, AudioManager audio, InputManager input, ScoreManager scoreManager) {
         Player player = entityManager.getPlayer();
         realTime += delta;
+        dispatchPendingWaveSpawns(entityManager);
 
         if (activeGate != null) {
             if (!tryResolve(activeGate, entityManager, audio, input, scoreManager, player, realTime)) {
@@ -455,9 +491,236 @@ public class TriggerManager {
             // ordinary spawn position; that method overrides it (and builds the entrance MOVEMENT)
             // once the real size is known - this just passes `trigger` and the camera's CURRENT
             // speed through for it to use there.
+            if (trigger.waveShape != null) {
+                fireWave(trigger, realTime);
+            } else {
+                EnemySpawnOps.spawnEnemy(entityManager, enemyDefinitions, assets, worldWidth, worldHeight,
+                    trigger.type, trigger.x, trigger.y, trigger.offsetX, trigger.offsetY, trigger.movementPattern, trigger.firingPattern,
+                    trigger.inverseMovement, trigger.powerup, trigger, camera.getSpeed());
+            }
+        }
+    }
+
+    /** Expands `trigger` (an enemy-spawn Trigger with waveShape set) into its full member list via
+     *  WaveSpawnPlanner, then queues every member as a PendingWaveSpawn due waveStartDelay +
+     *  i*waveSpawnInterval real-seconds from now - see dispatchPendingWaveSpawns() for the actual
+     *  spawn once each becomes due. Nothing is spawned synchronously here, even the "first" member -
+     *  a uniform "every member (including the one at slot 0) waits its own due time" rule is simpler
+     *  than special-casing "slot 0 spawns immediately, the rest queue", and waveStartDelay 0/
+     *  waveSpawnInterval 0 (the field defaults) already make slot 0 due THIS SAME FRAME's
+     *  dispatchPendingWaveSpawns() call anyway (it runs once more, right after this), so nothing
+     *  actually spawns any later than it would have otherwise.
+     *
+     * Every member spawns/arrives at its OWN true slot position - never a shared anchor - so a
+     * member with Trigger.enterFromAbove set flies in (and, if it has a real waypoint path, starts
+     * flying that path) using the EXACT SAME single-enemy machinery a normal, non-wave trigger
+     * already uses (EnemyEntranceMovement.build()'s existing "a WaypointPathMovement afterEntrance
+     * needs no synthetic entrance leg, its own initFrom() already reads the real off-screen spawn
+     * position" case) - no Squadron wrapping, no runtime offset-translate trick, and so none of the
+     * entrance-timing edge cases that come with either. This session tried (twice) to make
+     * SquadronMovement's own runtime "-offset/leader.update/+offset" translate carry the formation
+     * instead, keeping ONE shared pattern instance for the whole group - that meant the off-screen
+     * spawn height and the leader's own curve start point both had to be reverse-engineered to
+     * cancel out correctly, and EnemyEntranceMovement.build()'s entrance-skip check needed unwrapping
+     * to even recognize a Squadron-wrapped waypoint path - fragile in a way that broke twice under
+     * exactly the paired symptoms reported ("shoots down before the path" / "not offset until the
+     * end"). Cloning the pattern PER MEMBER instead - see registerShiftedClone() - and shifting
+     * every absolute target inside it by that member's own (offsetX, offsetY) sidesteps all of that:
+     * each member is just an ordinary, self-contained spawn with its own real movement pattern,
+     * indistinguishable (from BaseEnemy/EnemyEntranceMovement's own perspective) from one hand-
+     * authored at that exact slot - shifting the pattern's own targets is what "keep formation" (the
+     * whole group's shape holding together) actually reduces to, since a Straight/ZigZag/etc.
+     * pattern (no absolute target to shift at all) already preserves relative spacing automatically
+     * once every member shares the identical velocity - see registerShiftedClone()'s own doc.
+     * waveRotation only ever moves WHERE each member's shape/spawn position sits (see
+     * WaveSpawnPlanner.plan()) - it deliberately does NOT rotate the direction any member actually
+     * flies, which stays whatever the source pattern was authored with regardless of rotation. */
+    private void fireWave(Trigger trigger, float fireRealTime) {
+        Array<WaveSpawnPlanner.Slot> slots = WaveSpawnPlanner.plan(trigger, worldWidth / 2f, 1f);
+        if (slots.size == 0) return;
+
+        boolean hasOwnMovement = trigger.movementPattern != null && !trigger.movementPattern.isBlank()
+            && PatternRegistry.getMovement(trigger.movementPattern) != null;
+
+        // keepFormation's fallback (no authored movementPattern) needs exactly ONE shared angle for
+        // the whole group - computed once here (see singleAnchorProbe()'s own doc) rather than per
+        // member, since a synthesized Straight pattern has no absolute target to shift per member,
+        // only a direction: giving every member the SAME direction is what keeps the group's shape
+        // rigid (identical velocity every frame never changes anyone's position relative to anyone
+        // else's), whereas per-member angles (the independent/non-formation case below) would fan
+        // the group out instead.
+        String sharedFallbackAngleId = null;
+        if (trigger.waveKeepFormation && !hasOwnMovement) {
+            float sharedAngle = WaveSpawnPlanner.plan(singleAnchorProbe(trigger), worldWidth / 2f, 1f).first().angleDeg;
+            sharedFallbackAngleId = registerStraight(trigger.waveSpeed, sharedAngle, null);
+        }
+
+        // See Trigger.waveSpawnLift's own doc/computeWaveSpawnLift()'s own doc - only the
+        // waveKeepFormation+hasOwnMovement combination ever gives members DIFFERENT shifted targets
+        // (registerShiftedClone() below), so it's the only case where a per-member lift could ever
+        // need to differ from its squadmates' in the first place.
+        float waveSpawnLift = trigger.waveKeepFormation ? computeWaveSpawnLift(trigger, slots, hasOwnMovement) : Float.NaN;
+
+        for (int i = 0; i < slots.size; i++) {
+            WaveSpawnPlanner.Slot slot = slots.get(i);
+            float dueRealTime = fireRealTime + trigger.waveStartDelay + i * trigger.waveSpawnInterval;
+
+            String movementPatternId;
+            if (trigger.waveKeepFormation) {
+                movementPatternId = hasOwnMovement
+                    ? registerShiftedClone(trigger.movementPattern, slot.x - trigger.x, slot.y - trigger.y)
+                    : sharedFallbackAngleId;
+            } else {
+                movementPatternId = hasOwnMovement ? trigger.movementPattern : registerStraight(trigger.waveSpeed, slot.angleDeg, null);
+            }
+
+            // Per-member entrance stand-in - EnemyEntranceMovement.build() reads its OWN x/y as the
+            // entrance leg's arrival point (or, for a WaypointPathMovement afterEntrance, as nothing
+            // beyond its own off-screen SPAWN height - see GenericEnemy.initWithDefinition()'s own
+            // spawnY() override - since no synthetic leg is built for that case at all); offsetX/
+            // offsetY are passed through as trigger's own (almost always unset) - formationOffsetX/Y
+            // (PatternFactory.createMovement()'s param for THAT) is only ever consumed by a
+            // "Squadron" pattern, and nothing built here is one anymore.
+            //
+            // entranceView.y is always this member's own TRUE slot.y - exactly what a normal,
+            // individually-hand-placed enemy at that exact position would use, no formation-wide
+            // adjustment at all. Two earlier designs both got this wrong: shifting it by the group's
+            // own total Y-spread (worldHeight - minOffsetY + offsetY, sized off waveHeight alone) could
+            // inflate a tall wave's spawn point far ABOVE its own real target, reading as "moving
+            // opposite to its waypoint"; replacing that with each member computing its OWN off-screen
+            // height from only its OWN shifted target (no shared adjustment at all) fixed that but let
+            // members spawn at different heights with no relation to each other, breaking the
+            // formation's shape from the very first frame; collapsing every member to ONE shared
+            // absolute height fixed THAT but flattened the formation's own vertical shape at spawn down
+            // to a single line, then let it shear open during the flight since spawn Y no longer varied
+            // the way arrival Y does. waveSpawnLift (added below, in EnemyEntranceMovement.spawnY() -
+            // see that field's own doc) is the actual fix: a single ADDITIVE delta applied to every
+            // member's own DIFFERENT slot.y, not a value that replaces it - so the formation's real
+            // vertical shape survives untouched at spawn, through the flight, AND at arrival, while
+            // still guaranteeing every member clears both worldHeight and its own real target.
+            Trigger entranceView = new Trigger();
+            entranceView.x = slot.x;
+            entranceView.y = slot.y;
+            entranceView.enterFromAbove = trigger.enterFromAbove;
+            entranceView.spawnLead = trigger.spawnLead;
+            entranceView.distance = trigger.distance;
+            entranceView.waveSpawnLift = waveSpawnLift;
+
+            pendingWaveSpawns.add(new PendingWaveSpawn(trigger, dueRealTime, slot.x, slot.y, trigger.offsetX, trigger.offsetY, movementPatternId, entranceView));
+        }
+    }
+
+    /** See Trigger.waveSpawnLift's own doc - the single additive delta this wave's members all add to
+     *  their own (different) slot.y, or NaN when there's nothing to add.
+     *
+     * Two separate requirements, both satisfied by ONE shared lift because of how registerShiftedClone
+     * works: (a) every member has to clear worldHeight - driven by whichever member has the SMALLEST
+     * slot.y, so lift >= worldHeight - min(slot.y) covers all of them at once (every other member's
+     * own slot.y is larger, so the same lift clears worldHeight for them with room to spare); (b) every
+     * member has to clear its OWN real target - and since registerShiftedClone() shifts a member's
+     * target by the exact same (slot.y - trigger.y) its slot.y itself already differs from trigger.y
+     * by, (member target.y) - (member slot.y) reduces to (base target.y - trigger.y) for EVERY member,
+     * a single constant independent of which member - so lift >= that one constant clears every
+     * member's own target simultaneously, no per-member loop needed for this half at all. Whichever
+     * requirement needs more lift wins.
+     *
+     * Only a real authored WaypointPath movement can ever make (b) exceed (a) - every other movement
+     * kind has no absolute target to outrun, so (a) alone (already covered by EnemyEntranceMovement.
+     * spawnY()'s own worldHeight floor even with lift=0) is always enough, and this returns NaN for
+     * those, leaving spawnY() untouched exactly as if this method had never been called. */
+    private float computeWaveSpawnLift(Trigger trigger, Array<WaveSpawnPlanner.Slot> slots, boolean hasOwnMovement) {
+        if (!trigger.enterFromAbove) return Float.NaN;
+        float minSlotY = Float.POSITIVE_INFINITY;
+        for (WaveSpawnPlanner.Slot slot : slots) minSlotY = Math.min(minSlotY, slot.y);
+        float lift = worldHeight - minSlotY;
+
+        if (hasOwnMovement) {
+            MovementPatternDef source = PatternRegistry.getMovement(trigger.movementPattern);
+            if (source != null && "WaypointPath".equals(source.type) && source.patterns != null && source.patterns.size > 0) {
+                float baseTargetY = source.patterns.first().targetY;
+                if (!Float.isNaN(baseTargetY)) lift = Math.max(lift, baseTargetY - trigger.y);
+            }
+        }
+        return lift;
+    }
+
+    /** Deep-clones `sourceId`'s MovementPatternDef (a Json round-trip, same technique StageCanvas.
+     *  cloneTrigger()/forkMovementPattern() already use in the editor) and shifts every absolute
+     *  target coordinate found anywhere in it - MoveToPoint/Straight's own targetX/targetY, plus each
+     *  leg of a WaypointPath (its `patterns` list is itself a list of MovementPatternDef legs, each
+     *  with its own targetX/Y) and each sub-pattern of a Sequence/Squadron (`patterns`/`pattern`),
+     *  recursively - by (dx, dy), then registers the shifted copy under a fresh synthetic id via
+     *  PatternRegistry.putMovement() (never written to disk, same reasoning as registerStraight()).
+     *  Deliberately a plain TRANSLATE, not a rotate-then-translate, even when waveRotation is set:
+     *  every member keeps flying in the SAME direction the pattern was originally authored with,
+     *  regardless of how waveRotation has spread the group's own spawn positions out - confirmed as
+     *  the intended behavior (a rotated-direction version was tried and explicitly rejected). A field
+     *  left NaN (no target authored for that leg/pattern - falls back to spawnCenterX/0 at resolve
+     *  time, already relative to wherever THIS member itself spawns) is left untouched rather than
+     *  shifted, so it keeps behaving exactly as relative as it already was. */
+    private String registerShiftedClone(String sourceId, float dx, float dy) {
+        MovementPatternDef source = PatternRegistry.getMovement(sourceId);
+        Json json = new Json();
+        MovementPatternDef clone = json.fromJson(MovementPatternDef.class, json.toJson(source, MovementPatternDef.class));
+        shiftTargets(clone, dx, dy);
+        String id = "__wave" + (nextSyntheticPatternId++);
+        clone.id = id;
+        PatternRegistry.putMovement(id, clone);
+        return id;
+    }
+
+    private static void shiftTargets(MovementPatternDef def, float dx, float dy) {
+        if (def == null) return;
+        if (!Float.isNaN(def.targetX)) def.targetX += dx;
+        if (!Float.isNaN(def.targetY)) def.targetY += dy;
+        if (def.patterns != null) for (MovementPatternDef sub : def.patterns) shiftTargets(sub, dx, dy);
+        shiftTargets(def.pattern, dx, dy);
+    }
+
+    /** A throwaway Trigger sharing `trigger`'s own x/y/waveOrientation - used purely to ask
+     *  WaveSpawnPlanner for the angle IT would compute for a member sitting exactly at the anchor
+     *  (i.e. the degenerate "member == anchor" case - see WaveSpawnPlanner.computeAngle()'s own
+     *  fallback doc) without duplicating that computation here. waveShape is forced to "point" (a
+     *  single member, at the anchor, by construction) so plan() returns exactly one slot regardless
+     *  of `trigger`'s own actual shape. */
+    private static Trigger singleAnchorProbe(Trigger trigger) {
+        Trigger probe = new Trigger();
+        probe.x = trigger.x;
+        probe.y = trigger.y;
+        probe.waveShape = "point";
+        probe.waveOrientation = trigger.waveOrientation;
+        probe.waveNumberOfSpawns = 1;
+        return probe;
+    }
+
+    /** Builds (and registers into PatternRegistry under a fresh synthetic id, unless `explicitId` is
+     *  given) a plain "Straight" MovementPatternDef - see fireWave()'s own doc on why this is never
+     *  written to disk. Returns the id it was registered under. */
+    private String registerStraight(float speed, float angleDeg, String explicitId) {
+        MovementPatternDef def = new MovementPatternDef();
+        String id = explicitId != null ? explicitId : ("__wave" + (nextSyntheticPatternId++));
+        def.id = id;
+        def.type = "Straight";
+        def.speed = speed;
+        def.movementAngle = angleDeg;
+        PatternRegistry.putMovement(id, def);
+        return id;
+    }
+
+    /** Spawns every PendingWaveSpawn whose dueRealTime has arrived, oldest-due-first - run every
+     *  frame (see update()'s own doc on why this happens BEFORE the activeGate early-return: a
+     *  wave's own real-time schedule, like realTime itself, must never freeze just because some
+     *  unrelated later trigger's gate is blocking the camera). Iterates backward so removing a
+     *  dispatched entry mid-loop is safe without a separate pass. */
+    private void dispatchPendingWaveSpawns(EntityManager entityManager) {
+        for (int i = pendingWaveSpawns.size - 1; i >= 0; i--) {
+            PendingWaveSpawn pending = pendingWaveSpawns.get(i);
+            if (pending.dueRealTime > realTime) continue;
             EnemySpawnOps.spawnEnemy(entityManager, enemyDefinitions, assets, worldWidth, worldHeight,
-                trigger.type, trigger.x, trigger.y, trigger.offsetX, trigger.offsetY, trigger.movementPattern, trigger.firingPattern,
-                trigger.inverseMovement, trigger.powerup, trigger, camera.getSpeed());
+                pending.source.type, pending.x, pending.y, pending.offsetX, pending.offsetY,
+                pending.movementPatternId, pending.source.firingPattern, pending.source.inverseMovement,
+                pending.source.powerup, pending.entranceView, camera.getSpeed());
+            pendingWaveSpawns.removeIndex(i);
         }
     }
 

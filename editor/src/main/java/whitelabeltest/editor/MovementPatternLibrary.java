@@ -93,6 +93,18 @@ public class MovementPatternLibrary {
         return Files.exists(pathFor(id));
     }
 
+    /** Turns `hint` (e.g. "&lt;stageId&gt;_&lt;enemyType&gt;") into a filesystem-safe id guaranteed
+     *  not to collide with an existing pattern file, appending a numeric suffix if needed - see
+     *  exists(). Lets PropertiesPanel create a new spawn's waypoint path with one click instead of
+     *  making the user invent a unique name for every single one. */
+    public String uniqueId(String hint) {
+        String base = hint == null || hint.isBlank() ? "path" : hint.trim().replaceAll("[^A-Za-z0-9_-]+", "_");
+        if (!exists(base)) return base;
+        int n = 2;
+        while (exists(base + "_" + n)) n++;
+        return base + "_" + n;
+    }
+
     private static Path pathFor(String id) {
         return DIR.resolve(id + ".json");
     }

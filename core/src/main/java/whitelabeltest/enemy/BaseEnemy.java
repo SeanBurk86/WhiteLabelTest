@@ -67,6 +67,12 @@ public abstract class BaseEnemy implements Enemy {
     protected LifecycleState lifecycleState = LifecycleState.ACTIVE;
     protected float lifecycleTime = 0f;
 
+    // True once this enemy's sprite has been within GenericEnemy.isOffScreen()'s own bounds at
+    // least once since it last spawned - see that method's own doc on why the off-screen REMOVAL
+    // check is gated on this instead of applying unconditionally from frame 1. Reset in
+    // beginEntrance() (called once per real spawn, pooled reuse included), never anywhere mid-life.
+    protected boolean hasBeenOnScreen = false;
+
     public BaseEnemy() {
         this.rectangle = new Rectangle();
     }
@@ -80,6 +86,7 @@ public abstract class BaseEnemy implements Enemy {
 
     protected void beginEntrance() {
         lifecycleTime = 0f;
+        hasBeenOnScreen = false;
         if (spawnDuration > 0f) {
             lifecycleState = LifecycleState.ENTERING;
             if (sprite != null) sprite.setColor(1, 1, 1, spawnAnimation != null ? 1f : 0f);
@@ -214,9 +221,22 @@ public abstract class BaseEnemy implements Enemy {
     // the scrolling terrain (a "Stationary" ground enemy scrolls down screen right along with the
     // ground instead of floating in a fixed screen position) instead of sliding relative to it.
     // No-op for every other enemy.
+    //
+    // Also hands the same dy to movement.applyGroundScroll() BEFORE translating the sprite - a
+    // no-op default for the ordinary translate()-based patterns (StraightMovement, MoveToPointMovement,
+    // etc.), whose own next update() call adds to wherever this translate just left the sprite, same
+    // as always. WaypointPathMovement/SplineMovement instead SET the sprite's position outright from
+    // their own spawn-anchored curve every update() - that overwrites this method's translate the very
+    // next frame, before it ever reaches the screen, silently discarding the scroll instead of merely
+    // delaying it (a ground enemy on either of those patterns visibly lagged the actual background by
+    // however much it should have scrolled, with no waypoint/speed retuning able to fix a discard
+    // baked into a different frame's overwrite). Their applyGroundScroll() override folds dy into
+    // their OWN evaluated position instead, so it survives.
     private void applyGroundScroll(float delta, float groundScrollSpeed) {
         if (!isGround()) return;
-        sprite.translate(0f, groundScrollSpeed * delta);
+        float dy = groundScrollSpeed * delta;
+        if (movement != null) movement.applyGroundScroll(dy);
+        sprite.translate(0f, dy);
         rectangle.setPosition(sprite.getX(), sprite.getY());
     }
 

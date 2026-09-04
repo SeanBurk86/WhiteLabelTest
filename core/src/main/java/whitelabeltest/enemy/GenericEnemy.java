@@ -96,26 +96,10 @@ public class GenericEnemy extends BaseEnemy {
         }
         sprite.setOriginCenter();
 
-        // See EnemyEntranceMovement.spawnY()'s own doc - overrides the caller-supplied startY with
-        // the real off-screen spawn point ONLY now, because that computation needs this sprite's
-        // actual height (just set above via sprite.setSize()) to stay safely under isOffScreen()'s
-        // own removal tolerance - computing it any earlier (back when the caller only knew
-        // trigger.enterFromAbove, not yet this sprite's true size) is what silently deleted these
-        // spawns before they could visibly enter at all.
-        if (entranceTrigger != null && entranceTrigger.enterFromAbove && !Float.isNaN(entranceTrigger.y)) {
-            startY = EnemyEntranceMovement.spawnY(entranceTrigger, worldHeight, sprite.getHeight());
-        }
-
         if (!Float.isNaN(startX)) {
             sprite.setX(startX);
         } else {
             sprite.setX(MathUtils.random(0.5f, worldWidth - (sprite.getWidth() + 0.5f)));
-        }
-
-        if (!Float.isNaN(startY)) {
-            sprite.setY(startY);
-        } else {
-            sprite.setY(worldHeight + 1.0f);
         }
 
         this.health = def.health;
@@ -125,8 +109,31 @@ public class GenericEnemy extends BaseEnemy {
 
         // No def-level fallback (see EnemyDefinition.java's own doc) - PatternRegistry.getMovement(null)
         // and PatternFactory.createMovement(null, ...) are both already null-safe, resolving to
-        // NoMovement, so a spawn with no movementPatternId of its own simply doesn't move.
+        // NoMovement, so a spawn with no movementPatternId of its own simply doesn't move. Built
+        // BEFORE startY below (this method's original order had it after) because the 4-arg
+        // EnemyEntranceMovement.spawnY() overload needs to inspect THIS already-resolved pattern - see
+        // that overload's own doc - not just trigger.y; movement itself never depends on the sprite's Y
+        // (only X, already set above), so nothing here loses anything by building it first.
         this.movement = PatternFactory.createMovement(PatternRegistry.getMovement(movementPatternId), worldWidth, worldHeight, sprite.getX() + sprite.getWidth() / 2f, formationOffsetX, formationOffsetY);
+
+        // See EnemyEntranceMovement.spawnY()'s own doc - overrides the caller-supplied startY with
+        // the real off-screen spawn point ONLY now, because that computation needs this sprite's
+        // actual height (just set above via sprite.setSize()) to stay safely under isOffScreen()'s
+        // own removal tolerance - computing it any earlier (back when the caller only knew
+        // trigger.enterFromAbove, not yet this sprite's true size) is what silently deleted these
+        // spawns before they could visibly enter at all. Passing this.movement lets it also clear a
+        // WaypointPathMovement's own first-leg target, not just trigger.y - see that overload's own
+        // doc on why a plain trigger.y-only spawn point isn't always high enough.
+        if (entranceTrigger != null && entranceTrigger.enterFromAbove && !Float.isNaN(entranceTrigger.y)) {
+            startY = EnemyEntranceMovement.spawnY(entranceTrigger, worldHeight, sprite.getHeight(), this.movement);
+        }
+
+        if (!Float.isNaN(startY)) {
+            sprite.setY(startY);
+        } else {
+            sprite.setY(worldHeight + 1.0f);
+        }
+
         if (entranceTrigger != null) {
             MovementPattern entrance = EnemyEntranceMovement.build(entranceTrigger, cameraSpeed, worldHeight, sprite.getWidth(), sprite.getHeight(), this.movement);
             if (entrance != null) this.movement = entrance;
@@ -154,6 +161,17 @@ public class GenericEnemy extends BaseEnemy {
         initWithDefinition(null, texture, null, null, null, worldWidth, worldHeight, startX, startY);
     }
 
+    /** The bounds check below (generous tolerance - spriteWidth/Height*2 past each edge, not the
+     *  literal [0,worldWidth]x[0,worldHeight] play area) only actually REMOVES this enemy once
+     *  hasBeenOnScreen is already true - i.e. once it's been WITHIN those bounds at least one frame
+     *  since it last spawned (see BaseEnemy.beginEntrance(), which resets the flag). Before that,
+     *  being outside the bounds never removes it, no matter how far outside or for how long -
+     *  covering a spawn placed anywhere off-axis (a wave member spread wide in X, an anchor trigger
+     *  authored off to one side, not just the vertical entrance the old margin math was originally
+     *  sized for) that's meant to fly ONTO screen via its own movement/waypoint path rather than
+     *  spawning already inside the tolerance. Once it's genuinely been seen, the ordinary rule
+     *  applies again: wandering back out (by design, or by running off the bottom/top/either side)
+     *  removes it exactly as before. */
     @Override
     public boolean isOffScreen() {
         if (lifecycleState == LifecycleState.DYING) return isDeathAnimationFinished();
@@ -161,8 +179,13 @@ public class GenericEnemy extends BaseEnemy {
         if (firing instanceof SelfDestructFiring && ((SelfDestructFiring)firing).isTriggered()) return true;
         if (movement != null && movement.isFinished()) return true;
 
-        return sprite.getY() < -sprite.getHeight() * 2f || sprite.getY() > worldHeight + sprite.getHeight() * 2f ||
+        boolean outsideBounds = sprite.getY() < -sprite.getHeight() * 2f || sprite.getY() > worldHeight + sprite.getHeight() * 2f ||
                sprite.getX() + sprite.getWidth() < -sprite.getWidth() * 2f || sprite.getX() > worldWidth + sprite.getWidth() * 2f;
+        if (!outsideBounds) {
+            hasBeenOnScreen = true;
+            return false;
+        }
+        return hasBeenOnScreen;
     }
 
     @Override

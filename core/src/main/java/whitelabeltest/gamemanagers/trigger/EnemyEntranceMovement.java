@@ -5,6 +5,7 @@ import com.badlogic.gdx.math.Circle;
 import com.badlogic.gdx.math.Rectangle;
 import com.badlogic.gdx.utils.Array;
 import whitelabeltest.enemy.movementpatterns.MovementPattern;
+import whitelabeltest.enemy.movementpatterns.SquadronMovement;
 import whitelabeltest.enemy.movementpatterns.WaypointPathMovement;
 
 /** Trigger.enterFromAbove's actual mechanism: spawn this enemy off-screen, above both the play area
@@ -35,7 +36,33 @@ public final class EnemyEntranceMovement {
      *  "pop in at the arrival point" spawn (see Trigger.spawnLead's own doc on that distinction),
      *  which is exactly the bug this was reported as. */
     public static float spawnY(Trigger trigger, float worldHeight, float spriteHeight) {
-        return Math.max(trigger.y, worldHeight) + Math.max(spriteHeight, 0.5f);
+        return spawnY(trigger, worldHeight, spriteHeight, null);
+    }
+
+    /** Same as the 3-arg overload above, but ALSO safe against a WaypointPathMovement `afterEntrance`
+     *  (looking through one SquadronMovement wrapper, same as build() below) whose own first leg's
+     *  target sits at or above trigger.y - which the plain trigger.y-only computation above knows
+     *  nothing about. That path's initFrom() curves straight from wherever this returns to that leg's
+     *  own absolute target (see WaypointPathMovement.getLegs()'s own doc), so the spawn point has to
+     *  clear THAT target specifically, not just trigger.y/worldHeight, or the "entrance" ends up
+     *  climbing toward/past that already-near-the-top target instead of descending onto screen -
+     *  exactly what a wave's own waveRotation can do to a movementPattern authored to arrive near
+     *  worldHeight already (see TriggerManager.fireWave()'s own doc on registerShiftedClone(), which
+     *  shifts that target's Y by the formation's own rotated per-member spread with no awareness of
+     *  where the off-screen spawn point itself lands). A non-WaypointPathMovement afterEntrance (or
+     *  null) behaves exactly like the 3-arg overload - only this specific case ever differs. */
+    public static float spawnY(Trigger trigger, float worldHeight, float spriteHeight, MovementPattern afterEntrance) {
+        float arrivalY = trigger.y;
+        // See Trigger.waveSpawnLift's own doc - ADDED to this member's own trigger.y (== its own
+        // slot.y), never replacing it, so every member keeps its own relative Y offset from its
+        // squadmates - the same offset its real (shifted) waypoint target has from theirs - instead of
+        // collapsing to one shared absolute height and losing the formation's own vertical shape.
+        if (!Float.isNaN(trigger.waveSpawnLift)) arrivalY += trigger.waveSpawnLift;
+        MovementPattern leader = afterEntrance instanceof SquadronMovement squadron ? squadron.getLeader() : afterEntrance;
+        if (leader instanceof WaypointPathMovement waypointPath && waypointPath.getLegs().size > 0) {
+            arrivalY = Math.max(arrivalY, waypointPath.getLegs().first().targetY);
+        }
+        return Math.max(arrivalY, worldHeight) + Math.max(spriteHeight, 0.5f);
     }
 
     /** The synthetic single-leg WaypointPathMovement carrying this spawn from spawnY() straight down
@@ -72,9 +99,32 @@ public final class EnemyEntranceMovement {
      * entrance-spawned enemy with its own waypoint path actually starts flying it once it arrives
      * instead of freezing there forever (WaypointPathMovement, including the entrance leg's own,
      * never reports isFinished()==true on its own - see that class's own doc - so nothing would
-     * otherwise ever move this spawn on again after this method's returned pattern took over). */
+     * otherwise ever move this spawn on again after this method's returned pattern took over).
+     *
+     * A WaypointPathMovement `afterEntrance` is the one exception: it's returned UNWRAPPED, with no
+     * synthetic entrance leg at all. That path's own WaypointPathMovement.initFrom() already reads
+     * the sprite's real spawn position - already relocated off-screen by spawnY() (see
+     * GenericEnemy.initWithDefinition(), which applies that override independently of this method) -
+     * as its own first control point the first time it updates, so it curves in from off-screen using
+     * its own authored tension/orientation from the very first waypoint. Chaining a straight-line
+     * entrance leg in front of it (this method's ONLY behavior before this was added) instead read as
+     * two disconnected motions: a hard vertical drop to the plain (non-entrance) spawn point, then a
+     * sudden peel-off into the path's own shape once the entrance leg settled - "shoots down the
+     * screen" before it ever starts the path it was actually authored to fly.
+     *
+     * Looks through ONE SquadronMovement wrapper (see TriggerManager.fireWave()'s own "keep
+     * formation" doc - a wave member's afterEntrance is a SquadronMovement wrapping the real leader,
+     * never a bare WaypointPathMovement, even when that leader IS one) to find the same case: the
+     * wrapped leader's initFrom() still reads the sprite's real (off-screen, formation-offset-
+     * translated - see SquadronMovement.update()'s own translate-then-leader-then-translate-back
+     * shape) spawn position exactly the same way an unwrapped one would, so it's exactly as
+     * self-sufficient here as the plain case above - chaining a synthetic entrance leg in front of a
+     * SQUADRON wrapping a waypoint path reproduced the exact same "shoots down, then peels off" bug
+     * this method was written to fix, just one layer removed from where the original fix looked. */
     public static MovementPattern build(Trigger trigger, float cameraSpeed, float worldHeight, float spriteWidth, float spriteHeight, MovementPattern afterEntrance) {
         if (!trigger.enterFromAbove || Float.isNaN(trigger.y)) return null;
+        MovementPattern effectiveLeader = afterEntrance instanceof SquadronMovement squadron ? squadron.getLeader() : afterEntrance;
+        if (effectiveLeader instanceof WaypointPathMovement) return afterEntrance;
         float effectiveLead = Math.min(trigger.spawnLead, trigger.distance);
         if (effectiveLead <= 0f) return null;
 

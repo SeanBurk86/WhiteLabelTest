@@ -30,7 +30,16 @@ public final class PatternIds {
     }
 
     public static List<String> explosionPatternIds() {
-        Path path = Path.of("data/explosion_patterns.json");
+        return listJsonIds(Path.of("data/explosion_patterns.json"));
+    }
+
+    /** Bullet ids for FiringPatternDef.bulletId's own combo - same "one array, each entry carrying
+     *  its own id" shape as explosion_patterns.json above (see BulletDef), just a different file. */
+    public static List<String> bulletIds() {
+        return listJsonIds(Path.of("data/bullets.json"));
+    }
+
+    private static List<String> listJsonIds(Path path) {
         if (!Files.exists(path)) return new ArrayList<>();
         try {
             String text = Files.readString(path);

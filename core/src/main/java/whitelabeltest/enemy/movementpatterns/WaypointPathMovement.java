@@ -81,11 +81,27 @@ public class WaypointPathMovement implements MovementPattern {
 
     private WaypointCue pendingCue;
 
+    // Accumulated MovementPattern.applyGroundScroll() offset - see that method's own doc on why a
+    // ground enemy on this pattern needs it added into finalY below rather than relying on
+    // BaseEnemy's own sprite.translate(), which this class's own setCenterY() call would otherwise
+    // silently overwrite (and thus discard) the very next update().
+    private float groundScrollOffsetY = 0f;
+
     public WaypointPathMovement(Array<Leg> legs, boolean closePath, float globalSpeed) {
         this.legs = legs;
         this.closePath = closePath;
         this.globalSpeed = globalSpeed > 0 ? globalSpeed : 1f;
     }
+
+    /** This path's own authored legs, in order - see EnemyEntranceMovement.spawnY()'s own doc on why
+     *  it needs legs.first().targetY: this pattern's initFrom() starts from wherever the sprite
+     *  actually spawns and curves straight to that first leg's own absolute target, so the off-screen
+     *  entrance spawn point has to sit safely above THAT target specifically, not just above
+     *  trigger.y/worldHeight - a target already authored close to worldHeight (or pushed there by a
+     *  wave's own rotation - see TriggerManager.fireWave()'s own doc) can otherwise land AT OR ABOVE
+     *  the spawn point computed from trigger.y alone, sending the entrance climbing further off-screen
+     *  instead of descending onto it. */
+    public Array<Leg> getLegs() { return legs; }
 
     private void initFrom(Sprite sprite) {
         points = new Vector2[legs.size + 1];
@@ -134,7 +150,7 @@ public class WaypointPathMovement implements MovementPattern {
         float evalT = segmentIndex + Math.min(localT, 1f);
         WaypointSpline.evaluate(tempPos, points, tensions, closePath, evalT);
         float finalX = tempPos.x;
-        float finalY = inverseMovement ? worldHeight - tempPos.y : tempPos.y;
+        float finalY = (inverseMovement ? worldHeight - tempPos.y : tempPos.y) + groundScrollOffsetY;
         sprite.setCenterX(finalX);
         sprite.setCenterY(finalY);
         rectangle.setPosition(sprite.getX(), sprite.getY());
@@ -229,10 +245,16 @@ public class WaypointPathMovement implements MovementPattern {
     }
 
     @Override
+    public void applyGroundScroll(float dy) {
+        groundScrollOffsetY += dy;
+    }
+
+    @Override
     public void reset() {
         initialized = false;
         pathComplete = false;
         pendingCue = null;
+        groundScrollOffsetY = 0f;
     }
 
     @Override

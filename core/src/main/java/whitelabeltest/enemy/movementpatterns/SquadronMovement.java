@@ -15,6 +15,12 @@ public class SquadronMovement implements MovementPattern {
         this.offsetY = offsetY;
     }
 
+    /** The wrapped pattern this formation's shape/timing actually comes from - see
+     *  EnemyEntranceMovement.build()'s own doc on why it needs to look through a Squadron wrapper
+     *  to find a WaypointPathMovement leader, the same way it already recognizes one at the top
+     *  level. */
+    public MovementPattern getLeader() { return leader; }
+
     @Override
     public void update(float delta, Sprite sprite, Rectangle rectangle, float worldWidth, float worldHeight, Circle playerHitbox, boolean inverseMovement) {
         sprite.translate(-offsetX, -offsetY);

@@ -8,11 +8,11 @@ import javafx.scene.control.ComboBox;
 import javafx.scene.control.ScrollPane;
 import javafx.scene.control.Separator;
 import javafx.scene.control.TextArea;
-import javafx.scene.control.TextField;
 import javafx.scene.layout.HBox;
 import javafx.scene.layout.VBox;
 import whitelabeltest.enemy.EnemyDefinition;
 import whitelabeltest.enemy.MovementPatternDef;
+import whitelabeltest.gamemanagers.spawning.StageDefinition;
 import whitelabeltest.gamemanagers.trigger.Condition;
 import whitelabeltest.gamemanagers.trigger.Trigger;
 
@@ -82,6 +82,8 @@ public class PropertiesPanel extends ScrollPane {
     // section - see refreshMovementPathBox() - when a waypoint is selected/edited directly on the
     // canvas, without blowing away the rest of this panel's scroll position/fields.
     private final VBox movementPathBox = new VBox(6);
+    // Same "persistent, rebuilt in place" reasoning as movementPathBox - see refreshWaveBox().
+    private final VBox waveBox = new VBox(6);
     private Trigger trigger;
 
     public PropertiesPanel(StageLibrary library, StageCanvas canvas) {
@@ -324,7 +326,7 @@ public class PropertiesPanel extends ScrollPane {
         // type at all, so this trigger's own movementPattern is the sole source, usually authored
         // via the "Movement Path" section below rather than picked from this combo directly.
         root.getChildren().add(comboRow("Movement pattern", withBlank(PatternIds.movementPatternIds()), trigger.movementPattern,
-            v -> { trigger.movementPattern = v.isEmpty() ? null : v; onEdited(); }));
+            v -> { trigger.movementPattern = v.isEmpty() ? null : v; onEdited(); refreshWaveBox(); }));
         root.getChildren().add(comboRow("Firing pattern override", withBlank(PatternIds.firingPatternIds()), trigger.firingPattern,
             v -> { trigger.firingPattern = v.isEmpty() ? null : v; onEdited(); }));
         root.getChildren().add(comboRow("Guaranteed powerup", List.of("", "1", "2", "3"),
@@ -335,6 +337,10 @@ public class PropertiesPanel extends ScrollPane {
         root.getChildren().add(new Separator());
         root.getChildren().add(movementPathBox);
         refreshMovementPathBox();
+
+        root.getChildren().add(new Separator());
+        root.getChildren().add(waveBox);
+        refreshWaveBox();
     }
 
     /** Rebuilds the "Movement Path" section for the currently-shown enemy-spawn trigger - resolves
@@ -356,21 +362,20 @@ public class PropertiesPanel extends ScrollPane {
 
         if (pattern == null) {
             movementPathBox.getChildren().add(sectionLabel("No movement pattern resolved for this spawn."));
-            HBox row = new HBox(6);
-            TextField idField = new TextField();
-            idField.setPromptText("NewPatternId");
             Button create = new Button("Create Path");
             create.setOnAction(e -> {
-                String id = idField.getText().trim();
-                if (id.isEmpty() || canvas.getPatternLibrary().exists(id)) return;
+                StageDefinition stageDef = canvas.getDocument().getStageDefinition();
+                String hint = (stageDef != null && stageDef.id != null ? stageDef.id + "_" : "")
+                    + (trigger.type != null ? trigger.type : "path");
+                String id = canvas.getPatternLibrary().uniqueId(hint);
                 canvas.getPatternLibrary().save(canvas.getPatternLibrary().createNew(id));
                 trigger.movementPattern = id;
                 onEdited();
                 canvas.setPathEditTrigger(trigger);
                 refreshMovementPathBox();
+                refreshWaveBox();
             });
-            row.getChildren().addAll(idField, create);
-            movementPathBox.getChildren().add(row);
+            movementPathBox.getChildren().add(create);
             return;
         }
 
@@ -405,23 +410,42 @@ public class PropertiesPanel extends ScrollPane {
         movementPathBox.getChildren().add(toggle);
         if (!editingThis) return;
 
+        // From here on, edit canvas's own cached pattern (see StageCanvas.getPathEditPattern()'s own
+        // doc) instead of the `pattern` reloaded from disk above - that reload is only good for the
+        // "what's resolved right now" checks already done above it; mutating IT would silently be
+        // thrown away on the very next refresh, which is why every field below used to look like it
+        // needed a canvas click (landing on the correctly-live canvas.getSelectedPathPoint()) before
+        // an edit would actually stick.
+        MovementPatternDef live = canvas.getPathEditPattern();
+        final MovementPatternDef livePattern = live != null ? live : pattern;
+
         movementPathBox.getChildren().add(sectionLabel(
             "Click the stage to add a point. Drag a point to move it. Click a point to select it."));
 
         movementPathBox.getChildren().add(new Separator());
         movementPathBox.getChildren().add(sectionLabel("Path Options"));
-        movementPathBox.getChildren().add(numberRow("Global speed", pattern.globalSpeed, v -> {
-            pattern.globalSpeed = v; canvas.notifyPathEditChanged();
+        movementPathBox.getChildren().add(numberRow("Global speed", livePattern.globalSpeed, v -> {
+            livePattern.globalSpeed = v; canvas.notifyPathEditChanged();
         }));
-        movementPathBox.getChildren().add(FormControls.checkBox("Close path (loop)", pattern.closePath, v -> {
-            pattern.closePath = v; canvas.refreshPathPreviews(); canvas.notifyPathEditChanged();
+        movementPathBox.getChildren().add(FormControls.checkBox("Close path (loop)", livePattern.closePath, v -> {
+            livePattern.closePath = v; canvas.refreshPathPreviews(); canvas.notifyPathEditChanged();
         }));
-        movementPathBox.getChildren().add(FormControls.checkBox("Flip X", pattern.flipX, v -> {
-            pattern.flipX = v; canvas.refreshPathPreviews(); canvas.notifyPathEditChanged();
+        movementPathBox.getChildren().add(FormControls.checkBox("Flip X", livePattern.flipX, v -> {
+            livePattern.flipX = v; canvas.refreshPathPreviews(); canvas.notifyPathEditChanged();
         }));
-        movementPathBox.getChildren().add(FormControls.checkBox("Flip Y", pattern.flipY, v -> {
-            pattern.flipY = v; canvas.refreshPathPreviews(); canvas.notifyPathEditChanged();
+        movementPathBox.getChildren().add(FormControls.checkBox("Flip Y", livePattern.flipY, v -> {
+            livePattern.flipY = v; canvas.refreshPathPreviews(); canvas.notifyPathEditChanged();
         }));
+
+        movementPathBox.getChildren().add(new Separator());
+        movementPathBox.getChildren().add(sectionLabel("Waypoints"));
+        if (livePattern.patterns != null) {
+            int index = 1;
+            for (MovementPatternDef waypoint : livePattern.patterns) {
+                if (!"MoveToPoint".equals(waypoint.type)) continue;
+                movementPathBox.getChildren().add(buildWaypointListRow(waypoint, index++));
+            }
+        }
 
         MovementPatternDef selected = canvas.getSelectedPathPoint();
         if (selected != null) {
@@ -489,9 +513,132 @@ public class PropertiesPanel extends ScrollPane {
         Button save = new Button("Save Path");
         save.setOnAction(e -> {
             canvas.savePathEditPattern();
-            movementPathBox.getChildren().add(sectionLabel("Saved " + pattern.id + ".json"));
+            movementPathBox.getChildren().add(sectionLabel("Saved " + livePattern.id + ".json"));
         });
         movementPathBox.getChildren().add(save);
+    }
+
+    /** Rebuilds the "Wave" section for the currently-shown enemy-spawn trigger - see Trigger.
+     *  waveShape's own doc: null (the blank combo entry) means this trigger just spawns its one
+     *  enemy normally, same as before this feature existed; picking a shape expands the rest of the
+     *  section around it. Mirrors refreshMovementPathBox()'s own "clear and rebuild in place" style -
+     *  the two sections stay independently usable together now (see TriggerManager.fireWave()'s own
+     *  doc): the Movement Path section above still authors trigger.movementPattern completely
+     *  normally, waveShape/orientation/etc. just decide WHERE/WHEN each copy of that same spawn
+     *  (movement pattern included) lands, rather than one silently disabling the other. Has no
+     *  canvas-driven refresh triggers of its own to wire up (nothing here is editable by clicking the
+     *  canvas directly the way a waypoint is), so unlike refreshMovementPathBox() this is only ever
+     *  called from buildEnemySpawnFields() and its own field callbacks below. */
+    private void refreshWaveBox() {
+        waveBox.getChildren().clear();
+        if (trigger == null || !"enemy".equals(actionKindKey(trigger))) return;
+
+        waveBox.getChildren().add(sectionLabel("Wave"));
+        waveBox.getChildren().add(comboRow("shape", withBlank(List.of("point", "circle", "plane", "triangle")),
+            trigger.waveShape == null ? "" : trigger.waveShape,
+            v -> {
+                trigger.waveShape = v.isEmpty() ? null : v;
+                onEdited();
+                refreshWaveBox();
+            }));
+
+        if (trigger.waveShape == null) {
+            waveBox.getChildren().add(sectionLabel("No wave - this trigger just spawns its one enemy normally."));
+            return;
+        }
+
+        VBox shapeFields = new VBox(6);
+        rebuildWaveShapeFields(shapeFields);
+        waveBox.getChildren().add(shapeFields);
+
+        // Rotates the whole shape's own layout around the anchor - see WaveSpawnPlanner.plan()'s own
+        // doc - independent of orientation (which only ever decides facing/movement direction, never
+        // where a member actually sits), so this stays effective regardless of hasOwnMovement below.
+        waveBox.getChildren().add(numberRow("rotation (deg)", trigger.waveRotation, v -> { trigger.waveRotation = v; onEdited(); }));
+
+        boolean hasOwnMovement = trigger.movementPattern != null && !trigger.movementPattern.isBlank();
+        waveBox.getChildren().add(sectionLabel(hasOwnMovement
+            ? "Every member flies its own copy of \"" + trigger.movementPattern + "\" (see Movement Path above) - orientation below is unused."
+            : "No movement pattern set above, so orientation below picks each member's straight-line direction instead."));
+        waveBox.getChildren().add(comboRow("orientation",
+            List.of("in front", "to the center", "to the player", "to the exterior"), trigger.waveOrientation,
+            v -> { trigger.waveOrientation = v; onEdited(); }));
+
+        waveBox.getChildren().add(new Separator());
+        waveBox.getChildren().add(sectionLabel("Timing"));
+        waveBox.getChildren().add(numberRow("start delay (sec)", trigger.waveStartDelay, v -> { trigger.waveStartDelay = v; onEdited(); }));
+        waveBox.getChildren().add(numberRow("spawn interval (sec)", trigger.waveSpawnInterval, v -> { trigger.waveSpawnInterval = v; onEdited(); }));
+        waveBox.getChildren().add(FormControls.checkBox("keep formation", trigger.waveKeepFormation, v -> { trigger.waveKeepFormation = v; onEdited(); }));
+
+        if (!hasOwnMovement) {
+            waveBox.getChildren().add(new Separator());
+            waveBox.getChildren().add(numberRow("speed", trigger.waveSpeed, v -> { trigger.waveSpeed = v; onEdited(); }));
+        }
+    }
+
+    /** Shape-specific rows for whichever trigger.waveShape is currently selected - rebuilt from
+     *  scratch on every shape change (see refreshWaveBox()'s own doc on why nothing is preserved
+     *  across shapes) rather than just adding a new row for the field the new shape's own combo
+     *  callback below calls this again. */
+    private void rebuildWaveShapeFields(VBox shapeFields) {
+        shapeFields.getChildren().clear();
+        switch (trigger.waveShape) {
+            case "circle" -> {
+                shapeFields.getChildren().add(numberRow("width", trigger.waveWidth, v -> { trigger.waveWidth = v; onEdited(); }));
+                shapeFields.getChildren().add(numberRow("height", trigger.waveHeight, v -> { trigger.waveHeight = v; onEdited(); }));
+                shapeFields.getChildren().add(numberRow("start angle", trigger.waveStartAngle, v -> { trigger.waveStartAngle = v; onEdited(); }));
+                shapeFields.getChildren().add(numberRow("end angle", trigger.waveEndAngle, v -> { trigger.waveEndAngle = v; onEdited(); }));
+                shapeFields.getChildren().add(numberRow("circle offset", trigger.waveCircleOffset, v -> { trigger.waveCircleOffset = v; onEdited(); }));
+                shapeFields.getChildren().add(numberRow("number of spawns", trigger.waveNumberOfSpawns, v -> { trigger.waveNumberOfSpawns = Math.round(v); onEdited(); }));
+            }
+            case "plane" -> {
+                shapeFields.getChildren().add(numberRow("width", trigger.waveWidth, v -> { trigger.waveWidth = v; onEdited(); }));
+                shapeFields.getChildren().add(numberRow("height", trigger.waveHeight, v -> { trigger.waveHeight = v; onEdited(); }));
+                shapeFields.getChildren().add(numberRow("lines", trigger.waveLines, v -> { trigger.waveLines = Math.round(v); onEdited(); }));
+                shapeFields.getChildren().add(numberRow("columns", trigger.waveColumns, v -> { trigger.waveColumns = Math.round(v); onEdited(); }));
+            }
+            case "triangle" -> {
+                shapeFields.getChildren().add(numberRow("width", trigger.waveWidth, v -> { trigger.waveWidth = v; onEdited(); }));
+                shapeFields.getChildren().add(numberRow("height", trigger.waveHeight, v -> { trigger.waveHeight = v; onEdited(); }));
+                shapeFields.getChildren().add(numberRow("columns", trigger.waveColumns, v -> { trigger.waveColumns = Math.round(v); onEdited(); }));
+            }
+            default -> // "point"
+                shapeFields.getChildren().add(numberRow("number of spawns", trigger.waveNumberOfSpawns, v -> { trigger.waveNumberOfSpawns = Math.round(v); onEdited(); }));
+        }
+    }
+
+    /** One row of the "Waypoints" list - every point on the path being edited, each with its own
+     *  editable X/Y right here in the sidebar rather than requiring a canvas click first (that click-
+     *  to-select still works too, and drives the same canvas.selectPathPoint() this row's own
+     *  "Select" button does - see StageCanvas.selectPathPoint(MovementPatternDef)). The fuller field
+     *  set (speed/tension/orientation/sound/weapon-set) stays exclusive to "Selected Waypoint" below,
+     *  reached via Select, so this list doesn't turn into an unreadable wall of fields per point. */
+    private VBox buildWaypointListRow(MovementPatternDef waypoint, int index) {
+        boolean isSelected = waypoint == canvas.getSelectedPathPoint();
+        VBox box = new VBox(4);
+        box.setStyle("-fx-background-color: " + (isSelected ? "#33342f" : "#26272c") + "; -fx-padding: 6; -fx-background-radius: 6;");
+
+        HBox header = new HBox(6, sectionLabel("Point " + index));
+        header.setStyle("-fx-alignment: center-left;");
+        Button select = new Button(isSelected ? "Selected" : "Select");
+        select.setDisable(isSelected);
+        select.setOnAction(e -> { canvas.selectPathPoint(waypoint); refreshMovementPathBox(); });
+        Button delete = new Button("Delete");
+        delete.setOnAction(e -> {
+            canvas.selectPathPoint(waypoint);
+            canvas.deleteSelectedPathPoint();
+            refreshMovementPathBox();
+        });
+        header.getChildren().addAll(select, delete);
+
+        box.getChildren().add(header);
+        box.getChildren().add(numberRow("X", waypoint.targetX, v -> {
+            waypoint.targetX = v; canvas.refreshPathEditPositions(); canvas.notifyPathEditChanged();
+        }));
+        box.getChildren().add(numberRow("Y", waypoint.targetY, v -> {
+            waypoint.targetY = v; canvas.refreshPathEditPositions(); canvas.notifyPathEditChanged();
+        }));
+        return box;
     }
 
     // "path"/"player"/"fixed" - see MovementPatternDef.orientation's own doc.

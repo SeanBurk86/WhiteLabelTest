@@ -28,6 +28,19 @@ public interface MovementPattern {
      *  that's always "enough" to reach its true settled position other than actually reaching it. */
     default boolean isSettled() { return false; }
 
+    /** Folds `dy` (BaseEnemy.applyGroundScroll's groundScrollSpeed*delta for this frame) into this
+     *  pattern's OWN notion of where it is, for a pattern that sets the sprite's position outright
+     *  from its own internal state each update() (WaypointPathMovement/SplineMovement, both anchored
+     *  to a spawn-time-fixed curve) rather than nudging it via sprite.translate() the way every other
+     *  pattern does. A translate()-based pattern needs no override here: BaseEnemy's own
+     *  sprite.translate(0, dy) (still called unconditionally alongside this) already accumulates
+     *  correctly frame over frame for those, since each update() adds to wherever the sprite already
+     *  is rather than overwriting it - see applyGroundScroll()'s own doc on why an absolute-set
+     *  pattern's update() call the NEXT frame would otherwise silently erase that translate the
+     *  instant it ran, discarding the ground scroll entirely rather than merely delaying it. Default
+     *  no-op covers every translate()-based pattern (the overwhelming majority). */
+    default void applyGroundScroll(float dy) {}
+
     /** A one-shot sound/weapon-set-swap event queued the moment a WaypointPathMovement reaches a
      *  waypoint that sets one - see MovementPatternDef's WaypointPath field docs and BaseEnemy's own
      *  handling. Returns null (and every OTHER pattern's default never overrides this) once nothing

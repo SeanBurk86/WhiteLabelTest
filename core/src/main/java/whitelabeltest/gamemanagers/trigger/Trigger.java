@@ -100,6 +100,79 @@ public class Trigger {
     public String swapWeaponId = null;
     public int weaponSlot = 0;
 
+    // --- Wave: expands this ONE enemy-spawn trigger (see `type` above) into a whole formation of
+    // that same enemy type at fire time, instead of just the one spawn - see WaveSpawnPlanner (the
+    // shape/orientation math) and TriggerManager.fireWave() (the actual staggered spawning). null
+    // (the default) means "no wave" - just the ordinary single spawn `type`/x/y/movementPattern/etc.
+    // already describe - every other wave* field below is meaningless without it. While a wave IS
+    // set, x/y become the wave's own ANCHOR/center point rather than a literal spawn position, and
+    // offsetX/offsetY are ignored (each member's own formation offset is computed from the shape
+    // instead). movementPattern is NOT ignored - if it's set (still authored/edited completely
+    // normally via PropertiesPanel's "Movement Path" section, waypoints included), every member
+    // reuses it as-is; only an UNSET movementPattern falls back to a straight line synthesized from
+    // waveSpeed/waveOrientation - see TriggerManager.fireWave()'s own doc for exactly how.
+    public String waveShape; // "point", "circle", "plane", "triangle"
+    // "in front", "to the center", "to the player", "to the exterior" - see
+    // WaveSpawnPlanner.computeAngle().
+    public String waveOrientation = "in front";
+    // point, circle
+    public int waveNumberOfSpawns = 4;
+    // circle, plane, triangle - world units (this stage's whole play area is ~9x12).
+    public float waveWidth = 3f;
+    public float waveHeight = 3f;
+    // circle
+    public float waveStartAngle = 0f;
+    public float waveEndAngle = 360f;
+    public float waveCircleOffset = 0f;
+    // plane: waveLines is the count ACROSS THE WIDTH, waveColumns the count DOWN THE HEIGHT - see
+    // WaveSpawnPlanner.planeMembers()'s own doc on why those aren't named the other way round.
+    // triangle: waveColumns is the wide (back) row's count; total members =
+    // waveColumns*(waveColumns+1)/2 - see WaveSpawnPlanner.triangleMembers().
+    public int waveLines = 1;
+    public int waveColumns = 1;
+    // Real SECONDS after this trigger fires (NOT `distance` units - once a wave trigger fires, its
+    // members stagger out over real time regardless of whether the camera itself is even still
+    // moving) before the first/each subsequent member spawns - see TriggerManager's own pending-wave
+    // queue.
+    public float waveStartDelay = 0f;
+    public float waveSpawnInterval = 0f;
+    // True: every member holds the group's own rigid shape while moving - either an authored
+    // movementPattern's targets shifted per member, or (with none set) every member sharing the
+    // exact same synthesized direction - instead of each flying independently (an authored pattern
+    // reused verbatim, or each member's own per-slot angle) - see TriggerManager.fireWave()'s own
+    // doc for exactly how either case is built. "to the center"/"to the exterior" degenerate to
+    // "in front" for the synthesized-direction case specifically (a rigid body can't fly toward its
+    // own center) - see WaveSpawnPlanner.plan()'s own doc.
+    public boolean waveKeepFormation = false;
+    // Straight-line speed (world units/sec) for the movement this wave generates for each member -
+    // required for waveOrientation to actually produce visible motion.
+    public float waveSpeed = 3f;
+    // Degrees, standard math convention (matches MovementPatternDef.movementAngle - 0 = +X/right,
+    // 90 = +Y/up) - rotates the WHOLE shape's member positions around the anchor (trigger.x/y)
+    // before waveOrientation's own per-member facing is computed against them, so e.g. a "plane"
+    // that's normally a horizontal row can be turned into a vertical column, or any angle between,
+    // without reauthoring width/lines/columns - see WaveSpawnPlanner.plan(). 0 (the default) leaves
+    // every shape exactly as its own doc already describes it.
+    public float waveRotation = 0f;
+
+    // Runtime-only, never authored in JSON: for a wave member's synthetic entranceView (see
+    // TriggerManager.fireWave()), a single ADDITIVE lift - the SAME delta for every member of one
+    // wave - added to THIS member's own natural slot.y (never an absolute value replacing it). See
+    // EnemyEntranceMovement.spawnY()'s own doc for why this has to be a per-member-relative shift, not
+    // a shared absolute floor: this trigger's own base movementPattern shifts EVERY member's real
+    // waypoint target by that exact same member's own (slot.y - trigger.y), so target.y - slot.y is
+    // the SAME constant for every member regardless of the formation's own rotated shape - which means
+    // ONE shared additive lift, applied to each member's own already-different slot.y, simultaneously
+    // (a) clears every member's own target by the identical margin and (b) keeps every member's
+    // spawn-to-arrival Y difference from its squadmates EXACTLY what the formation's own shape says it
+    // should be, at every point along the flight, not just at the two endpoints - the earlier "one
+    // shared absolute ceiling" design this replaced instead collapsed every member's spawn Y to the
+    // SAME height, discarding the formation's own vertical shape at spawn entirely (holding it only in
+    // X) and letting it visibly shear open during the flight instead of staying rigid. NaN (the
+    // default, and always for a non-wave trigger) means "nothing to lift - fall back to the plain
+    // per-trigger computation alone", exactly the single-enemy behavior this field never touches.
+    public float waveSpawnLift = Float.NaN;
+
     // --- New action kinds this pass adds ---
 
     // Non-null: play this one-off sound (asset path relative to assets/) - see
