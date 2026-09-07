@@ -54,6 +54,19 @@ public class StageLibrary {
         return null;
     }
 
+    /** A fresh, blank EnemyDefinition with just its own id set - appended to the in-memory list
+     *  immediately (so it shows up in EnemyPalette/EnemyDefinitionPanel right away, same as every
+     *  other field a user edits there) but not written to data/enemies.json until saveEnemies() is
+     *  next called - same "new, unsaved until Save" convention FiringPatternLibrary.createNew()/
+     *  MovementPatternLibrary.createNew() already use for their own libraries. Caller's job to check
+     *  findEnemy(id) first - this never checks for a collision itself. */
+    public EnemyDefinition createEnemy(String id) {
+        EnemyDefinition def = new EnemyDefinition();
+        def.id = id;
+        enemies.add(def);
+        return def;
+    }
+
     /** Writes the current in-memory enemy list back to data/enemies.json - see
      *  EnemyDefinitionPanel, the only caller. Every EnemyDefinition instance here is shared by
      *  reference with whatever a placed Trigger's TriggerNode looked up (findEnemy()), so edits

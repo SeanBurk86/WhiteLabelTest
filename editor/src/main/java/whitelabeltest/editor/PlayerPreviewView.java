@@ -2,6 +2,8 @@ package whitelabeltest.editor;
 
 import com.badlogic.gdx.graphics.g2d.Sprite;
 import com.badlogic.gdx.math.Circle;
+import com.badlogic.gdx.utils.Array;
+import com.badlogic.gdx.utils.Json;
 import javafx.scene.image.Image;
 import javafx.scene.image.ImageView;
 import javafx.scene.layout.Pane;
@@ -15,6 +17,7 @@ import whitelabeltest.gamemanagers.background.ScrollingBackground;
 import whitelabeltest.gamemanagers.spawning.StageDefinition;
 import whitelabeltest.gamemanagers.trigger.EnemyEntranceMovement;
 import whitelabeltest.gamemanagers.trigger.Trigger;
+import whitelabeltest.gamemanagers.trigger.WaveSpawnPlanner;
 
 /** "Player View" tab - a true simulation (not a static snapshot) of what the player actually sees
  *  at a scrubbed distance: background art scrolled to its real position, and every already-spawned
@@ -66,6 +69,18 @@ public class PlayerPreviewView extends Pane {
         // centered. Capping max size to match pref/min stops the stretch.
         setMaxSize(WORLD_WIDTH * SCALE, WORLD_HEIGHT * SCALE);
         setStyle("-fx-background-color: #0c0d10;");
+        // A plain Pane never clips its own children to its layout bounds - so an enemy sitting
+        // above/below/beside the play area (any entrance-from-above spawn while its own descent is
+        // still in flight, especially a waveSpawnLift-boosted wave member - see stepMovement()'s own
+        // doc) was being drawn in full at its real, off-screen position in the surrounding
+        // EditorApp.wrapPlayerView() StackPane margin, rather than staying invisible there the way
+        // the real game's own fixed camera viewport naturally makes it (nothing outside the
+        // rendered framebuffer's bounds is ever drawn at all). Seeing it float there and only THEN
+        // cross into this black rectangle read as a sudden "pop in" the instant it arrived, not the
+        // gradual glide-in a clipped viewport actually shows. Sized to exactly this Pane's own
+        // fixed WORLD_WIDTH/HEIGHT*SCALE bounds - the same rectangle `background` below fills - so
+        // nothing outside it is ever visible, before OR after its entrance.
+        setClip(new Rectangle(WORLD_WIDTH * SCALE, WORLD_HEIGHT * SCALE));
         background.setWidth(WORLD_WIDTH * SCALE);
         background.setHeight(WORLD_HEIGHT * SCALE);
         background.setFill(Color.web("#0c0d10"));
@@ -121,28 +136,152 @@ public class PlayerPreviewView extends Pane {
             EnemyDefinition def = library.findEnemy(trigger.type);
             if (def == null || def.texture == null) continue;
 
-            // See EnemyEntranceMovement's own doc - the exact same computation TriggerManager.fire()
-            // (via GenericEnemy.initWithDefinition()) uses in the real game, so this preview can
-            // never drift out of sync with it the way this class's own background rendering once did
-            // against StageCanvas's independent reimplementation of the same formula. spawnY() now
-            // NEEDS the real sprite height (see its own doc on why a fixed margin was wrong), so the
-            // sprite has to be built first (at its ordinary arrival position) and then repositioned -
-            // and, same as GenericEnemy.initWithDefinition()'s own order, the movement pattern has to
-            // be resolved BEFORE spawnY() too, so a WaypointPathMovement's own first-leg target can
-            // raise the spawn point above itself, not just above trigger.y - see the 4-arg spawnY()
-            // overload's own doc.
-            Sprite sprite = buildSprite(def, trigger, trigger.y);
-            MovementPattern afterEntrance = resolveMovement(trigger, sprite);
-            if (trigger.enterFromAbove && !Float.isNaN(trigger.y)) {
-                sprite.setPosition(trigger.x, EnemyEntranceMovement.spawnY(trigger, (float) WORLD_HEIGHT, sprite.getHeight(), afterEntrance));
-            }
-            MovementPattern entrance = EnemyEntranceMovement.build(trigger, cameraSpeed, (float) WORLD_HEIGHT, sprite.getWidth(), sprite.getHeight(), afterEntrance);
-            MovementPattern movement = entrance != null ? entrance : afterEntrance;
             float groundScrollSpeed = resolveGroundScrollSpeed(def, stageDef);
-            if (!stepMovement(movement, sprite, elapsed, trigger.inverseMovement, def.isGround, groundScrollSpeed)) continue;
 
-            drawEnemySprite(def, sprite);
+            if (trigger.waveShape != null) {
+                drawWave(trigger, def, cameraSpeed, elapsed, groundScrollSpeed);
+            } else {
+                drawSpawn(trigger, def, loadPattern(trigger.movementPattern), trigger.inverseMovement, cameraSpeed, elapsed, groundScrollSpeed);
+            }
         }
+    }
+
+    /** Fans a wave trigger out into every WaveSpawnPlanner.plan() member and draws each one
+     *  independently, instead of the single anchor-point stand-in this used to draw - mirrors
+     *  TriggerManager.fireWave()'s own per-member movement resolution (registerShiftedClone() under
+     *  waveKeepFormation+an authored pattern, one shared synthesized angle under waveKeepFormation
+     *  alone via singleAnchorProbe(), or each member flying independently otherwise) and
+     *  computeWaveSpawnLift() - both duplicated locally (shiftedClone()/sharedFallbackAngle()/
+     *  computeWaveSpawnLift() below) since this class resolves movement from a loaded
+     *  MovementPatternDef object directly rather than through TriggerManager's PatternRegistry ids -
+     *  so an enterFromAbove wave's members clear the exact same off-screen spawn height here as they
+     *  do in real gameplay, the same reasoning EnemyEntranceMovement's own doc gives for sharing
+     *  spawnY()/build() between the two. Without this, a wave with an enterFromAbove member (e.g.
+     *  stage1's second IceSkull wave) could compute an anchor-only spawn/entrance that lands
+     *  off-screen or reports isFinished() prematurely, silently skipping the draw entirely even
+     *  though the underlying movement math was running fine. */
+    private void drawWave(Trigger trigger, EnemyDefinition def, float cameraSpeed, float elapsed, float groundScrollSpeed) {
+        Array<WaveSpawnPlanner.Slot> slots = WaveSpawnPlanner.plan(trigger, (float) WORLD_WIDTH / 2f, 1f);
+        if (slots.size == 0) return;
+
+        MovementPatternDef ownMovement = loadPattern(trigger.movementPattern);
+        boolean hasOwnMovement = ownMovement != null;
+        float fallbackAngle = trigger.waveKeepFormation && !hasOwnMovement ? sharedFallbackAngle(trigger) : 0f;
+        float waveSpawnLift = trigger.waveKeepFormation ? computeWaveSpawnLift(trigger, slots, ownMovement) : Float.NaN;
+
+        for (WaveSpawnPlanner.Slot slot : slots) {
+            MovementPatternDef memberDef;
+            if (trigger.waveKeepFormation) {
+                memberDef = hasOwnMovement ? shiftedClone(ownMovement, slot.x - trigger.x, slot.y - trigger.y) : straightDef(trigger.waveSpeed, fallbackAngle);
+            } else {
+                memberDef = hasOwnMovement ? ownMovement : straightDef(trigger.waveSpeed, slot.angleDeg);
+            }
+
+            // Same per-member entranceView shape TriggerManager.fireWave() builds - see that
+            // method's own doc on why entranceView.y is always this member's own true slot.y with
+            // no formation-wide adjustment, and why waveSpawnLift is the single additive delta that
+            // preserves the formation's real shape instead.
+            Trigger memberView = new Trigger();
+            memberView.x = slot.x;
+            memberView.y = slot.y;
+            memberView.enterFromAbove = trigger.enterFromAbove;
+            memberView.spawnLead = trigger.spawnLead;
+            memberView.distance = trigger.distance;
+            memberView.waveSpawnLift = waveSpawnLift;
+
+            drawSpawn(memberView, def, memberDef, trigger.inverseMovement, cameraSpeed, elapsed, groundScrollSpeed);
+        }
+    }
+
+    /** Builds, steps, and draws exactly one enemy sprite at `view`'s own x/y - shared by the
+     *  ordinary single-spawn path (view == the trigger itself) and drawWave()'s per-member loop
+     *  (view == a synthetic per-member entranceView). See EnemyEntranceMovement's own doc - the
+     *  exact same computation TriggerManager.fire()/fireWave() (via GenericEnemy.
+     *  initWithDefinition()) use in the real game, so this preview can never drift out of sync with
+     *  it the way this class's own background rendering once did against StageCanvas's independent
+     *  reimplementation of the same formula. spawnY() now NEEDS the real sprite height (see its own
+     *  doc on why a fixed margin was wrong), so the sprite has to be built first (at its ordinary
+     *  arrival position) and then repositioned - and, same as GenericEnemy.initWithDefinition()'s
+     *  own order, the movement pattern has to be resolved BEFORE spawnY() too, so a
+     *  WaypointPathMovement's own first-leg target can raise the spawn point above itself, not just
+     *  above view.y - see the 4-arg spawnY() overload's own doc.
+     *  @param inverseMovement always the SOURCE trigger's own field, never `view`'s (a wave's
+     *  synthetic per-member entranceView has no inverseMovement of its own) - matches
+     *  TriggerManager's dispatchPendingWaveSpawns() reading pending.source.inverseMovement rather
+     *  than the per-member entranceView. */
+    private void drawSpawn(Trigger view, EnemyDefinition def, MovementPatternDef movementDef, boolean inverseMovement,
+                            float cameraSpeed, float elapsed, float groundScrollSpeed) {
+        Sprite sprite = buildSprite(def, view, view.y);
+        MovementPattern afterEntrance = resolveMovement(movementDef, sprite);
+        if (view.enterFromAbove && !Float.isNaN(view.y)) {
+            sprite.setPosition(view.x, EnemyEntranceMovement.spawnY(view, (float) WORLD_HEIGHT, sprite.getHeight(), afterEntrance));
+        }
+        MovementPattern entrance = EnemyEntranceMovement.build(view, cameraSpeed, (float) WORLD_HEIGHT, sprite.getWidth(), sprite.getHeight(), afterEntrance);
+        MovementPattern movement = entrance != null ? entrance : afterEntrance;
+        if (!stepMovement(movement, sprite, elapsed, inverseMovement, def.isGround, groundScrollSpeed)) return;
+
+        drawEnemySprite(def, sprite);
+    }
+
+    /** Same degenerate-anchor probe TriggerManager.singleAnchorProbe() uses - asks WaveSpawnPlanner
+     *  for the angle it would compute for a single "point"-shape member sitting exactly at the
+     *  anchor, so every member of a waveKeepFormation wave with no authored movementPattern shares
+     *  the identical synthesized direction (a rigid body can't fly toward its own center) instead of
+     *  fanning out per-member the way the independent, non-formation case does. */
+    private float sharedFallbackAngle(Trigger trigger) {
+        Trigger probe = new Trigger();
+        probe.x = trigger.x;
+        probe.y = trigger.y;
+        probe.waveShape = "point";
+        probe.waveOrientation = trigger.waveOrientation;
+        probe.waveNumberOfSpawns = 1;
+        return WaveSpawnPlanner.plan(probe, (float) WORLD_WIDTH / 2f, 1f).first().angleDeg;
+    }
+
+    /** Deep-clones `source` (a Json round-trip) and shifts every absolute target coordinate found
+     *  anywhere in it by (dx, dy) - mirrors TriggerManager.registerShiftedClone()/shiftTargets()
+     *  exactly, minus the PatternRegistry synthetic-id registration that method also does: this
+     *  class hands a MovementPatternDef straight to PatternFactory.createMovement() rather than
+     *  resolving one by id, so there's nothing to register the clone under. */
+    private static MovementPatternDef shiftedClone(MovementPatternDef source, float dx, float dy) {
+        Json json = new Json();
+        MovementPatternDef clone = json.fromJson(MovementPatternDef.class, json.toJson(source, MovementPatternDef.class));
+        shiftTargets(clone, dx, dy);
+        return clone;
+    }
+
+    private static void shiftTargets(MovementPatternDef def, float dx, float dy) {
+        if (def == null) return;
+        if (!Float.isNaN(def.targetX)) def.targetX += dx;
+        if (!Float.isNaN(def.targetY)) def.targetY += dy;
+        if (def.patterns != null) for (MovementPatternDef sub : def.patterns) shiftTargets(sub, dx, dy);
+        shiftTargets(def.pattern, dx, dy);
+    }
+
+    /** A plain "Straight" MovementPatternDef - mirrors TriggerManager.registerStraight(), minus the
+     *  PatternRegistry registration for the same reason shiftedClone() skips it. */
+    private static MovementPatternDef straightDef(float speed, float angleDeg) {
+        MovementPatternDef def = new MovementPatternDef();
+        def.type = "Straight";
+        def.speed = speed;
+        def.movementAngle = angleDeg;
+        return def;
+    }
+
+    /** Mirrors TriggerManager.computeWaveSpawnLift() exactly (see that method's own doc for the
+     *  full reasoning) - takes the already-loaded `ownMovement` def directly rather than re-resolving
+     *  it from a PatternRegistry id. */
+    private float computeWaveSpawnLift(Trigger trigger, Array<WaveSpawnPlanner.Slot> slots, MovementPatternDef ownMovement) {
+        if (!trigger.enterFromAbove) return Float.NaN;
+        float minSlotY = Float.POSITIVE_INFINITY;
+        for (WaveSpawnPlanner.Slot slot : slots) minSlotY = Math.min(minSlotY, slot.y);
+        float lift = (float) WORLD_HEIGHT - minSlotY;
+
+        if (ownMovement != null && "WaypointPath".equals(ownMovement.type) && ownMovement.patterns != null && ownMovement.patterns.size > 0) {
+            float baseTargetY = ownMovement.patterns.first().targetY;
+            if (!Float.isNaN(baseTargetY)) lift = Math.max(lift, baseTargetY - trigger.y);
+        }
+        return lift;
     }
 
     /** Mirrors EntityManager.resolveGroundScrollSpeed()/GameController.loadStage()'s own resolution
@@ -191,10 +330,17 @@ public class PlayerPreviewView extends Pane {
         return sprite;
     }
 
-    private MovementPattern resolveMovement(Trigger trigger, Sprite sprite) {
-        String patternId = trigger.movementPattern;
-        MovementPatternDef def = (patternId != null && !patternId.isBlank() && patternLibrary.exists(patternId))
+    /** Resolves whichever pattern a trigger's own `movementPattern` id refers to, or null if it's
+     *  unset or doesn't resolve to a file that actually exists on disk - see
+     *  MovementPatternLibrary.resolveForTrigger()'s own doc (this takes a bare id instead of a
+     *  Trigger since drawWave()'s per-member callers need to resolve the SOURCE wave trigger's own
+     *  id once, up front, rather than per member). */
+    private MovementPatternDef loadPattern(String patternId) {
+        return (patternId != null && !patternId.isBlank() && patternLibrary.exists(patternId))
             ? patternLibrary.load(patternId) : null;
+    }
+
+    private MovementPattern resolveMovement(MovementPatternDef def, Sprite sprite) {
         return PatternFactory.createMovement(def, (float) WORLD_WIDTH, (float) WORLD_HEIGHT,
             sprite.getX() + sprite.getWidth() / 2f, Float.NaN, Float.NaN);
     }
@@ -213,21 +359,35 @@ public class PlayerPreviewView extends Pane {
      *  scrolling it toward - and eventually off - the bottom of the screen).
      *
      * Returns false once the pattern reports finished, OR the sprite goes off-screen (same bounds
-     * GenericEnemy.isOffScreen() checks) - checked INSIDE the loop, not just at the end, so stepping
-     * stops the instant the real game would have despawned this enemy rather than continuing to burn
-     * cycles on (and risk rendering) a pattern that happens to bring it back into view later, which
-     * the real game would never see either since the entity's already gone by then. Once isSettled()
-     * is true, movement.update() itself is skipped (it can only ever recompute the exact same
-     * position from here - see MovementPattern.isSettled()'s own doc) but the loop keeps running for
-     * a ground enemy (still applying drift/off-screen checks each step) and only truly breaks early
-     * once there's nothing left ANY further step could change - settled AND not ground. A fixed
-     * nominal player hitbox (bottom-center of the play area) stands in for the real player, since a
-     * scrub preview has no live player to aim a "player direction" orientation waypoint at. */
+     * GenericEnemy.isOffScreen() checks) AFTER having already been on-screen at least once - the
+     * same hasBeenOnScreen grace period that method itself applies (see its own doc): a spawn point
+     * that starts outside those bounds on purpose (any entrance-from-above enemy, and ESPECIALLY a
+     * waveSpawnLift-boosted wave member - see Trigger.waveSpawnLift's own doc on why every member
+     * shares one lift sized for the formation's LOWEST member, so every other member spawns even
+     * further above the tolerance) is never treated as "gone" for still being outside it during the
+     * one/several real frames its entrance movement needs to actually carry it down - only once
+     * it's genuinely been seen does wandering back out remove it, exactly as GenericEnemy's own
+     * check does. Without this grace, a wave member whose spawnY sits meaningfully above the
+     * single-spawn case's own (deliberately tight) margin - which every member but the formation's
+     * single lowest one does, by construction - got silently dropped after its very first simulated
+     * frame here, never drawn at all, even though the real game would have kept it alive the whole
+     * time its entrance was carrying it down. Checked INSIDE the loop, not just at the end, so
+     * stepping stops the instant the real game would have despawned this enemy (once truly gone,
+     * not just not-yet-arrived) rather than continuing to burn cycles on (and risk rendering) a
+     * pattern that happens to bring it back into view later, which the real game would never see
+     * either since the entity's already gone by then. Once isSettled() is true, movement.update()
+     * itself is skipped (it can only ever recompute the exact same position from here - see
+     * MovementPattern.isSettled()'s own doc) but the loop keeps running for a ground enemy (still
+     * applying drift/off-screen checks each step) and only truly breaks early once there's nothing
+     * left ANY further step could change - settled AND not ground. A fixed nominal player hitbox
+     * (bottom-center of the play area) stands in for the real player, since a scrub preview has no
+     * live player to aim a "player direction" orientation waypoint at. */
     private boolean stepMovement(MovementPattern movement, Sprite sprite, float elapsed, boolean inverseMovement,
                                   boolean isGround, float groundScrollSpeed) {
         Circle dummyPlayerHitbox = new Circle((float) WORLD_WIDTH / 2f, 1f, 0.3f);
         com.badlogic.gdx.math.Rectangle rect = new com.badlogic.gdx.math.Rectangle(sprite.getX(), sprite.getY(), sprite.getWidth(), sprite.getHeight());
         float simulateSeconds = Math.min(elapsed, MAX_SIMULATED_SECONDS);
+        boolean hasBeenOnScreen = false;
         for (float t = 0f; t < simulateSeconds; t += FIXED_DELTA) {
             if (movement.isFinished()) return false;
             boolean settled = movement.isSettled();
@@ -240,7 +400,12 @@ public class PlayerPreviewView extends Pane {
                 sprite.translate(0f, dy);
                 rect.setPosition(sprite.getX(), sprite.getY());
             }
-            if (isOffScreen(sprite)) return false;
+            boolean outsideBounds = isOffScreen(sprite);
+            if (!outsideBounds) {
+                hasBeenOnScreen = true;
+            } else if (hasBeenOnScreen) {
+                return false;
+            }
             if (settled && !isGround) break;
         }
         return !movement.isFinished();

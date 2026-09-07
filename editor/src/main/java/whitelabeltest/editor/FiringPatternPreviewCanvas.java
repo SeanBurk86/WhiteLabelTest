@@ -81,13 +81,18 @@ final class FiringPatternPreviewCanvas extends Canvas {
 
     /** One pattern's own running state (fire timer, and for Sequence/Combined, its children's own
      *  running state) - built fresh by rebuild() every time `def` changes, since a Sequence's
-     *  current stage/a leaf's shootTimer wouldn't mean anything against a differently-shaped tree. */
+     *  current stage/a leaf's shootTimer wouldn't mean anything against a differently-shaped tree.
+     *  `bursting`/`burstTimer`/`currentBurstShot` are BurstAimed-only - see stepBurstAimed()'s own
+     *  doc, which mirrors BurstAimedFiring's own identically-named fields exactly. */
     private static final class RunningPattern {
         FiringPatternDef def;
         float timer;
         float stageTime;
         int stageIndex;
         List<RunningPattern> children;
+        boolean bursting;
+        float burstTimer;
+        int currentBurstShot;
     }
 
     private final List<PreviewBullet> bullets = new ArrayList<>();
@@ -165,6 +170,9 @@ final class FiringPatternPreviewCanvas extends Canvas {
             r.children = new ArrayList<>();
             for (FiringPatternDef sub : def.patterns) r.children.add(buildRunning(sub));
         }
+        // Mirrors BurstAimedFiring's own constructor seeding shootTimer = phaseOffset - see
+        // stepBurstAimed()'s own doc on what that's for.
+        if ("BurstAimed".equals(def.type)) r.timer = def.phaseOffset;
         return r;
     }
 
@@ -254,7 +262,8 @@ final class FiringPatternPreviewCanvas extends Canvas {
                 r.timer += delta;
                 if (r.timer >= rate) { r.timer -= rate; spawnSineShot(d); }
             }
-            default -> { // Aimed, AimedAtPoint, QuarterCircle, BurstAimed, SelfDestruct, ExplodingAimed
+            case "BurstAimed" -> stepBurstAimed(r, d, delta);
+            default -> { // Aimed, AimedAtPoint, QuarterCircle, SelfDestruct, ExplodingAimed
                 float rate = d.fireRate > 0 ? d.fireRate : defaultRate(type);
                 r.timer += delta;
                 if (r.timer >= rate) { r.timer -= rate; spawnAimedFamily(d, type); }
@@ -266,18 +275,59 @@ final class FiringPatternPreviewCanvas extends Canvas {
         return switch (type) {
             case "SelfDestruct" -> 3.0f;
             case "ExplodingAimed" -> 2.0f;
-            case "BurstAimed" -> 1.2f;
             default -> 1.0f; // Aimed/AimedAtPoint/QuarterCircle
         };
+    }
+
+    // Mirrors BurstAimedFiring's own state machine exactly (see that class's own doc/fields:
+    // shootTimer -> r.timer, isBursting -> r.bursting, burstTimer/currentBurstShot identical) -
+    // unlike every other leaf type above, BurstAimed needed its OWN case rather than falling into
+    // spawnAimedFamily()'s generic "one shot every fireRate seconds" handling, since its entire
+    // authored purpose is firing BURST_COUNT aimed shots burstInterval seconds apart, then waiting
+    // fireRate seconds before the next burst - collapsing that to one shot per fireRate (this
+    // preview's previous behavior) silently dropped the burst - and with it def.burstInterval/
+    // def.phaseOffset, both authored/editable in FiringPatternFieldsEditor but never read anywhere
+    // in this file - entirely, making it look and behave just like a plain Aimed pattern.
+    private static final int BURST_AIMED_BURST_COUNT = 5;
+    private static final float BURST_AIMED_DEFAULT_INTERVAL = 0.15f;
+
+    private void stepBurstAimed(RunningPattern r, FiringPatternDef d, float delta) {
+        float fireRate = d.fireRate > 0 ? d.fireRate : defaultRate("BurstAimed");
+        float burstInterval = d.burstInterval > 0 ? d.burstInterval : BURST_AIMED_DEFAULT_INTERVAL;
+
+        if (!r.bursting) {
+            r.timer += delta;
+            if (r.timer >= fireRate) {
+                r.bursting = true;
+                r.timer = 0f;
+                r.currentBurstShot = 0;
+                r.burstTimer = burstInterval; // Fire first shot immediately - matches BurstAimedFiring.update().
+            }
+        }
+
+        if (r.bursting) {
+            r.burstTimer += delta;
+            if (r.burstTimer >= burstInterval) {
+                r.burstTimer = 0f;
+                // BurstAimedFiring.fireAimedShot() aims straight at the player hitbox with no
+                // targetOffsetX/Y support at all (unlike AimedFiring) - aimAngle(d) would silently
+                // apply an offset the real pattern never reads, so this aims raw instead.
+                float angle = (float) Math.toDegrees(Math.atan2(playerY - emitterY(d), playerX - emitterX(d)));
+                spawnStraight(d, angle, d.bulletSpeed > 0 ? d.bulletSpeed : 5f, d.bulletSize > 0 ? d.bulletSize : 0.25f);
+                r.currentBurstShot++;
+                if (r.currentBurstShot >= BURST_AIMED_BURST_COUNT) r.bursting = false;
+            }
+        }
     }
 
     // --- Spawners - each mirrors one FiringPattern subclass's own shape/timing (see
     // PatternFactory.createFiring()'s dispatch for the real formula each is modeled on) ----------
 
-    /** Aimed/AimedAtPoint/QuarterCircle/BurstAimed/SelfDestruct/ExplodingAimed all reduce to "one
-     *  or more straight shots on a fixed bearing, chosen once at spawn" for preview purposes -
+    /** Aimed/AimedAtPoint/QuarterCircle/SelfDestruct/ExplodingAimed all reduce to "one or more
+     *  straight shots on a fixed bearing, chosen once at spawn" for preview purposes -
      *  QuarterCircleFiring's own spread fan (see PatternFactory's "QuarterCircle" case) is the
-     *  only one of these that's actually a multi-bullet volley. */
+     *  only one of these that's actually a multi-bullet volley. BurstAimed is handled separately -
+     *  see stepBurstAimed()'s own doc for why it needed its own case instead. */
     private void spawnAimedFamily(FiringPatternDef d, String type) {
         float speed = d.bulletSpeed > 0 ? d.bulletSpeed : 5f;
         float size = d.bulletSize > 0 ? d.bulletSize : 0.25f;
