@@ -19,6 +19,12 @@ public class EnemyDefinition {
     // own movementPatternId - null there just means this particular spawn doesn't move).
     public boolean inverseMovement = false;
     public boolean rotateWithMovement = true;
+    // When true, this enemy's sprite continuously rotates to face the player's current position
+    // every frame, overriding both its movement pattern's own rotation and rotateWithMovement -
+    // see BaseEnemy.applyFacePlayer(). Independent of firing pattern; use it for an enemy whose
+    // art should visibly track/aim at the player even if its firing pattern isn't itself aimed
+    // (or to sell an aimed firing pattern with matching visuals).
+    public boolean facePlayer = false;
     public boolean isBoss = false;
     public boolean isGround = false;
     // Index (declaration order in the stage's backgroundLayers - see StageDefinition.

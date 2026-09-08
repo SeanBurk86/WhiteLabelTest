@@ -8,6 +8,7 @@ import com.badlogic.gdx.graphics.g2d.SpriteBatch;
 import com.badlogic.gdx.graphics.g2d.TextureRegion;
 import com.badlogic.gdx.math.Circle;
 import com.badlogic.gdx.math.Intersector;
+import com.badlogic.gdx.math.MathUtils;
 import com.badlogic.gdx.math.Rectangle;
 import com.badlogic.gdx.utils.Array;
 import whitelabeltest.enemy.bullets.EnemyBullet;
@@ -30,6 +31,9 @@ public abstract class BaseEnemy implements Enemy {
     protected float worldWidth, worldHeight;
     protected boolean invertMovement; // Added field to store inversion state
     protected boolean rotateWithMovement = true;
+    // See EnemyDefinition.facePlayer's own doc - applyFacePlayer() overrides whatever rotation the
+    // movement/rotateWithMovement logic above just set, every frame, while this is true.
+    protected boolean facePlayer = false;
 
     protected Animation<TextureRegion> animation;
     protected float animationTime = 0;
@@ -135,6 +139,7 @@ public abstract class BaseEnemy implements Enemy {
                 if (!rotateWithMovement) sprite.setRotation(0);
                 resolveMovementCue(audio);
             }
+            if (facePlayer) applyFacePlayer(playerHitbox);
             applyGroundScroll(delta, groundScrollSpeed);
             if (lifecycleTime >= spawnDuration) {
                 lifecycleState = LifecycleState.ACTIVE;
@@ -161,6 +166,7 @@ public abstract class BaseEnemy implements Enemy {
             if (!rotateWithMovement) sprite.setRotation(0);
             resolveMovementCue(audio);
         }
+        if (facePlayer) applyFacePlayer(playerHitbox);
         applyGroundScroll(delta, groundScrollSpeed);
 
         if (healthRegenPerSecond > 0f && health < maxHealth) {
@@ -232,6 +238,16 @@ public abstract class BaseEnemy implements Enemy {
     // however much it should have scrolled, with no waypoint/speed retuning able to fix a discard
     // baked into a different frame's overwrite). Their applyGroundScroll() override folds dy into
     // their OWN evaluated position instead, so it survives.
+    // Points the sprite at the player's current center, in the same "art faces up at rotation 0"
+    // convention every aimed bullet already uses (see AimedEnemyBullet.init()'s velocity.angleDeg()
+    // - 90) - so an enemy with EnemyDefinition.facePlayer set visually tracks the player exactly
+    // the way its bullets would if it also fired an aimed pattern.
+    private void applyFacePlayer(Circle playerHitbox) {
+        float dx = playerHitbox.x - (sprite.getX() + sprite.getWidth() / 2f);
+        float dy = playerHitbox.y - (sprite.getY() + sprite.getHeight() / 2f);
+        sprite.setRotation(MathUtils.atan2(dy, dx) * MathUtils.radiansToDegrees - 90f);
+    }
+
     private void applyGroundScroll(float delta, float groundScrollSpeed) {
         if (!isGround()) return;
         float dy = groundScrollSpeed * delta;
@@ -417,6 +433,7 @@ public abstract class BaseEnemy implements Enemy {
         guaranteedPowerup = null;
         invertMovement = false; // Reset on pool
         rotateWithMovement = true;
+        facePlayer = false;
         hasFiredOnce = false;
         pairResolved = false;
         pairGraceTimer = -1f;

@@ -102,6 +102,7 @@ public class EnemyDefinitionPanel extends ScrollPane {
         root.getChildren().add(checkBox("Is ground", def.isGround, v -> def.isGround = v));
         root.getChildren().add(checkBox("Inverse movement", def.inverseMovement, v -> def.inverseMovement = v));
         root.getChildren().add(checkBox("Rotate with movement", def.rotateWithMovement, v -> def.rotateWithMovement = v));
+        root.getChildren().add(checkBox("Face player", def.facePlayer, v -> def.facePlayer = v));
         root.getChildren().add(checkBox("Sealable", def.sealable, v -> def.sealable = v));
         root.getChildren().add(checkBox("Defiant", def.defiant, v -> def.defiant = v));
         root.getChildren().add(checkBox("Damageable by enemy bullets", def.damageableByEnemyBullets, v -> def.damageableByEnemyBullets = v));
