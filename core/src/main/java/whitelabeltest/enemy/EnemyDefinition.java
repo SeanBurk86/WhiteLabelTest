@@ -44,6 +44,13 @@ public class EnemyDefinition {
     // with different numbers of background layers.
     public int backgroundLayer = -1;
     public boolean sealable = false;
+    // When true, this enemy keeps firing even while its hitbox sits in the play area's bottom/
+    // left/right ceasefire zone, which normally holds an enemy's fire so it can't shoot into or
+    // past the boundary - see BaseEnemy's CEASEFIRE_ZONE_Y/CEASEFIRE_ZONE_X firing gate and
+    // Enemy.ignoresCeasefireZone(). For an enemy that's MEANT to live at an edge and shoot from
+    // there (e.g. a ground turret parked at the bottom of the screen, or a scripted emitter hugging
+    // a side wall), which would otherwise be silent for its whole life.
+    public boolean ignoreCeasefireZone = false;
     public boolean defiant = false;
     // See Enemy.isDamageableByEnemyBullets() - opts this enemy into being damaged by other
     // enemies' bullets (e.g. PowerCarrier as a bullet-streaming drill's target).

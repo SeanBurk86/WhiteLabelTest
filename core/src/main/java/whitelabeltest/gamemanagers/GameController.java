@@ -320,9 +320,19 @@ public class GameController implements Disposable {
             return;
         }
 
+        // A triggerFile-driven stage's Trigger.setSpeed action changes camera.getSpeed() (see
+        // TriggerManager.fire()), but that camera is purely a distance clock for arming triggers -
+        // see LevelCamera's own class doc - and was never itself wired to anything visual. Reading
+        // it back as a scale (see TriggerManager.getSpeedScale()) and feeding it into the ACTUAL
+        // on-screen scroll rates below is what makes a setSpeed(0) action (e.g. freezing the screen
+        // for a stationary boss fight) or a later setSpeed back to normal actually visible, rather
+        // than only affecting when later triggers arm. 1f (full speed, unmodified) for a stage with
+        // no triggerManager at all, so this is a no-op everywhere that doesn't use setSpeed.
+        float cameraSpeedScale = triggerManager != null ? triggerManager.getSpeedScale() : 1f;
+        background.setScrollSpeedScale(cameraSpeedScale);
         background.update(delta);
         entities.update(delta, input, assets, audio, weaponsDisabled, hyperAttackDisabled,
-            spawnScheduler != null ? spawnScheduler.getGroundScrollSpeed() : groundScrollSpeed, background);
+            (spawnScheduler != null ? spawnScheduler.getGroundScrollSpeed() : groundScrollSpeed) * cameraSpeedScale, background);
         if (spawnScheduler != null) {
             spawnScheduler.update(delta, entities, audio, input,
                 scoreManager.getEnemiesDestroyed(), scoreManager.getGemsCollected(), entities.getPlayer().getGrazePoints());
@@ -691,11 +701,21 @@ public class GameController implements Disposable {
      *  its own null-guards) so testing can start mid-level instead of always from distance 0. A
      *  slot id of null leaves that slot at whatever the constructor's placeholder WeaponLoadout gave
      *  it; startDistance <= 0 skips seeking entirely (already at distance 0 from the fresh
-     *  debugLoadStage() above, so nothing to do). */
-    public void quickStartAtStage(String stageId, float startDistance, String slotAWeaponId, String slotBWeaponId) {
+     *  debugLoadStage() above, so nothing to do).
+     *  @param slotALevel starting level for whichever weapon ends up in slot A
+     *  @param slotBLevel starting level for whichever weapon ends up in slot B - see
+     *  Main.QuickPlayConfig.slotALevel's own doc on why <= 0 means "leave it" rather than "set it
+     *  to 0": setSlotWeapon() above already brings a freshly-equipped weapon up to level 1 on its
+     *  own (same as an ordinary equip), so a real override only needs to run when the caller
+     *  actually asked for a SPECIFIC level - applied after setSlotWeapon() precisely so it
+     *  overrides that implicit level-1, not the other way around. */
+    public void quickStartAtStage(String stageId, float startDistance, String slotAWeaponId, String slotBWeaponId,
+                                   int slotALevel, int slotBLevel) {
         debugLoadStage(stageId);
         if (slotAWeaponId != null) entities.getPlayer().setSlotWeapon(0, slotAWeaponId);
         if (slotBWeaponId != null) entities.getPlayer().setSlotWeapon(1, slotBWeaponId);
+        if (slotAWeaponId != null && slotALevel > 0) entities.getPlayer().setWeaponLevel(slotAWeaponId, slotALevel);
+        if (slotBWeaponId != null && slotBLevel > 0) entities.getPlayer().setWeaponLevel(slotBWeaponId, slotBLevel);
         if (startDistance > 0) seekToTime(startDistance);
     }
 

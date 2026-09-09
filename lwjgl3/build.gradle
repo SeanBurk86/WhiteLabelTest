@@ -72,6 +72,8 @@ run {
   if (project.hasProperty('quickPlayDistance')) jvmArgs += "-DquickPlay.distance=${project.property('quickPlayDistance')}"
   if (project.hasProperty('quickPlaySlotA')) jvmArgs += "-DquickPlay.slotA=${project.property('quickPlaySlotA')}"
   if (project.hasProperty('quickPlaySlotB')) jvmArgs += "-DquickPlay.slotB=${project.property('quickPlaySlotB')}"
+  if (project.hasProperty('quickPlaySlotALevel')) jvmArgs += "-DquickPlay.slotALevel=${project.property('quickPlaySlotALevel')}"
+  if (project.hasProperty('quickPlaySlotBLevel')) jvmArgs += "-DquickPlay.slotBLevel=${project.property('quickPlaySlotBLevel')}"
 }
 
 jar {

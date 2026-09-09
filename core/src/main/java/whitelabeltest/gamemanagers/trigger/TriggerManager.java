@@ -72,6 +72,15 @@ public class TriggerManager {
     private final ObjectMap<String, EnemyDefinition> enemyDefinitions;
     private final ScrollingBackground background;
     private final LevelCamera camera;
+    // TriggerFile.cameraSpeed as authored (1f if the file didn't set one) - the "100%" reference
+    // point a Trigger.setSpeed action's absolute value is measured against, so GameController can
+    // turn camera.getSpeed() back into a relative scale (see getSpeedScale()) for driving the
+    // ACTUAL on-screen scroll (ScrollingBackground's per-layer scrollSpeed, ground-scroll enemies),
+    // which - unlike camera.position itself, see LevelCamera's own class doc - stays a fixed,
+    // independently-authored rate that was never wired to this class's distance clock until a
+    // Trigger.setSpeed action needed to visibly pause/resume it (e.g. freezing the screen for a
+    // stationary boss fight, then resuming at the same rate once it's destroyed).
+    private final float baseSpeed;
     private Array<Trigger> triggers;
     // Live text cues fired via a Trigger.text action - see fire()/getTextCues(). GameController
     // merges this alongside SpawnScheduler's own (wall-clock) textCues into one combined list for
@@ -185,11 +194,21 @@ public class TriggerManager {
             }
         });
         camera = new LevelCamera(worldWidth, initialSpeed);
+        baseSpeed = initialSpeed;
     }
 
     public LevelCamera getCamera() { return camera; }
     public Array<TextCue> getTextCues() { return liveTextCues; }
     public float getRealTime() { return realTime; }
+
+    /** camera.getSpeed() expressed as a fraction of baseSpeed - 1.0 at the stage's authored normal
+     *  pace, 0.0 while a Trigger.setSpeed(0) action has frozen it, etc. - see baseSpeed's own doc.
+     *  GameController multiplies this into ScrollingBackground's/ground-scroll enemies' own scroll
+     *  rates every frame so a setSpeed action visibly pauses/resumes the on-screen world, not just
+     *  this class's internal distance clock. baseSpeed <= 0 (camera speed authored as 0 or negative
+     *  to begin with) has no meaningful "normal pace" to scale against, so this just falls back to
+     *  camera.getSpeed() itself rather than dividing by zero/flipping sign. */
+    public float getSpeedScale() { return baseSpeed > 0f ? camera.getSpeed() / baseSpeed : camera.getSpeed(); }
 
     /** Debug-only (see UIManager.drawDebugTriggerInfo()): a short human-readable description of
      *  whichever gate is currently freezing the camera, or null if none is - lets a stuck stage be

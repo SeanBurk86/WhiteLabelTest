@@ -49,6 +49,10 @@ public interface Enemy extends Pool.Poolable {
     // Sealable enemies hold their fire while the player's graze halo overlaps their hitbox - see
     // BaseEnemy.update's firing gate.
     default boolean isSealable() { return false; }
+    // Enemies that ignore the ceasefire zone keep firing at the play area's bottom/left/right
+    // edges instead of holding their fire there - see BaseEnemy.update's firing gate and
+    // EnemyDefinition.ignoreCeasefireZone.
+    default boolean ignoresCeasefireZone() { return false; }
     // Defiant enemies take no damage until they've fired at least once - see
     // BaseEnemy.takeDamage()/hasFiredOnce.
     default boolean isDefiant() { return false; }

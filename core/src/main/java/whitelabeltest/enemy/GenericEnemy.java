@@ -222,6 +222,9 @@ public class GenericEnemy extends BaseEnemy {
     public boolean isSealable() { return def != null && def.sealable; }
 
     @Override
+    public boolean ignoresCeasefireZone() { return def != null && def.ignoreCeasefireZone; }
+
+    @Override
     public boolean isDefiant() { return def != null && def.defiant; }
 
     @Override

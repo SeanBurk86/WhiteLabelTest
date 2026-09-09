@@ -1,5 +1,6 @@
 package whitelabeltest.editor;
 
+import com.badlogic.gdx.utils.Json;
 import javafx.collections.FXCollections;
 import javafx.geometry.Insets;
 import javafx.scene.Scene;
@@ -14,10 +15,14 @@ import javafx.scene.paint.Color;
 import javafx.stage.Modality;
 import javafx.stage.Stage;
 import whitelabeltest.gamemanagers.spawning.StageDefinition;
+import whitelabeltest.player.PlayerDefinition;
 import whitelabeltest.player.WeaponLoadout;
 
 import java.io.IOException;
+import java.io.UncheckedIOException;
+import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.ArrayList;
 import java.util.List;
 
 /** "Quick Play" - launches the real game (a separate LWJGL3/GL process; it cannot run inside this
@@ -28,12 +33,17 @@ import java.util.List;
  *  how the launched process actually receives these three things.
  *
  * Two tabs: "Launch" (a read-only summary of what's about to start, plus the actual Launch button)
- * and "Weapons" (the two starting-slot combos) - the four real weapon ids
- * (Player.weaponById()'s own list), not just the three curated WeaponLoadout presets
- * (WaveBlastWeapon is deliberately powerup-only there) - this is a dev testing tool, not real
- * progression, so the extra freedom is fine here. */
+ * and "Weapons" (the two starting-slot combos, each paired with its own starting LEVEL combo) - the
+ * four real weapon ids (Player.weaponById()'s own list), not just the three curated WeaponLoadout
+ * presets (WaveBlastWeapon is deliberately powerup-only there) - this is a dev testing tool, not
+ * real progression, so the extra freedom is fine here. Level range is read from player.json's own
+ * maxWeaponLevel (see loadMaxWeaponLevel()) rather than hardcoded, so it never drifts out of sync
+ * with what Player.setWeaponLevel() itself actually allows. */
 public final class QuickPlayDialog {
     private static final List<String> WEAPON_IDS = List.of("BasicWeapon", "WaveBlastWeapon", "OrbitWeapon", "Thunderbolt");
+    // Matches player.json's own current maxWeaponLevel - used only if that file can't be read for
+    // some reason (see loadMaxWeaponLevel()), so the level combos always have SOME sane range.
+    private static final int FALLBACK_MAX_WEAPON_LEVEL = 4;
 
     private QuickPlayDialog() {}
 
@@ -48,6 +58,13 @@ public final class QuickPlayDialog {
         slotACombo.setValue(WeaponLoadout.BASIC_THUNDERBOLT.slotAWeaponId);
         ComboBox<String> slotBCombo = new ComboBox<>(FXCollections.observableArrayList(WEAPON_IDS));
         slotBCombo.setValue(WeaponLoadout.BASIC_THUNDERBOLT.slotBWeaponId);
+
+        List<String> levelOptions = new ArrayList<>();
+        for (int level = 1; level <= loadMaxWeaponLevel(); level++) levelOptions.add(String.valueOf(level));
+        ComboBox<String> slotALevelCombo = new ComboBox<>(FXCollections.observableArrayList(levelOptions));
+        slotALevelCombo.setValue("1");
+        ComboBox<String> slotBLevelCombo = new ComboBox<>(FXCollections.observableArrayList(levelOptions));
+        slotBLevelCombo.setValue("1");
 
         Stage dialog = new Stage();
         dialog.initOwner(owner);
@@ -66,7 +83,8 @@ public final class QuickPlayDialog {
         launch.setOnAction(e -> {
             document.save();
             library.saveStages();
-            launchProcess(stageDef.id, timelineBar.getValue(), slotACombo.getValue(), slotBCombo.getValue());
+            launchProcess(stageDef.id, timelineBar.getValue(), slotACombo.getValue(), slotBCombo.getValue(),
+                Integer.parseInt(slotALevelCombo.getValue()), Integer.parseInt(slotBLevelCombo.getValue()));
             dialog.close();
         });
 
@@ -75,7 +93,9 @@ public final class QuickPlayDialog {
 
         VBox weaponsTab = new VBox(10,
             FormControls.fieldLabel("Slot A"), slotACombo,
-            FormControls.fieldLabel("Slot B"), slotBCombo);
+            FormControls.fieldLabel("Slot A Level"), slotALevelCombo,
+            FormControls.fieldLabel("Slot B"), slotBCombo,
+            FormControls.fieldLabel("Slot B Level"), slotBLevelCombo);
         weaponsTab.setPadding(new Insets(12));
 
         TabPane tabs = new TabPane();
@@ -86,7 +106,7 @@ public final class QuickPlayDialog {
         weaponsTabWrapper.setClosable(false);
         tabs.getTabs().addAll(launchTabWrapper, weaponsTabWrapper);
 
-        Scene scene = new Scene(tabs, 320, 220);
+        Scene scene = new Scene(tabs, 320, 300);
         scene.getStylesheets().add(QuickPlayDialog.class.getResource("/dark-theme.css").toExternalForm());
         dialog.setScene(scene);
         dialog.showAndWait();
@@ -99,7 +119,8 @@ public final class QuickPlayDialog {
      *  Lwjgl3Launcher.readQuickPlayConfig() reads. Fire-and-forget (no waitFor()) so the editor's own
      *  UI thread never blocks on the forked game's lifetime; inheritIO() surfaces Gradle/game output
      *  in the editor's own console for troubleshooting a failed launch. */
-    private static void launchProcess(String stageId, float distance, String slotA, String slotB) {
+    private static void launchProcess(String stageId, float distance, String slotA, String slotB,
+                                       int slotALevel, int slotBLevel) {
         boolean isWindows = System.getProperty("os.name", "").toLowerCase().contains("win");
         String gradlew = isWindows ? "gradlew.bat" : "./gradlew";
         // The editor's own run task sets its working directory to assets/ (see editor/build.gradle) -
@@ -113,13 +134,31 @@ public final class QuickPlayDialog {
                 "-PquickPlayStage=" + stageId,
                 "-PquickPlayDistance=" + distance,
                 "-PquickPlaySlotA=" + slotA,
-                "-PquickPlaySlotB=" + slotB
+                "-PquickPlaySlotB=" + slotB,
+                "-PquickPlaySlotALevel=" + slotALevel,
+                "-PquickPlaySlotBLevel=" + slotBLevel
             );
             pb.directory(repoRoot.toFile());
             pb.inheritIO();
             pb.start();
         } catch (IOException e) {
             new Alert(Alert.AlertType.ERROR, "Failed to launch Quick Play: " + e.getMessage()).showAndWait();
+        }
+    }
+
+    /** player.json's own maxWeaponLevel - the same ceiling Player.setWeaponLevel() itself clamps
+     *  to - read fresh every time this dialog opens (a plain, uncached Files.readString() + Json
+     *  parse, same technique EditorDocument/StageLibrary already use for their own JSON reads) so a
+     *  tuning change to that file shows up here without an editor restart. Falls back to
+     *  FALLBACK_MAX_WEAPON_LEVEL if the file is missing/unparseable, rather than failing to open
+     *  this dialog at all over what's ultimately just a cosmetic range on a dev testing tool. */
+    private static int loadMaxWeaponLevel() {
+        try {
+            String text = Files.readString(Path.of("data/player.json"));
+            PlayerDefinition def = new Json().fromJson(PlayerDefinition.class, text);
+            return def != null && def.maxWeaponLevel > 0 ? def.maxWeaponLevel : FALLBACK_MAX_WEAPON_LEVEL;
+        } catch (IOException | UncheckedIOException e) {
+            return FALLBACK_MAX_WEAPON_LEVEL;
         }
     }
 }

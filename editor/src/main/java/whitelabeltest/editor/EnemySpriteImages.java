@@ -66,16 +66,28 @@ public final class EnemySpriteImages {
     // passes the same convention consistently) - JavaFX Image decoding is the single biggest cost
     // in a rebuild (PlayerPreviewView/StageCanvas/TriggerNode all reload on every edit/scrub tick),
     // and the same handful of texture files get requested over and over across every enemy/layer
-    // sharing them, so caching the decoded Image once per session (editor sessions are short-lived,
-    // and re-decoding on external file changes was never supported here anyway) removes essentially
-    // all of that cost after the first load. Single-threaded (JavaFX Application Thread only), so a
-    // plain HashMap is fine - no concurrent access to guard against.
+    // sharing them, so caching the decoded Image once per session removes essentially all of that
+    // cost after the first load. Only ever holds SUCCESSFUL decodes - see loadImage()'s own doc on
+    // why a missing file is deliberately never cached. Single-threaded (JavaFX Application Thread
+    // only), so a plain HashMap is fine - no concurrent access to guard against.
     private static final Map<String, Image> imageCache = new HashMap<>();
 
+    /** Never caches a miss (loadImageUncached() returning null because the file doesn't exist YET)
+     *  - only a real decoded Image ever goes into imageCache. An editor session is long-lived (this
+     *  same instance keeps running while the user adds new enemy art, exactly the DollarsMiniBoss-
+     *  style workflow of authoring a definition and dropping its texture file in moments later) and
+     *  every texture lookup - including Player View's own per-scrub-tick rebuild() - funnels through
+     *  here, so caching a miss permanently would poison every later lookup for that same path the
+     *  instant it was tried once too early, even after the real file shows up on disk: no scrub, no
+     *  re-open, nothing short of restarting the whole editor process would ever pick it up again.
+     *  Retrying the (cheap - just a File.exists() check) miss on every call is a fair trade to keep
+     *  a still-genuinely-missing texture no more expensive than before, in exchange for a texture
+     *  that JUST appeared becoming visible on the very next rebuild instead of never. */
     public static Image loadImage(String texturePath) {
-        if (imageCache.containsKey(texturePath)) return imageCache.get(texturePath);
+        Image cached = imageCache.get(texturePath);
+        if (cached != null) return cached;
         Image image = loadImageUncached(texturePath);
-        imageCache.put(texturePath, image);
+        if (image != null) imageCache.put(texturePath, image);
         return image;
     }
 

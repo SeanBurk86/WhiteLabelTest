@@ -24,13 +24,24 @@ public class Lwjgl3Launcher {
         float distance = parseFloat(System.getProperty("quickPlay.distance"), 0f);
         String slotA = System.getProperty("quickPlay.slotA");
         String slotB = System.getProperty("quickPlay.slotB");
-        return new Main.QuickPlayConfig(stageId, distance, blankToNull(slotA), blankToNull(slotB));
+        int slotALevel = parseInt(System.getProperty("quickPlay.slotALevel"), 0);
+        int slotBLevel = parseInt(System.getProperty("quickPlay.slotBLevel"), 0);
+        return new Main.QuickPlayConfig(stageId, distance, blankToNull(slotA), blankToNull(slotB), slotALevel, slotBLevel);
     }
 
     private static float parseFloat(String value, float fallback) {
         if (value == null || value.isBlank()) return fallback;
         try {
             return Float.parseFloat(value);
+        } catch (NumberFormatException e) {
+            return fallback;
+        }
+    }
+
+    private static int parseInt(String value, int fallback) {
+        if (value == null || value.isBlank()) return fallback;
+        try {
+            return Integer.parseInt(value);
         } catch (NumberFormatException e) {
             return fallback;
         }

@@ -97,6 +97,14 @@ public class ScrollingBackground {
     private final Texture playerFeedbackQuadTexture;
     private boolean stopped;
     private boolean muted;
+    // Multiplies every layer's own authored scrollSpeed in update() below - 1f (the default) is
+    // full, unmodified speed. Lets a triggerFile-driven stage's TriggerManager.getSpeedScale()
+    // visibly pause/resume the on-screen scroll (e.g. freezing the screen for a stationary boss
+    // fight, then resuming at the same rate once it's destroyed) via a Trigger.setSpeed action -
+    // see setScrollSpeedScale()'s own doc. Left at 1f and never touched by a stage with no
+    // triggerFile (GameController only ever calls setScrollSpeedScale() when its triggerManager is
+    // non-null), so this is a no-op everywhere else.
+    private float scrollSpeedScale = 1f;
 
     private VideoPlayer bossVideoPlayer;
     private boolean bossVideoStarted;
@@ -205,11 +213,18 @@ public class ScrollingBackground {
         }
     }
 
+    /** See scrollSpeedScale's own doc - called every frame by GameController once its
+     *  triggerManager is non-null, so a Trigger.setSpeed action's effect shows up here at most one
+     *  frame after camera.setSpeed() itself (GameController's own update() order calls this
+     *  background.update() before triggerManager.update() runs), same one-frame lag every other
+     *  cross-system read of this frame's freshly-changed state already has in that loop. */
+    public void setScrollSpeedScale(float scale) { this.scrollSpeedScale = scale; }
+
     public void update(float delta) {
         if (!stopped) {
             for (Layer layer : layers) {
                 if (layer.frozen) continue;
-                layer.scrollY += layer.scrollSpeed * delta;
+                layer.scrollY += layer.scrollSpeed * delta * scrollSpeedScale;
                 clampToTopOfStrip(layer);
             }
         }
@@ -350,7 +365,11 @@ public class ScrollingBackground {
      *  across stages with different numbers of background layers. */
     public float getLayerScrollSpeed(int index, float fallback) {
         if (index < 0 || index >= layers.size) return fallback;
-        return layers.get(index).scrollSpeed;
+        // Scaled the same way update() scales the layer's own visible scroll (see
+        // scrollSpeedScale's own doc), so a ground enemy attached to this layer stays visually
+        // planted on it - including freezing/resuming alongside it during a Trigger.setSpeed(0)
+        // stop - rather than drifting off a layer that's no longer actually moving underneath it.
+        return layers.get(index).scrollSpeed * scrollSpeedScale;
     }
 
     /** Begins the hue-cycle shader's begin/end wrap (see HueCycleShader) around one or more

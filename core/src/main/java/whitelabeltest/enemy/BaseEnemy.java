@@ -178,13 +178,14 @@ public abstract class BaseEnemy implements Enemy {
             }
         }
 
-        // Skipped (not just no-op fired) while paused, in the ceasefire zone, or "sealed" by the
+        // Skipped (not just no-op fired) while paused, in the ceasefire zone (unless this enemy ignores it - see
+        // Enemy.ignoresCeasefireZone()/EnemyDefinition.ignoreCeasefireZone), or "sealed" by the
         // graze halo overlapping this enemy's hitbox (see Enemy.isSealable()/EnemyDefinition.
         // sealable) - in every case so a firing pattern's internal cooldown timer stays frozen at
         // its pre-gate value instead of overshooting and unloading the instant firing resumes -
         // see EntityManager's firingPaused computation.
         boolean sealed = isSealable() && grazeHitbox.radius > 0f && Intersector.overlaps(grazeHitbox, rectangle);
-        if (firing != null && !firingPaused && !isInCeasefireZone() && !sealed) {
+        if (firing != null && !firingPaused && (ignoresCeasefireZone() || !isInCeasefireZone()) && !sealed) {
             int bulletsBefore = enemyBullets.size;
             firing.update(delta, this, sprite, rectangle, enemyBullets, bulletAnimation, playerHitbox);
             if (!hasFiredOnce && enemyBullets.size > bulletsBefore) hasFiredOnce = true;

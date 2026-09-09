@@ -484,6 +484,7 @@ public class PatternPreviewer {
             d.isGround = src.isGround;
             d.backgroundLayer = src.backgroundLayer;
             d.sealable = src.sealable;
+            d.ignoreCeasefireZone = src.ignoreCeasefireZone;
             d.defiant = src.defiant;
             d.damageableByEnemyBullets = src.damageableByEnemyBullets;
             d.showHealthBar = src.showHealthBar;
@@ -802,6 +803,7 @@ public class PatternPreviewer {
         rows.add(toggleRow(1, "Is Ground", () -> d.isGround, v -> d.isGround = v));
         rows.add(numberRow(1, "Background Layer (-1 = none)", () -> (float) d.backgroundLayer, v -> d.backgroundLayer = Math.round(v), 1f, true));
         rows.add(toggleRow(1, "Sealable", () -> d.sealable, v -> d.sealable = v));
+        rows.add(toggleRow(1, "Ignore Ceasefire Zone", () -> d.ignoreCeasefireZone, v -> d.ignoreCeasefireZone = v));
         rows.add(toggleRow(1, "Defiant", () -> d.defiant, v -> d.defiant = v));
         rows.add(toggleRow(1, "Damageable By Enemy Bullets", () -> d.damageableByEnemyBullets, v -> d.damageableByEnemyBullets = v));
         rows.add(toggleRow(1, "Show Health Bar", () -> d.showHealthBar, v -> d.showHealthBar = v));

@@ -40,12 +40,21 @@ public class Main extends ApplicationAdapter {
         public final float startDistance;
         public final String slotAWeaponId;
         public final String slotBWeaponId;
+        // Starting level for whichever weapon occupies each slot - 0 (Lwjgl3Launcher's own
+        // fallback for a missing/blank quickPlay.slotXLevel property) means "leave it at whatever
+        // GameController.quickStartAtStage()'s own setSlotWeapon() call already left it at" (level
+        // 1, same as an ordinary equip - see Player.setSlotWeapon()), not "set it to 0".
+        public final int slotALevel;
+        public final int slotBLevel;
 
-        public QuickPlayConfig(String stageId, float startDistance, String slotAWeaponId, String slotBWeaponId) {
+        public QuickPlayConfig(String stageId, float startDistance, String slotAWeaponId, String slotBWeaponId,
+                                int slotALevel, int slotBLevel) {
             this.stageId = stageId;
             this.startDistance = startDistance;
             this.slotAWeaponId = slotAWeaponId;
             this.slotBWeaponId = slotBWeaponId;
+            this.slotALevel = slotALevel;
+            this.slotBLevel = slotBLevel;
         }
     }
 
@@ -213,7 +222,8 @@ public class Main extends ApplicationAdapter {
      *  start-screen input detection to read here the way transitionToWeaponSelect()'s does. */
     private void transitionToQuickPlay() {
         game = new GameController(PLAY_AREA_WIDTH, PLAY_AREA_HEIGHT, keyBindings, audioSettings, WeaponLoadout.BASIC_THUNDERBOLT);
-        game.quickStartAtStage(quickPlay.stageId, quickPlay.startDistance, quickPlay.slotAWeaponId, quickPlay.slotBWeaponId);
+        game.quickStartAtStage(quickPlay.stageId, quickPlay.startDistance, quickPlay.slotAWeaponId, quickPlay.slotBWeaponId,
+            quickPlay.slotALevel, quickPlay.slotBLevel);
         game.setActiveInput(InputType.KEYBOARD);
         ui = new UIManager(InputType.KEYBOARD);
         state = AppState.PLAYING;
