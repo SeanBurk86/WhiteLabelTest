@@ -1,6 +1,7 @@
 package whitelabeltest.editor;
 
 import com.badlogic.gdx.utils.Array;
+import com.badlogic.gdx.utils.Json;
 import javafx.geometry.Insets;
 import javafx.scene.control.Button;
 import javafx.scene.control.CheckBox;
@@ -48,6 +49,11 @@ final class FiringPatternFieldsEditor {
     static final List<String> TYPES = List.of("None", "SelfDestruct", "ExplodingAimed", "BurstAimed", "Sweep",
         "SineWave", "Orbiting", "Wall", "PolkaDot", "RadialNearMiss", "SpawnEnemy", "Aimed", "QuarterCircle",
         "AimedAtPoint", "Laser", "Sequence", "Combined");
+
+    // Shared across every Sub-Patterns list this editor opens (including nested ones), so a
+    // sub-pattern copied out of one Sequence/Combined pattern can be pasted into a completely
+    // different one - not just reordered within its own list the way drag-and-drop already allows.
+    private static FiringPatternDef subPatternClipboard = null;
 
     private static final String NONE_LABEL = "(none)";
     // Matches PatternPreviewer's own HITBOX_SHAPE_OPTIONS exactly - see HitboxSpec.Shape.
@@ -327,7 +333,28 @@ final class FiringPatternFieldsEditor {
             onDirty.run();
         });
 
-        root.getChildren().addAll(new HBox(8, add, remove), list, new Separator(), subEditorScroll);
+        Button copy = new Button("Copy");
+        copy.setOnAction(e -> {
+            FiringPatternDef sub = list.getSelectionModel().getSelectedItem();
+            if (sub == null) return;
+            subPatternClipboard = deepCopy(sub);
+        });
+        Button paste = new Button("Paste");
+        paste.setOnAction(e -> {
+            if (subPatternClipboard == null) return;
+            if (def.patterns == null) def.patterns = new Array<>();
+            FiringPatternDef pasted = deepCopy(subPatternClipboard);
+            // Pasting is additive, same as "Add Sub-Pattern" - it never overwrites whatever is
+            // currently selected, so pasting the same clipboard entry repeatedly just stacks up
+            // that many independent copies (each free to be edited/reordered on its own afterward).
+            def.patterns.add(pasted);
+            list.getItems().add(pasted);
+            list.getSelectionModel().select(pasted);
+            onDirty.run();
+        });
+        copy.disableProperty().bind(list.getSelectionModel().selectedItemProperty().isNull());
+
+        root.getChildren().addAll(new HBox(8, add, remove, copy, paste), list, new Separator(), subEditorScroll);
         VBox.setVgrow(root, javafx.scene.layout.Priority.ALWAYS);
         return root;
     }
@@ -404,6 +431,15 @@ final class FiringPatternFieldsEditor {
         cell.setOnDragDone(event -> cell.setStyle(""));
 
         return cell;
+    }
+
+    /** Same "serialize then deserialize" clone FiringPatternEditorDialog's own Duplicate button
+     *  uses - a plain Java field copy would still alias nested Arrays/objects (bulletSpeedPhases,
+     *  a Sequence/Combined's own nested `patterns`), so editing the pasted copy would silently edit
+     *  the original it was copied from too. */
+    private static FiringPatternDef deepCopy(FiringPatternDef source) {
+        Json json = new Json();
+        return json.fromJson(FiringPatternDef.class, json.toJson(source, FiringPatternDef.class));
     }
 
     private static String formatIntArray(int[] values) {
