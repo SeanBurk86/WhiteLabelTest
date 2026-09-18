@@ -260,7 +260,12 @@ final class FiringPatternPreviewCanvas extends Canvas {
             case "SineWave" -> {
                 float rate = d.fireRate > 0 ? d.fireRate : 0.5f;
                 r.timer += delta;
-                if (r.timer >= rate) { r.timer -= rate; spawnSineShot(d); }
+                if (r.timer >= rate) { r.timer -= rate; spawnSineShot(d, 0.6f, 2f); }
+            }
+            case "Feather" -> {
+                float rate = d.fireRate > 0 ? d.fireRate : 0.5f;
+                r.timer += delta;
+                if (r.timer >= rate) { r.timer -= rate; spawnSineShot(d, 1.4f, 1.1f, 1.5f); }
             }
             case "BurstAimed" -> stepBurstAimed(r, d, delta);
             default -> { // Aimed, AimedAtPoint, QuarterCircle, SelfDestruct, ExplodingAimed
@@ -357,17 +362,21 @@ final class FiringPatternPreviewCanvas extends Canvas {
         spawnStraight(d, angle, d.bulletSpeed > 0 ? d.bulletSpeed : 5f, d.bulletSize > 0 ? d.bulletSize : 0.25f);
     }
 
-    private void spawnSineShot(FiringPatternDef d) {
+    private void spawnSineShot(FiringPatternDef d, float defaultAmplitude, float defaultFrequency) {
+        spawnSineShot(d, defaultAmplitude, defaultFrequency, 5f);
+    }
+
+    private void spawnSineShot(FiringPatternDef d, float defaultAmplitude, float defaultFrequency, float defaultSpeed) {
         PreviewBullet b = new PreviewBullet();
         b.kind = Kind.SINE;
         b.x = b.originX = emitterX(d);
         b.y = b.originY = emitterY(d);
         b.angleDeg = aimAngle(d);
-        b.speed = d.bulletSpeed > 0 ? d.bulletSpeed : 5f;
+        b.speed = d.bulletSpeed > 0 ? d.bulletSpeed : defaultSpeed;
         applySpeedProfile(b, d);
         b.size = d.bulletSize > 0 ? d.bulletSize : 0.2f;
-        b.amplitude = d.amplitude > 0 ? d.amplitude : 0.6f;
-        b.frequency = d.frequency > 0 ? d.frequency : 2f;
+        b.amplitude = d.amplitude > 0 ? d.amplitude : defaultAmplitude;
+        b.frequency = d.frequency > 0 ? d.frequency : defaultFrequency;
         bullets.add(b);
     }
 

@@ -47,7 +47,7 @@ final class FiringPatternFieldsEditor {
     private FiringPatternFieldsEditor() {}
 
     static final List<String> TYPES = List.of("None", "SelfDestruct", "ExplodingAimed", "BurstAimed", "Sweep",
-        "SineWave", "Orbiting", "Wall", "PolkaDot", "RadialNearMiss", "SpawnEnemy", "Aimed", "QuarterCircle",
+        "SineWave", "Feather", "Orbiting", "Wall", "PolkaDot", "RadialNearMiss", "SpawnEnemy", "Aimed", "QuarterCircle",
         "AimedAtPoint", "Laser", "Sequence", "Combined");
 
     // Shared across every Sub-Patterns list this editor opens (including nested ones), so a
@@ -130,7 +130,7 @@ final class FiringPatternFieldsEditor {
         box.getChildren().add(numberRow("Sweep end angle (deg)", def.sweepEndAngle, v -> { def.sweepEndAngle = v; onDirty.run(); }));
 
         box.getChildren().add(new Separator());
-        box.getChildren().add(sectionLabel("Sine Wave"));
+        box.getChildren().add(sectionLabel("Sine Wave / Feather"));
         box.getChildren().add(numberRow("Amplitude", def.amplitude, v -> { def.amplitude = v; onDirty.run(); }));
         box.getChildren().add(numberRow("Frequency", def.frequency, v -> { def.frequency = v; onDirty.run(); }));
 

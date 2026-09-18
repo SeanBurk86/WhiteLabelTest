@@ -23,6 +23,7 @@ import whitelabeltest.enemy.PatternRegistry;
 import whitelabeltest.enemy.bullets.EnemyBullet;
 import whitelabeltest.enemy.firingpatterns.LaserFiring;
 import whitelabeltest.enemy.firingpatterns.OrbitingFiring;
+import whitelabeltest.enemy.firingpatterns.FeatherFiring;
 import whitelabeltest.enemy.firingpatterns.SineWaveFiring;
 import whitelabeltest.enemy.firingpatterns.SweepFiring;
 import whitelabeltest.enemy.movementpatterns.MovementPattern;
@@ -42,7 +43,7 @@ import java.util.function.Supplier;
  *  Disk" row is confirmed. */
 public class PatternPreviewer {
     private static final String[] MOVEMENT_TYPES = {"None", "Straight", "ZigZag", "Seeking", "MoveToPoint", "Spline", "Sequence", "Squadron"};
-    private static final String[] FIRING_TYPES = {"None", "SelfDestruct", "ExplodingAimed", "BurstAimed", "Sweep", "SineWave", "Orbiting", "Wall", "PolkaDot", "RadialNearMiss", "SpawnEnemy", "Aimed", "QuarterCircle", "AimedAtPoint", "Laser", "Sequence", "Combined"};
+    private static final String[] FIRING_TYPES = {"None", "SelfDestruct", "ExplodingAimed", "BurstAimed", "Sweep", "SineWave", "Feather", "Orbiting", "Wall", "PolkaDot", "RadialNearMiss", "SpawnEnemy", "Aimed", "QuarterCircle", "AimedAtPoint", "Laser", "Sequence", "Combined"};
     private static final String NONE_LABEL = "(none)";
     // See HitboxSpec.Shape - NONE_LABEL here means "null", i.e. let the bullet class's own default
     // shape stand (see each bullet class's getHitRadius()) rather than forcing one.
@@ -642,7 +643,7 @@ public class PatternPreviewer {
 
     private void resolveFiringSentinels(FiringPatternDef d) {
         if (d.bulletSize <= 0) d.bulletSize = "Orbiting".equals(d.type) ? 0.5f : 0.25f;
-        if (d.bulletSpeed <= 0) d.bulletSpeed = "Orbiting".equals(d.type) ? 4f : 5f;
+        if (d.bulletSpeed <= 0) d.bulletSpeed = "Orbiting".equals(d.type) ? 4f : ("Feather".equals(d.type) ? 1.5f : 5f);
         if (d.bulletDamage <= 0) d.bulletDamage = BulletDef.DEFAULT_DAMAGE;
         if (d.spreadDegrees <= 0) d.spreadDegrees = 90f;
         if (d.numBullets <= 0) d.numBullets = 9;
@@ -653,8 +654,8 @@ public class PatternPreviewer {
         if (d.sweepDuration <= 0) d.sweepDuration = SweepFiring.DEFAULT_SWEEP_DURATION;
         if (Float.isNaN(d.sweepStartAngle)) d.sweepStartAngle = SweepFiring.DEFAULT_START_ANGLE;
         if (Float.isNaN(d.sweepEndAngle)) d.sweepEndAngle = SweepFiring.DEFAULT_END_ANGLE;
-        if (d.amplitude <= 0) d.amplitude = SineWaveFiring.DEFAULT_AMPLITUDE;
-        if (d.frequency <= 0) d.frequency = SineWaveFiring.DEFAULT_FREQUENCY;
+        if (d.amplitude <= 0) d.amplitude = "Feather".equals(d.type) ? FeatherFiring.DEFAULT_AMPLITUDE : SineWaveFiring.DEFAULT_AMPLITUDE;
+        if (d.frequency <= 0) d.frequency = "Feather".equals(d.type) ? FeatherFiring.DEFAULT_FREQUENCY : SineWaveFiring.DEFAULT_FREQUENCY;
         if (d.orbitRadius <= 0) d.orbitRadius = OrbitingFiring.DEFAULT_ORBIT_RADIUS;
         if (d.orbitSpeed <= 0) d.orbitSpeed = OrbitingFiring.DEFAULT_ORBIT_SPEED;
         if (d.wallMarginX <= 0) d.wallMarginX = 0.25f;
@@ -1008,6 +1009,7 @@ public class PatternPreviewer {
                 appendCommonBulletRows(node, indent);
                 break;
             case "SineWave":
+            case "Feather":
                 appendCommonBulletRows(node, indent);
                 rows.add(numberRow(indent, "Amplitude", () -> node.amplitude, v -> node.amplitude = v, 0.1f, false));
                 rows.add(numberRow(indent, "Frequency", () -> node.frequency, v -> node.frequency = v, 0.25f, false));

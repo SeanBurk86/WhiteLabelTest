@@ -120,6 +120,7 @@ public class PatternFactory {
             case "BurstAimed": return new BurstAimedFiring(fireRate, resolve(bulletSize, 0.25f), resolve(bulletSpeed, 5f), spriteOverride, offsetX, offsetY, bulletDamage, speedProfile, hitboxSpec);
             case "Sweep": return new SweepFiring(fireRate, resolve(bulletSize, 0.25f), resolve(bulletSpeed, 5f), spriteOverride, offsetX, offsetY, bulletDamage, speedProfile, hitboxSpec);
             case "SineWave": return new SineWaveFiring(fireRate, resolve(bulletSize, 0.2f), resolve(bulletSpeed, 5f), spriteOverride, offsetX, offsetY, bulletDamage, speedProfile, hitboxSpec);
+            case "Feather": return new FeatherFiring(fireRate, resolve(bulletSize, 0.2f), resolve(bulletSpeed, 1.5f), spriteOverride, offsetX, offsetY, bulletDamage, speedProfile, hitboxSpec);
             // Orbiting's "speed" bootstraps a constant center-drift vector, not a travel speed
             // that ramps over time the way the other bullet types here do - acceleration doesn't
             // apply to it.
@@ -212,6 +213,14 @@ public class PatternFactory {
                 float amplitude = def.amplitude > 0 ? def.amplitude : SineWaveFiring.DEFAULT_AMPLITUDE;
                 float frequency = def.frequency > 0 ? def.frequency : SineWaveFiring.DEFAULT_FREQUENCY;
                 return new SineWaveFiring(def.fireRate, resolve(bulletSize(def, bulletDef), 0.2f), resolve(bulletSpeed(def, bulletDef), 5f), spriteOverride, def.offsetX, def.offsetY, bulletDamage(def, bulletDef),
+                    speedProfile(def, bulletDef), hitboxSpec(def, bulletDef), amplitude, frequency);
+            }
+            case "Feather": {
+                BulletDef bulletDef = PatternRegistry.getBullet(def.bulletId);
+                Animation<TextureRegion> spriteOverride = buildBulletAnimation(enemyDef, def, bulletDef);
+                float amplitude = def.amplitude > 0 ? def.amplitude : FeatherFiring.DEFAULT_AMPLITUDE;
+                float frequency = def.frequency > 0 ? def.frequency : FeatherFiring.DEFAULT_FREQUENCY;
+                return new FeatherFiring(def.fireRate, resolve(bulletSize(def, bulletDef), 0.2f), resolve(bulletSpeed(def, bulletDef), 1.5f), spriteOverride, def.offsetX, def.offsetY, bulletDamage(def, bulletDef),
                     speedProfile(def, bulletDef), hitboxSpec(def, bulletDef), amplitude, frequency);
             }
             // Orbiting's "speed" bootstraps a constant center-drift vector, not a travel speed

@@ -11,6 +11,7 @@ import whitelabeltest.enemy.bullets.AimedEnemyBullet;
 import whitelabeltest.enemy.bullets.BasicEnemyBullet;
 import whitelabeltest.enemy.bullets.DrifterBullet;
 import whitelabeltest.enemy.bullets.EnemyBullet;
+import whitelabeltest.enemy.bullets.FeatherBullet;
 import whitelabeltest.enemy.bullets.LaserBullet;
 import whitelabeltest.enemy.bullets.OrbitingBullet;
 import whitelabeltest.enemy.bullets.SineBullet;
@@ -53,6 +54,9 @@ public class ObjectPools {
     };
     public static final Pool<SineBullet> sineBulletPool = new Pool<SineBullet>() {
         @Override protected SineBullet newObject() { return new SineBullet(); }
+    };
+    public static final Pool<FeatherBullet> featherBulletPool = new Pool<FeatherBullet>() {
+        @Override protected FeatherBullet newObject() { return new FeatherBullet(); }
     };
     public static final Pool<OrbitingBullet> orbitingBulletPool = new Pool<OrbitingBullet>() {
         @Override protected OrbitingBullet newObject() { return new OrbitingBullet(); }
@@ -100,6 +104,7 @@ public class ObjectPools {
         else if (b instanceof ExplodingAimedBullet) explodingAimedBulletPool.free((ExplodingAimedBullet)b);
         else if (b instanceof DrifterBullet) drifterBulletPool.free((DrifterBullet)b);
         else if (b instanceof SineBullet) sineBulletPool.free((SineBullet)b);
+        else if (b instanceof FeatherBullet) featherBulletPool.free((FeatherBullet)b);
         else if (b instanceof OrbitingBullet) orbitingBulletPool.free((OrbitingBullet)b);
         else if (b instanceof LaserBullet) laserBulletPool.free((LaserBullet)b);
     }
