@@ -780,11 +780,19 @@ public class TriggerManager {
             && !trigger.gate && !trigger.scheduleEnd;
     }
 
-    /** Number of triggers that actually spawn an enemy - added into GameController's
-     *  totalEnemiesAcrossRun alongside SpawnScheduler.getSchedule().size(). */
+    /** Number of enemies that actually spawn - added into GameController's totalEnemiesAcrossRun
+     *  alongside SpawnScheduler.getSchedule().size(). A wave trigger (Trigger.waveShape != null)
+     *  spawns WaveSpawnPlanner.plan()'s whole member list rather than just the one trigger, so it
+     *  must be counted that way too - counting 1 per wave trigger (as an ordinary single spawn would
+     *  be) undercounts any stage using waves, throwing off both the end-of-stage total and
+     *  computeRank()'s killFraction. The nominal player point only affects each member's angle, never
+     *  the member count, so passing 0,0 here still yields the exact size fireWave() will spawn. */
     public int getEnemySpawnCount() {
         int count = 0;
-        for (Trigger trigger : triggers) if (isEnemySpawn(trigger)) count++;
+        for (Trigger trigger : triggers) {
+            if (!isEnemySpawn(trigger)) continue;
+            count += trigger.waveShape != null ? WaveSpawnPlanner.plan(trigger, 0f, 0f).size : 1;
+        }
         return count;
     }
 
