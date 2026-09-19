@@ -60,6 +60,9 @@ public class WaypointPathMovement implements MovementPattern {
     // Minimum tangent magnitude used when converting "world units/sec" into "curve-parameter/sec" -
     // guards against a near-zero local tangent (a very high-tension corner) making progress blow up.
     private static final float MIN_TANGENT_MAGNITUDE = 0.5f;
+    // Longest distance (world units) the path advances between re-reading the curve's local speed -
+    // see update().
+    private static final float MAX_SUBSTEP_DISTANCE = 0.02f;
 
     private final Array<Leg> legs;
     private final boolean closePath;
@@ -131,10 +134,19 @@ public class WaypointPathMovement implements MovementPattern {
         if (waitTimer > 0f) {
             waitTimer -= delta;
         } else {
-            float t = segmentIndex + localT;
-            float tangentMag = WaypointSpline.tangentAt(tempTangent, points, tensions, closePath, t).len();
-            float rate = (destination.speed * globalSpeed) / Math.max(tangentMag, MIN_TANGENT_MAGNITUDE);
-            localT += rate * delta;
+            // Advance in short distance-steps, re-reading the curve's local speed each time, rather than
+            // one big step sized from the tangent at the START of the frame: a segment whose end
+            // tangent is tiny (a sharp reversal, e.g. a back-and-forth path, where the neighbouring
+            // waypoints on either side sit on nearly the same spot) has a derivative that grows
+            // several-fold within a single frame, so the one-shot version overshot by 3-6x there - the
+            // enemy visibly snapped forward at every turnaround instead of easing through it.
+            float remaining = destination.speed * globalSpeed * delta;
+            while (remaining > 0f && localT < 1f) {
+                float step = Math.min(remaining, MAX_SUBSTEP_DISTANCE);
+                float tangentMag = WaypointSpline.tangentAt(tempTangent, points, tensions, closePath, segmentIndex + localT).len();
+                localT += step / Math.max(tangentMag, MIN_TANGENT_MAGNITUDE);
+                remaining -= step;
+            }
         }
 
         // Evaluated BEFORE onArrive() below touches segmentIndex/localT, using localT clamped (not
@@ -178,6 +190,18 @@ public class WaypointPathMovement implements MovementPattern {
         }
         if (closePath) {
             segmentIndex = (segmentIndex + 1) % legs.size;
+            // Wrapping back to segment 0 means "start the next lap", but segment 0 begins at
+            // points[0] - the enemy's SPAWN position, captured once by initFrom() - so without this
+            // the sprite teleports back there at the end of every lap (the last leg's target sits at
+            // points[points.length-1], and the closed-curve evaluate() never actually walks the
+            // final "last waypoint -> points[0]" segment, since segmentIndex only spans legs.size
+            // segments). Re-anchoring points[0] onto the last waypoint makes every lap after the
+            // first start exactly where the previous one ended.
+            if (segmentIndex == 0) {
+                int last = points.length - 1;
+                points[0].set(points[last]);
+                tensions[0] = tensions[last];
+            }
         } else if (segmentIndex + 1 >= legs.size) {
             pathComplete = true;
         } else {

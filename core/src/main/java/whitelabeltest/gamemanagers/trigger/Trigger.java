@@ -1,6 +1,7 @@
 package whitelabeltest.gamemanagers.trigger;
 
 import com.badlogic.gdx.utils.Array;
+import whitelabeltest.enemy.HealthPhase;
 import whitelabeltest.gamemanagers.TextCue;
 
 /** One entry in a stage's trigger file - fires once the LevelCamera's collision box reaches
@@ -94,6 +95,11 @@ public class Trigger {
     // Meaningless (a no-op) without a nonzero spawnLead - with no travel-time budget there's nowhere
     // for the entrance movement to come from, so it just spawns normally at (x, y) instead.
     public boolean enterFromAbove = false;
+    // Optional - health-triggered behavior changes for the enemy this trigger spawns (and, for a
+    // wave, each of its members): when the enemy's health first drops to a phase's healthPercent it
+    // swaps to that phase's movement and/or firing pattern - see HealthPhase and BaseEnemy.
+    // takeDamage(). null (the default) means no phases, the enemy just keeps its spawn behavior.
+    public Array<HealthPhase> healthPhases;
     public boolean silence = false;
     public boolean despawn = false;
     public boolean waypointGem = false;

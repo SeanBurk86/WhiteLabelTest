@@ -19,6 +19,10 @@ public class GenericEnemy extends BaseEnemy {
     private Texture bulletTexture;
     private Texture spawnTexture;
     private Texture deathTexture;
+    // Kept from initWithDefinition() so a health-phase movement swap (see resolveMovementPattern())
+    // builds its pattern with the same formation slot this spawn originally used.
+    private float formationOffsetX = Float.NaN;
+    private float formationOffsetY = Float.NaN;
 
     public void initWithDefinition(EnemyDefinition def, Texture texture, Texture bulletTexture,
                                     Texture spawnTexture, Texture deathTexture,
@@ -77,6 +81,8 @@ public class GenericEnemy extends BaseEnemy {
         this.invertMovement = def.inverseMovement;
         this.rotateWithMovement = def.rotateWithMovement;
         this.facePlayer = def.facePlayer;
+        this.formationOffsetX = formationOffsetX;
+        this.formationOffsetY = formationOffsetY;
 
         this.animation = AnimationCache.get(texture, def.columns > 0 ? def.columns : def.frameCount, def.rows, def.frameCount, def.frameDuration, Animation.PlayMode.LOOP);
         TextureRegion[] frames = animation.getKeyFrames();
@@ -204,9 +210,27 @@ public class GenericEnemy extends BaseEnemy {
     @Override
     protected FiringPattern resolveWeaponSet(String weaponSetName) {
         if (def == null || def.weaponSets == null || weaponSetName == null) return null;
-        String firingPatternId = def.weaponSets.get(weaponSetName);
-        if (firingPatternId == null) return null;
-        return PatternFactory.createFiring(def, PatternRegistry.getFiring(firingPatternId), worldWidth, worldHeight);
+        return resolveFiringPattern(def.weaponSets.get(weaponSetName));
+    }
+
+    /** Builds `firingPatternId` the same way initWithDefinition() builds `firing` in the first
+     *  place. Null (no swap) for a null id or one that isn't a real pattern on disk. */
+    @Override
+    protected FiringPattern resolveFiringPattern(String firingPatternId) {
+        if (def == null || firingPatternId == null) return null;
+        FiringPatternDef patternDef = PatternRegistry.getFiring(firingPatternId);
+        if (patternDef == null) return null;
+        return PatternFactory.createFiring(def, patternDef, worldWidth, worldHeight);
+    }
+
+    /** Builds `movementPatternId` starting from wherever this enemy is right now - a WaypointPath's
+     *  own initFrom() reads the sprite's position the first time it updates, so the new path just
+     *  curves from here to its first waypoint. Null (no swap) for an id that isn't a real pattern. */
+    @Override
+    protected MovementPattern resolveMovementPattern(String movementPatternId) {
+        MovementPatternDef patternDef = PatternRegistry.getMovement(movementPatternId);
+        if (patternDef == null) return null;
+        return PatternFactory.createMovement(patternDef, worldWidth, worldHeight, sprite.getX() + sprite.getWidth() / 2f, formationOffsetX, formationOffsetY);
     }
 
     @Override

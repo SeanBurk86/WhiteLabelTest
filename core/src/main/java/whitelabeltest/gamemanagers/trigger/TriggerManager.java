@@ -16,6 +16,7 @@ import com.badlogic.gdx.utils.Json;
 import com.badlogic.gdx.utils.ObjectMap;
 import com.badlogic.gdx.utils.SerializationException;
 import whitelabeltest.enemy.EnemyDefinition;
+import whitelabeltest.enemy.HealthPhase;
 import whitelabeltest.enemy.MovementPatternDef;
 import whitelabeltest.enemy.PatternRegistry;
 import whitelabeltest.player.Player;
@@ -141,9 +142,11 @@ public class TriggerManager {
         final float x, y, offsetX, offsetY;
         final String movementPatternId; // already registered in PatternRegistry - see fireWave()
         final Trigger entranceView; // synthetic per-member stand-in - see fireWave()'s own doc
+        final Array<HealthPhase> healthPhases; // this member's own (possibly formation-shifted) copy - see fireWave()
 
         PendingWaveSpawn(Trigger source, float dueRealTime, float x, float y, float offsetX, float offsetY,
-                          String movementPatternId, Trigger entranceView) {
+                          String movementPatternId, Trigger entranceView, Array<HealthPhase> healthPhases) {
+            this.healthPhases = healthPhases;
             this.source = source;
             this.dueRealTime = dueRealTime;
             this.x = x;
@@ -515,7 +518,7 @@ public class TriggerManager {
             } else {
                 EnemySpawnOps.spawnEnemy(entityManager, enemyDefinitions, assets, worldWidth, worldHeight,
                     trigger.type, trigger.x, trigger.y, trigger.offsetX, trigger.offsetY, trigger.movementPattern, trigger.firingPattern,
-                    trigger.inverseMovement, trigger.powerup, trigger, camera.getSpeed());
+                    trigger.inverseMovement, trigger.powerup, trigger, camera.getSpeed(), trigger.healthPhases);
             }
         }
     }
@@ -625,7 +628,22 @@ public class TriggerManager {
             entranceView.distance = trigger.distance;
             entranceView.waveSpawnLift = waveSpawnLift;
 
-            pendingWaveSpawns.add(new PendingWaveSpawn(trigger, dueRealTime, slot.x, slot.y, trigger.offsetX, trigger.offsetY, movementPatternId, entranceView));
+            // A health phase's movementPattern gets the same per-member shift as the spawn
+            // movement above - otherwise, with keepFormation, every member would fly its phase path
+            // to the SAME absolute waypoints and collapse the formation the moment the phase starts.
+            Array<HealthPhase> memberPhases = trigger.healthPhases;
+            if (trigger.waveKeepFormation && memberPhases != null && memberPhases.size > 0) {
+                memberPhases = new Array<>();
+                for (HealthPhase phase : trigger.healthPhases) {
+                    String phaseMovement = phase.movementPattern;
+                    if (phaseMovement != null && PatternRegistry.getMovement(phaseMovement) != null) {
+                        phaseMovement = registerShiftedClone(phaseMovement, slot.x - trigger.x, slot.y - trigger.y);
+                    }
+                    memberPhases.add(new HealthPhase(phase.healthPercent, phaseMovement, phase.firingPattern));
+                }
+            }
+
+            pendingWaveSpawns.add(new PendingWaveSpawn(trigger, dueRealTime, slot.x, slot.y, trigger.offsetX, trigger.offsetY, movementPatternId, entranceView, memberPhases));
         }
     }
 
@@ -738,7 +756,7 @@ public class TriggerManager {
             EnemySpawnOps.spawnEnemy(entityManager, enemyDefinitions, assets, worldWidth, worldHeight,
                 pending.source.type, pending.x, pending.y, pending.offsetX, pending.offsetY,
                 pending.movementPatternId, pending.source.firingPattern, pending.source.inverseMovement,
-                pending.source.powerup, pending.entranceView, camera.getSpeed());
+                pending.source.powerup, pending.entranceView, camera.getSpeed(), pending.healthPhases);
             pendingWaveSpawns.removeIndex(i);
         }
     }

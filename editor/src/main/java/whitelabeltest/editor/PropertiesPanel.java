@@ -11,6 +11,7 @@ import javafx.scene.control.TextArea;
 import javafx.scene.layout.HBox;
 import javafx.scene.layout.VBox;
 import whitelabeltest.enemy.EnemyDefinition;
+import whitelabeltest.enemy.HealthPhase;
 import whitelabeltest.enemy.MovementPatternDef;
 import whitelabeltest.gamemanagers.spawning.StageDefinition;
 import whitelabeltest.gamemanagers.trigger.Condition;
@@ -333,6 +334,9 @@ public class PropertiesPanel extends ScrollPane {
             trigger.powerup == null ? "" : String.valueOf(trigger.powerup),
             v -> { trigger.powerup = v.isEmpty() ? null : Integer.valueOf(v); onEdited(); }));
         root.getChildren().add(FormControls.checkBox("Inverse movement", trigger.inverseMovement, v -> { trigger.inverseMovement = v; onEdited(); }));
+
+        root.getChildren().add(new Separator());
+        buildHealthPhasesSection();
 
         root.getChildren().add(new Separator());
         root.getChildren().add(movementPathBox);
@@ -715,6 +719,45 @@ public class PropertiesPanel extends ScrollPane {
         if (List.of("enemiesDestroyed", "enemyTypeDestroyed", "gemsCollected", "grazed").contains(condition.type)) {
             box.getChildren().add(numberRow("Count", condition.count, v -> { condition.count = v.intValue(); onEdited(); }));
         }
+        return box;
+    }
+
+    /** Health phases - see HealthPhase/Trigger.healthPhases: at each listed remaining-health percent the
+     *  spawned enemy swaps to a different movement and/or firing pattern (blank = leave that one as it
+     *  is). Only shown for an enemy-spawn trigger; the list stays null (so nothing is written to the
+     *  trigger file) until the first phase is added. */
+    private void buildHealthPhasesSection() {
+        root.getChildren().add(sectionLabel("Health phases (change patterns as it takes damage)"));
+        if (trigger.healthPhases != null) {
+            for (HealthPhase phase : trigger.healthPhases) root.getChildren().add(buildHealthPhaseRow(phase));
+        }
+        Button add = new Button("+ Add Health Phase");
+        add.setOnAction(e -> {
+            if (trigger.healthPhases == null) trigger.healthPhases = new com.badlogic.gdx.utils.Array<>();
+            trigger.healthPhases.add(new HealthPhase(50f, null, null));
+            onEdited();
+            showTrigger(trigger);
+        });
+        root.getChildren().add(add);
+    }
+
+    private VBox buildHealthPhaseRow(HealthPhase phase) {
+        VBox box = new VBox(4);
+        box.setStyle("-fx-background-color: #26272c; -fx-padding: 6; -fx-background-radius: 6;");
+
+        Button remove = new Button("✕");
+        remove.setOnAction(e -> {
+            trigger.healthPhases.removeValue(phase, true);
+            if (trigger.healthPhases.size == 0) trigger.healthPhases = null;
+            onEdited();
+            showTrigger(trigger);
+        });
+        HBox header = new HBox(6, numberRow("At health %", phase.healthPercent, v -> { phase.healthPercent = v; onEdited(); }), remove);
+        box.getChildren().add(header);
+        box.getChildren().add(comboRow("Movement pattern", withBlank(PatternIds.movementPatternIds()), phase.movementPattern,
+            v -> { phase.movementPattern = v.isEmpty() ? null : v; onEdited(); }));
+        box.getChildren().add(comboRow("Firing pattern", withBlank(PatternIds.firingPatternIds()), phase.firingPattern,
+            v -> { phase.firingPattern = v.isEmpty() ? null : v; onEdited(); }));
         return box;
     }
 }

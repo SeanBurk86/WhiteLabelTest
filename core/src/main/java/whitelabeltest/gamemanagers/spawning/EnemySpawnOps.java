@@ -14,6 +14,7 @@ import com.badlogic.gdx.utils.ObjectMap;
 import whitelabeltest.enemy.Enemy;
 import whitelabeltest.enemy.EnemyDefinition;
 import whitelabeltest.enemy.GenericEnemy;
+import whitelabeltest.enemy.HealthPhase;
 import whitelabeltest.gamemanagers.trigger.Trigger;
 
 /** Enemy-instantiation and sprite-cue mechanics shared by SpawnScheduler (wall-clock-timed spawn
@@ -40,6 +41,15 @@ public final class EnemySpawnOps {
                                    float worldWidth, float worldHeight, String type, float x, float y, float offsetX, float offsetY,
                                    String movementPattern, String firingPattern, boolean inverseMovement, Integer powerup,
                                    Trigger entranceTrigger, float cameraSpeed) {
+        spawnEnemy(entityManager, enemyDefinitions, assets, worldWidth, worldHeight, type, x, y, offsetX, offsetY,
+            movementPattern, firingPattern, inverseMovement, powerup, entranceTrigger, cameraSpeed, null);
+    }
+
+    /** @param healthPhases see HealthPhase/Trigger.healthPhases - null or empty for none. */
+    public static void spawnEnemy(EntityManager entityManager, ObjectMap<String, EnemyDefinition> enemyDefinitions, AssetManager assets,
+                                   float worldWidth, float worldHeight, String type, float x, float y, float offsetX, float offsetY,
+                                   String movementPattern, String firingPattern, boolean inverseMovement, Integer powerup,
+                                   Trigger entranceTrigger, float cameraSpeed, Array<HealthPhase> healthPhases) {
         EnemyDefinition def = enemyDefinitions.get(type);
         if (def == null) return;
 
@@ -55,6 +65,7 @@ public final class EnemySpawnOps {
         enemy.initWithDefinition(def, tex, bulletTex, spawnTex, deathTex, worldWidth, worldHeight, x, y, offsetX, offsetY, movementPattern, firingPattern, entranceTrigger, cameraSpeed);
 
         if (powerup != null) enemy.setGuaranteedPowerup(powerup);
+        enemy.setHealthPhases(healthPhases);
         entityManager.getEnemies().add(enemy);
     }
 

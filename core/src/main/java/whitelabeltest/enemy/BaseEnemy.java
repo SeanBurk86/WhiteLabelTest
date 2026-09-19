@@ -53,6 +53,11 @@ public abstract class BaseEnemy implements Enemy {
     private static final float CEASEFIRE_ZONE_Y = 1.5f;
     private static final float CEASEFIRE_ZONE_X = 0.5f;
 
+    // See HealthPhase/setHealthPhases() - sorted highest healthPercent first, so nextHealthPhase
+    // only ever moves forward through them as health falls. Null when this enemy has no phases.
+    private Array<HealthPhase> healthPhases;
+    private int nextHealthPhase = 0;
+
     // Tracks whether a Defiant enemy (see Enemy.isDefiant()) has actually spawned a bullet yet -
     // detected generically (any firing pattern growing enemyBullets) rather than each
     // FiringPattern reporting it, so this works unmodified for every existing/future pattern.
@@ -379,8 +384,57 @@ public abstract class BaseEnemy implements Enemy {
             startDeath();
             return true;
         }
+        advanceHealthPhases();
         return false;
     }
+
+    @Override
+    public void setHealthPhases(Array<HealthPhase> phases) {
+        nextHealthPhase = 0;
+        if (phases == null || phases.size == 0) {
+            healthPhases = null;
+            return;
+        }
+        healthPhases = new Array<>(phases);
+        healthPhases.sort((a, b) -> Float.compare(b.healthPercent, a.healthPercent));
+    }
+
+    /** Enters every not-yet-entered phase whose threshold current health has reached, in order from
+     *  highest threshold to lowest - so a hit that skips past several at once still ends up in the
+     *  deepest one's patterns. Compared as health*100 <= maxHealth*percent to avoid integer
+     *  truncation of the threshold. */
+    private void advanceHealthPhases() {
+        if (healthPhases == null || maxHealth <= 0) return;
+        while (nextHealthPhase < healthPhases.size
+                && health * 100f <= maxHealth * healthPhases.get(nextHealthPhase).healthPercent) {
+            enterHealthPhase(healthPhases.get(nextHealthPhase));
+            nextHealthPhase++;
+        }
+    }
+
+    /** Swaps in phase's movement and/or firing pattern, each only if it names a pattern that
+     *  actually exists - an unknown or blank id leaves the current one running rather than silently
+     *  turning the enemy into one that doesn't move or fire (see resolveMovementPattern()/
+     *  resolveFiringPattern()). */
+    private void enterHealthPhase(HealthPhase phase) {
+        if (phase.movementPattern != null && !phase.movementPattern.isBlank()) {
+            MovementPattern resolved = resolveMovementPattern(phase.movementPattern);
+            if (resolved != null) movement = resolved;
+        }
+        if (phase.firingPattern != null && !phase.firingPattern.isBlank()) {
+            FiringPattern resolved = resolveFiringPattern(phase.firingPattern);
+            if (resolved != null) firing = resolved;
+        }
+    }
+
+    /** Builds a live MovementPattern for the given movement-pattern id, starting from this enemy's
+     *  current position - a no-op hook here for the same reason resolveWeaponSet() is: only
+     *  GenericEnemy has the definition/world info needed to build one. Null = no swap. */
+    protected MovementPattern resolveMovementPattern(String movementPatternId) { return null; }
+
+    /** Builds a live FiringPattern for the given firing-pattern id - see resolveMovementPattern().
+     *  Null = no swap. */
+    protected FiringPattern resolveFiringPattern(String firingPatternId) { return null; }
 
     @Override
     public void advanceFiringPattern() {
@@ -439,6 +493,8 @@ public abstract class BaseEnemy implements Enemy {
         pairResolved = false;
         pairGraceTimer = -1f;
         healthRegenAccumulator = 0f;
+        healthPhases = null;
+        nextHealthPhase = 0;
         lifecycleState = LifecycleState.ACTIVE;
         lifecycleTime = 0f;
         if (sprite != null) {

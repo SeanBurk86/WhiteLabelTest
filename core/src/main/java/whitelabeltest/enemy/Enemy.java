@@ -132,6 +132,10 @@ public interface Enemy extends Pool.Poolable {
     Integer getGuaranteedPowerup();
 
 
+    // See HealthPhase/Trigger.healthPhases - hands this enemy the list of health thresholds at
+    // which it swaps movement/firing pattern. No-op default for an enemy that doesn't support it.
+    default void setHealthPhases(Array<HealthPhase> phases) {}
+
     void setInvertMovement(boolean invert);
 
     Enemy create(Texture texture, float worldWidth, float worldHeight);
