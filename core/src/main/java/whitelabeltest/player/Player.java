@@ -777,6 +777,22 @@ public class Player {
         deathRestoreLevel = 0;
     }
 
+    /** Puts the player back at reset()'s own start position with the halo attached and both
+     *  equipped weapons back at level 1 - run when a new stage begins (see GameController.
+     *  advanceToNextStage()) so each stage opens the same way regardless of how the last one
+     *  ended. Unlike reset(), this keeps the run's lives/bombs/loadout: it only touches position,
+     *  halo and weapon level (a weapon that's not equipped is left alone, since it's already at 0). */
+    public void resetForNewStage() {
+        sprite.setPosition(worldWidth / 2f - sprite.getWidth() / 2f, 0);
+        updateHitbox();
+        updateGrazeHitbox();
+        reattachHaloImmediately();
+        for (Weapon w : weaponSlots) {
+            if (w != null) w.setLevel(1);
+        }
+        deathRestoreLevel = 0;
+    }
+
     /** Snaps the halo straight back onto the player, canceling whatever hyper attack ability
      *  currently has it detached (Basic's dash/return, or Thunderbolt's move-out/charge/return)
      *  instead of leaving it stranded mid-flight - used by reset() on a full game restart, and by

@@ -660,6 +660,7 @@ public class GameController implements Disposable {
     private void advanceToNextStage() {
         loadStage(stageIndex + 1);
         entities.clearWorld();
+        entities.getPlayer().resetForNewStage();
         levelComplete = false;
         levelCompleteDelayTimer = -1f;
         bossDefeatedScheduleTime = -1f;
