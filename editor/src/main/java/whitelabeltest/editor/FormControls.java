@@ -78,6 +78,15 @@ public final class FormControls {
         return row;
     }
 
+    /** A blank-able combo of the available sound effects (see PatternIds.sfxPaths()). A current
+     *  value that isn't in the folder (a hand-typed path, or a placeholder like CHANGE_ME.mp3) is
+     *  kept as an extra entry so opening the panel never silently rewrites it. */
+    public static HBox soundRow(String label, String initial, Consumer<String> onCommit) {
+        List<String> options = withBlank(PatternIds.sfxPaths());
+        if (initial != null && !initial.isEmpty() && !options.contains(initial)) options.add(initial);
+        return comboRow(label, options, initial, onCommit);
+    }
+
     public static CheckBox checkBox(String label, boolean initial, Consumer<Boolean> onCommit) {
         CheckBox box = new CheckBox(label);
         box.setSelected(initial);

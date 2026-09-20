@@ -27,6 +27,7 @@ import static whitelabeltest.editor.FormControls.comboRow;
 import static whitelabeltest.editor.FormControls.numberRow;
 import static whitelabeltest.editor.FormControls.numberRowNullable;
 import static whitelabeltest.editor.FormControls.sectionLabel;
+import static whitelabeltest.editor.FormControls.soundRow;
 import static whitelabeltest.editor.FormControls.textRow;
 import static whitelabeltest.editor.FormControls.withBlank;
 
@@ -249,7 +250,7 @@ public class PropertiesPanel extends ScrollPane {
     }
 
     private void buildSoundFields() {
-        root.getChildren().add(textRow("Sound path", trigger.sound, v -> { trigger.sound = v; onEdited(); }));
+        root.getChildren().add(soundRow("Sound path", trigger.sound, v -> { trigger.sound = v; onEdited(); }));
     }
 
     private void buildSpriteFields() {
@@ -486,7 +487,7 @@ public class PropertiesPanel extends ScrollPane {
             }
 
             movementPathBox.getChildren().add(sectionLabel("Sound"));
-            movementPathBox.getChildren().add(textRow("Name (blank = none)", selected.soundName, v -> {
+            movementPathBox.getChildren().add(soundRow("File (blank = none)", selected.soundName, v -> {
                 selected.soundName = v.isBlank() ? null : v; canvas.notifyPathEditChanged();
             }));
             movementPathBox.getChildren().add(numberRow("Volume", selected.soundVolume, v -> {

@@ -181,6 +181,22 @@ public class ScrollingBackground {
         }
     }
 
+    /** Passes the camera's current distance into the stage down to the kaleidoscope shader, which
+     *  fades from monochrome to colour with it - see Stage2KaleidoscopeShader.setStageDistance().
+     *  Same no-op-for-other-backgrounds contract as setKaleidoscopeTransitionTime(). */
+    public void setKaleidoscopeStageDistance(float distance) {
+        if (shaderBackground instanceof Stage2KaleidoscopeShader kaleidoscope) {
+            kaleidoscope.setStageDistance(distance);
+        }
+    }
+
+    /** See Stage2KaleidoscopeShader.setDistances(). */
+    public void setKaleidoscopeDistances(float colorFadeDistance, float tentacleSwitchDistance) {
+        if (shaderBackground instanceof Stage2KaleidoscopeShader kaleidoscope) {
+            kaleidoscope.setDistances(colorFadeDistance, tentacleSwitchDistance);
+        }
+    }
+
     /** Passes a stage's schedule-configured boss-video cue time down as the hue cycle's period - see
      *  SpawnScheduler.getBackgroundVideoTime()/HueCycleShader.setPeriod(). No-op if this stage didn't
      *  set StageDefinition.hueCycleBackground, so GameController can call this unconditionally after

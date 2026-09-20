@@ -55,6 +55,11 @@ public class GameController implements Disposable {
     // Camera-position-driven counterpart to spawnScheduler - see TriggerManager's class doc. Null
     // for any stage whose StageDefinition.triggerFile is unset (every stage but stage1, for now).
     private TriggerManager triggerManager;
+    // Distance at which the kaleidoscope background finishes fading to colour - see loadStage(); <= 0 means
+    // "no distance-driven fade" (the shader falls back to its own clock).
+    private float colorFadeDistance = -1f;
+    // How many distance units before the boss trigger the kaleidoscope background swaps to the tentacles.
+    private static final float KALEIDOSCOPE_SWITCH_LEAD = 4f;
     // spawnScheduler's own (wall-clock) textCues plus triggerManager's (distance-driven) ones,
     // refreshed every update() - see getTextCues(). A stage like stage1, whose schedule.json no
     // longer authors any text cues at all, just contributes an empty list here, so UIManager keeps
@@ -339,6 +344,7 @@ public class GameController implements Disposable {
         }
         if (triggerManager != null) {
             triggerManager.update(delta, entities, audio, input, scoreManager);
+            background.setKaleidoscopeStageDistance(triggerManager.getCamera().getPosition());
         }
         combinedTextCues.clear();
         if (spawnScheduler != null) combinedTextCues.addAll(spawnScheduler.getTextCues());
@@ -630,6 +636,11 @@ public class GameController implements Disposable {
         }
         background.setKaleidoscopeTransitionTime(stageDef.kaleidoscopeTransitionTime != null ? stageDef.kaleidoscopeTransitionTime
             : (spawnScheduler != null ? spawnScheduler.getKaleidoscopeTransitionTime() : Stage2KaleidoscopeShader.DEFAULT_TRANSITION_TIME));
+        float bossDistance = triggerManager != null ? triggerManager.getBossSpawnDistance() : -1f;
+        colorFadeDistance = stageDef.kaleidoscopeColorFadeDistance != null ? stageDef.kaleidoscopeColorFadeDistance : bossDistance;
+        float tentacleSwitchDistance = stageDef.kaleidoscopeTransitionDistance != null ? stageDef.kaleidoscopeTransitionDistance
+            : (bossDistance > 0f ? Math.max(0f, bossDistance - KALEIDOSCOPE_SWITCH_LEAD) : -1f);
+        background.setKaleidoscopeDistances(colorFadeDistance, tentacleSwitchDistance);
         groundScrollSpeed = stageDef.groundScrollSpeed != null ? stageDef.groundScrollSpeed
             : (spawnScheduler != null ? spawnScheduler.getGroundScrollSpeed() : ScrollingBackground.DEFAULT_SCROLL_SPEED);
         // A trigger-authored boss video (see Trigger.triggerBossVideo) wins over the schedule's own

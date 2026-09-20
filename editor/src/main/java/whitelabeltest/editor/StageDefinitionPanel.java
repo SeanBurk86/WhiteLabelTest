@@ -82,6 +82,12 @@ public class StageDefinitionPanel extends ScrollPane {
         root.getChildren().add(numberRowNullable("Kaleidoscope transition time (blank = engine default)",
             stage.kaleidoscopeTransitionTime != null ? stage.kaleidoscopeTransitionTime : Float.NaN,
             v -> stage.kaleidoscopeTransitionTime = Float.isNaN(v) ? null : v));
+        root.getChildren().add(numberRowNullable("Kaleidoscope colour fade ends at distance (blank = boss)",
+            stage.kaleidoscopeColorFadeDistance != null ? stage.kaleidoscopeColorFadeDistance : Float.NaN,
+            v -> stage.kaleidoscopeColorFadeDistance = Float.isNaN(v) ? null : v));
+        root.getChildren().add(numberRowNullable("Kaleidoscope -> tentacles at distance (blank = just before boss)",
+            stage.kaleidoscopeTransitionDistance != null ? stage.kaleidoscopeTransitionDistance : Float.NaN,
+            v -> stage.kaleidoscopeTransitionDistance = Float.isNaN(v) ? null : v));
         root.getChildren().add(numberRowNullable("Ground scroll speed (blank = engine default)",
             stage.groundScrollSpeed != null ? stage.groundScrollSpeed : Float.NaN,
             v -> stage.groundScrollSpeed = Float.isNaN(v) ? null : v));

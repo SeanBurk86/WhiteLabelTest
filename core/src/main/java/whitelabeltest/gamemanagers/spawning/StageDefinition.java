@@ -42,6 +42,13 @@ public class StageDefinition {
     // from. null (the default) means "use the engine default", same meaning SpawnScheduler's own
     // null/unset schedule fields already had.
     public Float kaleidoscopeTransitionTime;
+    // Camera distance at which the "kaleidoscope" shader background has finished fading from
+    // monochrome to its colour palette (see Stage2KaleidoscopeShader.setDistances()). null means
+    // "the boss trigger's distance" - the whole stage.
+    public Float kaleidoscopeColorFadeDistance;
+    // Camera distance at which the "kaleidoscope" shader background swaps from the phosphene to the
+    // tentacles tunnel. null means "a few units before the boss trigger" (see GameController.loadStage()).
+    public Float kaleidoscopeTransitionDistance;
     public Float groundScrollSpeed;
     public String music;
     public Array<BackgroundLayerDef> backgroundLayers;

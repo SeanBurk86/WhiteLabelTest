@@ -39,6 +39,24 @@ public final class PatternIds {
         return listJsonIds(Path.of("data/bullets.json"));
     }
 
+    /** Sound-effect asset paths (e.g. "audio/sfx/hawkscreech.mp3") for the sound combos - relative
+     *  to the assets folder, the same form Trigger.sound / MovementPatternDef.soundName already store
+     *  and AudioManager.playCueSound() loads through Gdx.files.internal(). */
+    public static List<String> sfxPaths() {
+        Path dir = Path.of("audio/sfx");
+        if (!Files.isDirectory(dir)) return new ArrayList<>();
+        try (Stream<Path> files = Files.list(dir)) {
+            return files
+                .map(p -> p.getFileName().toString())
+                .filter(name -> name.endsWith(".mp3") || name.endsWith(".wav") || name.endsWith(".ogg"))
+                .map(name -> "audio/sfx/" + name)
+                .sorted(Comparator.naturalOrder())
+                .collect(java.util.stream.Collectors.toCollection(ArrayList::new));
+        } catch (IOException e) {
+            throw new UncheckedIOException("Failed to list " + dir.toAbsolutePath(), e);
+        }
+    }
+
     private static List<String> listJsonIds(Path path) {
         if (!Files.exists(path)) return new ArrayList<>();
         try {
