@@ -416,7 +416,7 @@ public class Main extends ApplicationAdapter {
                 game.getEnemiesDestroyed(), game.getTotalEnemyCount(),
                 game.getLevelCompleteTimeBonus(), game.getLevelCompleteBossFightSeconds(),
                 game.getMaxChainCount(), game.getLevelCompleteRank(),
-                game.hasNextStage(), game.getStageNumber());
+                game.hasNextStage(), game.getStageName());
         }
 
         if (game.isDebugMode() && game.isAudioMuted() && !game.isDebugMenuOpen()) {

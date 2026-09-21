@@ -5,6 +5,7 @@ import whitelabeltest.gamemanagers.spawning.GameBalance;
 import whitelabeltest.gamemanagers.effects.PointGem;
 import whitelabeltest.gamemanagers.replay.ReplayFrame;
 import whitelabeltest.gamemanagers.spawning.StageDefinition;
+import whitelabeltest.gamemanagers.spawning.StageMapDefinition;
 import whitelabeltest.gamemanagers.spawning.StageSequenceDefinition;
 import whitelabeltest.gamemanagers.audio.AudioManager;
 import whitelabeltest.gamemanagers.audio.AudioSettings;
@@ -87,12 +88,12 @@ public class GameController implements Disposable {
     // GameController (re-resolved on every reset() in case the underlying JSON changed, e.g. via
     // the debug enemy/pattern editor's live-reload path).
     private Array<String> stageSequence;
-    // The sequence's stage ids in their ORIGINAL order (stageSequence itself gets reordered as the player
-    // picks stages - see confirmStageSelect()), so the stage-select map keeps every stage at the same
-    // place along its path however they were chosen.
-    private Array<String> stageMapOrder;
-    // See StageSequenceDefinition.chooseNextStage.
-    private boolean chooseNextStage;
+    // For a sequence with a stageMap (see StageSequenceDefinition.stageMap): the map itself, and the nodes
+    // the player has played through so far (the last one is the stage currently loaded). stageSequence
+    // then grows one stage per choice as the run goes, instead of being fixed up front. Both null for an
+    // ordinary fixed-order sequence.
+    private StageMap stageMap;
+    private Array<StageMap.Node> stageMapPath;
     // Non-null while the stage-select map is up after a stage clear - see openStageSelect().
     private StageSelect stageSelect;
     // Explicit index into stageSequence (not raw position in AssetManager's stage pool) of the
@@ -630,54 +631,58 @@ public class GameController implements Disposable {
         }
         if (input.isRestartJustPressed()) {
             if (!hasNextStage()) reset();
-            else if (chooseNextStage && stageSequence.size - (stageIndex + 1) > 1) openStageSelect();
-            else advanceToNextStage();
+            else if (stageMap != null) {
+                // Only one way on = nothing to choose; otherwise it's the stage-select screen.
+                Array<StageMap.Node> choices = stageMap.choicesAfter(stageMapPath.peek());
+                if (choices.size > 1) openStageSelect();
+                else moveToMapNode(choices.first());
+            } else advanceToNextStage();
         } else if (input.isQuitJustPressed()) {
             quitToMenuRequested = true;
         }
     }
 
-    /** Builds the stage-select map from the sequence's stages - see StageSelect. Every stage is a node, in
-     *  the sequence's original order (the path runs through them in that order); the ones the player has
-     *  already been through (everything up to and including the stage just cleared) are marked cleared
-     *  and can't be picked again. */
+    /** Opens the stage-select screen: the whole map, the route taken so far, and the stages the one just
+     *  cleared connects to - see StageSelect. */
     private void openStageSelect() {
-        StageSelect select = new StageSelect();
-        for (int i = 0; i < stageMapOrder.size; i++) {
-            String id = stageMapOrder.get(i);
-            StageDefinition def = assets.getStageDefinition(id);
-            boolean cleared = stageSequence.indexOf(id, false) <= stageIndex;
-            select.addNode(id, def.name != null ? def.name : id,
-                def.mapX != null ? def.mapX : Float.NaN, def.mapY != null ? def.mapY : Float.NaN,
-                cleared, i, stageMapOrder.size);
-        }
-        stageSelect = select;
+        stageSelect = new StageSelect(stageMap, stageMapPath);
     }
 
-    /** Left/right pick between the remaining stages and the same confirm key as the STAGE CLEAR screen
-     *  launches the highlighted one. All of it comes from the recorded/replayed input stream (move edges +
-     *  confirm), so a replay makes the same choices with nothing extra to record. */
+    /** Up/down (or left/right) pick between the stages on offer and the same confirm key as the STAGE
+     *  CLEAR screen launches the highlighted one. All of it comes from the recorded/replayed input stream
+     *  (move edges + confirm), so a replay makes the same choices with nothing extra to record. */
     private void handleStageSelectInput(float delta) {
         stageSelect.tick(delta);
-        if (input.isMoveLeftJustStarted()) stageSelect.move(-1);
-        if (input.isMoveRightJustStarted()) stageSelect.move(1);
+        if (input.isMoveUpJustStarted() || input.isMoveLeftJustStarted()) stageSelect.move(-1);
+        if (input.isMoveDownJustStarted() || input.isMoveRightJustStarted()) stageSelect.move(1);
         if (input.isRestartJustPressed()) {
-            confirmStageSelect();
+            StageMap.Node chosen = stageSelect.getSelected();
+            stageSelect = null;
+            if (chosen != null) moveToMapNode(chosen);
         } else if (input.isQuitJustPressed()) {
             quitToMenuRequested = true;
         }
     }
 
-    /** Moves the chosen stage to be the next one in stageSequence (swapping it with whichever was there,
-     *  so the untaken stages simply stay in the pool behind it) and starts it like any other advance. */
-    private void confirmStageSelect() {
-        StageSelect.Node chosen = stageSelect.getSelected();
-        stageSelect = null;
-        if (chosen != null) {
-            int at = stageSequence.indexOf(chosen.id, false);
-            if (at > stageIndex + 1) stageSequence.swap(stageIndex + 1, at);
-        }
+    /** Steps the run onto `node` - appends its stage to the sequence (which is how loadStage()/
+     *  advanceToNextStage() find it) and starts it like any other advance. */
+    private void moveToMapNode(StageMap.Node node) {
+        stageMapPath.add(node);
+        stageSequence.add(node.stageId);
         advanceToNextStage();
+    }
+
+    /** Builds the runtime map for a sequence's stageMap, giving every node that has a stage that stage's
+     *  display name. An unknown stage id fails here, at the start of the run, rather than mid-run when
+     *  somebody first chooses it. */
+    private StageMap buildStageMap(StageMapDefinition def) {
+        StageMap map = new StageMap(def);
+        for (StageMap.Node node : map.getNodes()) {
+            if (!node.hasStage()) continue;
+            StageDefinition stage = assets.getStageDefinition(node.stageId);
+            node.label = stage.name != null ? stage.name : node.stageId;
+        }
+        return map;
     }
 
     private void loadStage(int index) {
@@ -759,8 +764,8 @@ public class GameController implements Disposable {
         recorder = null;
         stageSequence = new Array<>();
         stageSequence.add(stageId);
-        stageMapOrder = stageSequence;
-        chooseNextStage = false;
+        stageMap = null;
+        stageMapPath = null;
         stageSelect = null;
         loadStage(0);
         entities.clearWorld();
@@ -800,16 +805,19 @@ public class GameController implements Disposable {
         if (startDistance > 0) seekToTime(startDistance);
     }
 
-    public boolean hasNextStage() { return stageIndex + 1 < stageSequence.size; }
-    /** The current stage's number for display ("STAGE n CLEAR"). On a choose-your-stage sequence that's its
-     *  place on the map, NOT how many stages have been played: the player can take them out of order, and
-     *  clearing the map's third stage as their second must still say STAGE 3. */
-    public int getStageNumber() {
-        if (chooseNextStage) {
-            int onMap = stageMapOrder.indexOf(stageSequence.get(stageIndex), false);
-            if (onMap >= 0) return onMap + 1;
-        }
-        return stageIndex + 1;
+    /** On a map sequence there's a next stage as long as the current node connects to one that has a stage
+     *  built - a dead end (nodes ahead with no stage yet, or none at all) is the end of the run. */
+    public boolean hasNextStage() {
+        if (stageMap != null) return !stageMap.choicesAfter(stageMapPath.peek()).isEmpty();
+        return stageIndex + 1 < stageSequence.size;
+    }
+
+    /** The current stage's own name for display ("STAGE 3 CLEAR"). Its name rather than a count of stages
+     *  played, since on a map the player takes a route through stages and "the second stage you played"
+     *  isn't a stable thing to call one. */
+    public String getStageName() {
+        String name = currentStageDef != null ? currentStageDef.name : null;
+        return name != null ? name : "STAGE " + (stageIndex + 1);
     }
 
     /** Overrides entities.reset(loadout)'s ordinary WeaponSelectScreen-driven loadout with a stage
@@ -1092,12 +1100,21 @@ public class GameController implements Disposable {
         levelCompleteRank = LevelRank.D;
         totalEnemiesAcrossRun = 0;
         StageSequenceDefinition sequenceDef = assets.getStageSequence(stageSequenceId);
-        // Copied: choosing stages reorders stageSequence (see confirmStageSelect()), which must never touch the
-        // sequence definition AssetManager keeps around and hands out again on the next reset().
-        stageSequence = new Array<>(sequenceDef.stageIds);
-        stageMapOrder = new Array<>(sequenceDef.stageIds);
-        chooseNextStage = sequenceDef.chooseNextStage;
+        // Always a copy: a map sequence appends to stageSequence as the player chooses (see moveToMapNode()),
+        // which must never touch the sequence definition AssetManager keeps around and hands out again on
+        // the next reset().
         stageSelect = null;
+        if (sequenceDef.stageMap != null) {
+            stageMap = buildStageMap(sequenceDef.stageMap);
+            stageMapPath = new Array<>();
+            stageMapPath.add(stageMap.getStart());
+            stageSequence = new Array<>();
+            stageSequence.add(stageMap.getStart().stageId);
+        } else {
+            stageMap = null;
+            stageMapPath = null;
+            stageSequence = new Array<>(sequenceDef.stageIds);
+        }
         loadStage(0);
         audio.stopVictory();
         patternPreviewer.close(entities);

@@ -959,7 +959,7 @@ public class UIManager implements Disposable {
      *  computeRank() derives from those same stats. */
     public void drawLevelComplete(SpriteBatch batch, float worldWidth, float worldHeight, int score, int bombBonus, int livesMultiplier,
                                    int enemiesDestroyed, int totalEnemies, int bossTimeBonus, float bossFightSeconds, int maxChainCount,
-                                   LevelRank rank, boolean hasNextStage, int stageNumber) {
+                                   LevelRank rank, boolean hasNextStage, String stageName) {
         batch.setColor(0f, 0f, 0f, 0.88f);
         batch.draw(whitePixel, 0, 0, worldWidth, worldHeight);
         batch.setColor(Color.WHITE);
@@ -969,7 +969,7 @@ public class UIManager implements Disposable {
         float panelX = margin;
         float panelWidth = worldWidth - margin * 2f;
 
-        String title = hasNextStage ? "STAGE " + stageNumber + " CLEAR" : "MISSION COMPLETE";
+        String title = hasNextStage ? stageName.toUpperCase() + " CLEAR" : "MISSION COMPLETE";
         float titleY = worldHeight - 0.9f;
         drawGlowCentered(batch, title, centerX, titleY, 2.6f, HUD_GREEN_DIM, Color.WHITE);
 
@@ -1051,11 +1051,13 @@ public class UIManager implements Disposable {
         drawCentered(batch, prompt, centerX, statsBottom - 0.5f, HUD_LABEL);
     }
 
-    /** The stage-select map shown after a stage clear on a sequence with chooseNextStage (see
-     *  StageSelect) - same terminal look as drawLevelComplete(). A winding path climbs from the lower
-     *  left to the upper right with a node at each of its peaks (one per stage, in sequence order): the
-     *  ones already cleared are lit green, the ones still to play are amber, and the cursor sits on one
-     *  of the amber ones, pulsing, with its name and the controls in a panel underneath. */
+    /** The stage-select screen shown after a stage clear on a sequence with a stageMap (see StageMap/
+     *  StageSelect), laid out like the reference sketch (assets/stage guide.png): a lattice of hexagon nodes
+     *  running left to right, fanning out from Stage 1 in the middle, each node joined to the two ahead of
+     *  it. Nodes with a stage carry its name; the route already taken is lit green, the stages on offer
+     *  are red (the one under the cursor pulses with a halo), stages on a branch not taken are dimmed, and
+     *  nodes with no stage yet are dark and marked "?". The controls and the highlighted stage's name sit in
+     *  a panel underneath. */
     public void drawStageSelect(SpriteBatch batch, float worldWidth, float worldHeight, StageSelect select) {
         batch.setColor(0f, 0f, 0f, 0.9f);
         batch.draw(whitePixel, 0, 0, worldWidth, worldHeight);
@@ -1078,87 +1080,134 @@ public class UIManager implements Disposable {
         batch.setColor(Color.WHITE);
         drawBoxBorder(batch, panelX, panelBottom, panelWidth, panelHeight, HUD_GREEN_DIM);
 
-        // Node coordinates are 0..1 across the area inside the panel's padding. Labels go ABOVE their node (the path
-        // never rises above a peak, so that's the one clear side), hence the extra room at the top.
-        float mapLeft = panelX + 0.9f;
-        float mapWidth = panelWidth - 1.8f;
-        float mapBottom = panelBottom + 0.8f;
-        float mapHeight = panelHeight - 0.8f - 1.3f;
-
-        Array<StageSelect.Node> nodes = select.getNodes();
+        StageMap map = select.getMap();
+        Array<StageMap.Node> nodes = map.getNodes();
         float time = select.getTime();
 
-        // The path: from each node (a peak) it drops away into a valley and climbs to the next one, like the
-        // reference sketch's sawtooth climb. Lit only where both ends are cleared.
-        final int samples = 28;
-        for (int i = 0; i < nodes.size - 1; i++) {
-            StageSelect.Node a = nodes.get(i);
-            StageSelect.Node b = nodes.get(i + 1);
-            float ax = mapLeft + a.x * mapWidth, ay = mapBottom + a.y * mapHeight;
-            float bx = mapLeft + b.x * mapWidth, by = mapBottom + b.y * mapHeight;
-            float dip = 0.3f * (float) Math.hypot(bx - ax, by - ay);
-            boolean lit = a.cleared && b.cleared;
-            float px = ax, py = ay;
-            for (int s = 1; s <= samples; s++) {
-                float t = s / (float) samples;
-                // The exponent < 1 keeps the ends sharp (peaks) and the middle broad (valley). Kept above the
-                // panel's floor so a deep valley never runs out of the box.
-                float qx = MathUtils.lerp(ax, bx, t);
-                float qy = MathUtils.lerp(ay, by, t) - dip * (float) Math.pow(MathUtils.sin(MathUtils.PI * t), 0.5);
-                qy = Math.max(qy, panelBottom + 0.25f);
-                if (lit) {
-                    drawPathSegment(batch, px, py, qx, qy, 0.22f, 0.35f, 1f, 0.55f, 0.16f);
-                    drawPathSegment(batch, px, py, qx, qy, 0.07f, 0.35f, 1f, 0.55f, 1f);
+        // Node coordinates are 0..1 across the area inside the panel's padding. The hexagons are sized off the
+        // tightest spacing on the map - the vertical gap between neighbours in the tallest column, and the gap
+        // between columns - so they nearly touch their neighbours like the sketch's do, but never overlap.
+        float padX = 0.9f, padY = 0.8f;
+        float mapLeft = panelX + padX;
+        float mapWidth = panelWidth - padX * 2f;
+        float mapBottom = panelBottom + padY;
+        float mapHeight = panelHeight - padY * 2f;
+        int columns = 1, tallest = 1;
+        for (StageMap.Node node : nodes) {
+            columns = Math.max(columns, node.column + 1);
+            tallest = Math.max(tallest, node.row + 1);
+        }
+        float rowGap = tallest > 1 ? mapHeight / (tallest - 1) : mapHeight;
+        float columnGap = columns > 1 ? mapWidth / (columns - 1) : mapWidth;
+        float hexRadius = Math.min(rowGap * 0.94f / SQRT3, columnGap * 0.46f);
+
+        StageMap.Node current = select.getCurrent();
+        StageMap.Node selected = select.getSelected();
+
+        // Links first, so the hexagons cover their ends. Lit along the route taken, amber from where the player
+        // stands to each stage on offer (pulsing on the highlighted one), dim everywhere else.
+        for (StageMap.Node from : nodes) {
+            float fx = mapLeft + from.x * mapWidth, fy = mapBottom + from.y * mapHeight;
+            for (StageMap.Node to : from.next) {
+                float tx = mapLeft + to.x * mapWidth, ty = mapBottom + to.y * mapHeight;
+                if (select.isVisited(from) && select.isVisited(to)) {
+                    drawPathSegment(batch, fx, fy, tx, ty, 0.2f, 0.35f, 1f, 0.55f, 0.16f);
+                    drawPathSegment(batch, fx, fy, tx, ty, 0.08f, 0.35f, 1f, 0.55f, 1f);
+                } else if (from == current && select.isChoice(to)) {
+                    float pulse = to == selected ? 0.75f + 0.25f * MathUtils.sin(time * 6f) : 0.55f;
+                    drawPathSegment(batch, fx, fy, tx, ty, 0.2f, 1f, 0.72f, 0.18f, 0.14f * pulse);
+                    drawPathSegment(batch, fx, fy, tx, ty, 0.08f, 1f, 0.72f, 0.18f, pulse);
                 } else {
-                    drawPathSegment(batch, px, py, qx, qy, 0.05f, 0.16f, 0.4f, 0.24f, 1f);
+                    drawPathSegment(batch, fx, fy, tx, ty, 0.07f, 0.2f, 0.32f, 0.24f, 1f);
                 }
-                px = qx;
-                py = qy;
             }
         }
 
-        StageSelect.Node selected = select.getSelected();
-        for (int i = 0; i < nodes.size; i++) {
-            StageSelect.Node node = nodes.get(i);
+        for (StageMap.Node node : nodes) {
             float nx = mapLeft + node.x * mapWidth, ny = mapBottom + node.y * mapHeight;
+            boolean visited = select.isVisited(node);
+            boolean choice = select.isChoice(node);
             boolean isSelected = node == selected;
-            Color accent = node.cleared ? HUD_GREEN : HUD_AMBER;
-            float size = 0.5f;
-            if (isSelected) size += 0.12f + 0.06f * MathUtils.sin(time * 6f);
+            float r = hexRadius;
+            if (isSelected) r *= 1.04f + 0.03f * MathUtils.sin(time * 6f);
 
             if (isSelected) {
-                // A pulsing halo behind the cursor node.
-                batch.setColor(accent.r, accent.g, accent.b, 0.14f + 0.06f * MathUtils.sin(time * 6f));
-                drawRotatedQuad(batch, nx - size * 0.85f, ny - size * 0.85f, size * 0.85f, size * 0.85f, size * 1.7f, size * 1.7f, 45f);
-                batch.setColor(Color.WHITE);
+                drawHexagon(batch, nx, ny, r * 1.4f, 1f, 0.32f, 0.26f, 0.12f + 0.06f * MathUtils.sin(time * 6f));
             }
-            batch.setColor(accent);
-            drawRotatedQuad(batch, nx - size / 2f, ny - size / 2f, size / 2f, size / 2f, size, size, 45f);
-            batch.setColor(node.cleared ? 0.04f : 0.12f, node.cleared ? 0.22f : 0.08f, node.cleared ? 0.1f : 0.02f, 1f);
-            float inner = size * 0.68f;
-            drawRotatedQuad(batch, nx - inner / 2f, ny - inner / 2f, inner / 2f, inner / 2f, inner, inner, 45f);
-            batch.setColor(Color.WHITE);
-            if (node.cleared) drawDiamondIcon(batch, nx, ny, size * 0.3f, HUD_GREEN);
+            float outlineR = 0f, outlineG = 0f, outlineB = 0f, fillR = 0f, fillG = 0f, fillB = 0f;
+            if (visited) {            // route taken: green
+                outlineR = 0.35f; outlineG = 1f; outlineB = 0.55f;
+                fillR = 0.05f; fillG = 0.3f; fillB = 0.14f;
+            } else if (choice) {      // on offer: red, like the sketch's nodes
+                outlineR = isSelected ? 1f : 1f; outlineG = isSelected ? 0.95f : 0.72f; outlineB = isSelected ? 0.85f : 0.18f;
+                fillR = 0.85f; fillG = 0.14f; fillB = 0.16f;
+            } else if (node.hasStage()) { // a branch not taken
+                outlineR = 0.32f; outlineG = 0.2f; outlineB = 0.2f;
+                fillR = 0.28f; fillG = 0.08f; fillB = 0.09f;
+            } else {                  // no stage here yet
+                outlineR = 0.2f; outlineG = 0.28f; outlineB = 0.24f;
+                fillR = 0.07f; fillG = 0.1f; fillB = 0.09f;
+            }
+            drawHexagon(batch, nx, ny, r, outlineR, outlineG, outlineB, 1f);
+            drawHexagon(batch, nx, ny, r * 0.74f, fillR, fillG, fillB, 1f);
 
-            drawCentered(batch, node.label, nx, ny + size + 0.4f, isSelected ? Color.WHITE : accent);
-            if (node.cleared) drawCentered(batch, "CLEARED", nx, ny + size + 0.75f, HUD_LABEL);
+        }
+
+        // Names go INSIDE the hexagons, drawn after all of them: stacked nodes leave no room above or beside
+        // one for a label, and a bigger neighbour must never paint over it. Long names shrink to fit.
+        for (StageMap.Node node : nodes) {
+            float nx = mapLeft + node.x * mapWidth, ny = mapBottom + node.y * mapHeight;
+            if (!node.hasStage() || node.label == null) {
+                drawCentered(batch, "?", nx, ny + 0.1f, HUD_GREEN_DIM);
+                continue;
+            }
+            boolean visited = select.isVisited(node);
+            boolean choice = select.isChoice(node);
+            Color labelColor = node == selected ? Color.WHITE : (visited ? HUD_GREEN : (choice ? Color.WHITE : HUD_LABEL));
+            measureLayout.setText(font, node.label);
+            float scale = Math.min(0.85f, hexRadius * 1.25f / Math.max(measureLayout.width, 0.01f));
+            drawScaledCentered(batch, node.label, nx, ny + measureLayout.height * scale / 2f, scale, labelColor);
         }
 
         // Info panel under the map: the highlighted stage's name and the controls.
         float infoHeight = 2.4f;
         float infoBottom = panelBottom - 0.3f - infoHeight;
         drawBoxBorder(batch, panelX, infoBottom, panelWidth, infoHeight, HUD_GREEN_DIM);
-        if (selected != null) {
+        if (selected != null && selected.label != null) {
             drawCentered(batch, "NEXT TARGET", centerX, infoBottom + infoHeight - 0.45f, HUD_LABEL);
             drawGlowCentered(batch, selected.label, centerX, infoBottom + infoHeight - 1.05f, 1.8f, HUD_GREEN_DIM, Color.WHITE);
         }
         String prompt;
         if (inputType == InputType.KEYBOARD) {
-            prompt = select.getChoiceCount() > 1 ? "LEFT / RIGHT = SELECT   R = LAUNCH   Q = QUIT" : "R = LAUNCH   Q = QUIT";
+            prompt = select.getChoiceCount() > 1 ? "UP / DOWN = SELECT   R = LAUNCH   Q = QUIT" : "R = LAUNCH   Q = QUIT";
         } else {
-            prompt = select.getChoiceCount() > 1 ? "LEFT / RIGHT = SELECT   START = LAUNCH" : "START = LAUNCH";
+            prompt = select.getChoiceCount() > 1 ? "UP / DOWN = SELECT   START = LAUNCH" : "START = LAUNCH";
         }
         drawCentered(batch, prompt, centerX, infoBottom + 0.5f, HUD_LABEL);
+    }
+
+    private static final float SQRT3 = 1.7320508f;
+
+    /** A filled regular hexagon with flat top and bottom and points left and right (like the sketch's),
+     *  `radius` from its centre to a point. Drawn as a stack of horizontal strips - a hexagon is only
+     *  ever as wide as 2*(radius - |y|/sqrt(3)) at height y from its centre - since the batch only draws
+     *  textured quads. */
+    private void drawHexagon(SpriteBatch batch, float cx, float cy, float radius, float r, float g, float b, float a) {
+        float halfHeight = radius * SQRT3 / 2f;
+        // About 90 strips per world unit of height (~1 pixel or less at any sensible window size), so the slanted
+        // edges come out smooth rather than stair-stepped.
+        int strips = Math.max(22, (int) (2f * halfHeight * 90f));
+        float stripHeight = 2f * halfHeight / strips;
+        batch.setColor(r, g, b, a);
+        for (int i = 0; i < strips; i++) {
+            float y0 = -halfHeight + i * stripHeight;
+            float mid = Math.abs(y0 + stripHeight / 2f);
+            float width = 2f * (radius - mid / SQRT3);
+            // A hair of overlap between strips so no seams show through at fractional pixel positions - but only
+            // when opaque: overlapping translucent strips would double up into visible stripes.
+            batch.draw(whitePixel, cx - width / 2f, cy + y0, width, a >= 1f ? stripHeight + 0.004f : stripHeight);
+        }
+        batch.setColor(Color.WHITE);
     }
 
     /** A straight, `thickness`-wide line between two points - one piece of the stage-select path. */

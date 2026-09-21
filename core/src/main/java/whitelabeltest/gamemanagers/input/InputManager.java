@@ -37,6 +37,10 @@ public class InputManager {
     private boolean moveJustStarted;
     private boolean moveLeftJustStarted;
     private boolean moveRightJustStarted;
+    // Up/down counterparts of the two above - used to move the stage-select cursor between the branches of the
+    // map, which are stacked vertically (see GameController.handleStageSelectInput()).
+    private boolean moveUpJustStarted;
+    private boolean moveDownJustStarted;
 
     private InputType activeInput = InputType.KEYBOARD;
     private boolean prevBombButton;
@@ -48,6 +52,8 @@ public class InputManager {
     private boolean prevMoving;
     private boolean prevMovingLeft;
     private boolean prevMovingRight;
+    private boolean prevMovingUp;
+    private boolean prevMovingDown;
     // Guards the one-time seedHeldState() call below - see its javadoc.
     private boolean primed = false;
 
@@ -83,6 +89,8 @@ public class InputManager {
                 || Gdx.input.isKeyPressed(keyBindings.getKey(Action.MOVE_DOWN));
             prevMovingLeft = Gdx.input.isKeyPressed(keyBindings.getKey(Action.MOVE_LEFT));
             prevMovingRight = Gdx.input.isKeyPressed(keyBindings.getKey(Action.MOVE_RIGHT));
+            prevMovingUp = Gdx.input.isKeyPressed(keyBindings.getKey(Action.MOVE_UP));
+            prevMovingDown = Gdx.input.isKeyPressed(keyBindings.getKey(Action.MOVE_DOWN));
         } else if (activeInput == InputType.GAMEPAD) {
             Controller controller = Controllers.getCurrent();
             if (controller != null) {
@@ -102,6 +110,9 @@ public class InputManager {
                     || controller.getButton(controller.getMapping().buttonDpadDown);
                 prevMovingLeft = axisX < -0.2f || dpadLeft;
                 prevMovingRight = axisX > 0.2f || dpadRight;
+                // Gamepad up is a NEGATIVE Y axis reading - see update()'s own moveDirection.y -= axisY.
+                prevMovingUp = axisY < -0.2f || controller.getButton(controller.getMapping().buttonDpadUp);
+                prevMovingDown = axisY > 0.2f || controller.getButton(controller.getMapping().buttonDpadDown);
             }
         }
     }
@@ -251,6 +262,12 @@ public class InputManager {
         boolean movingRight = moveDirection.x > 0f;
         moveLeftJustStarted = movingLeft && !prevMovingLeft;
         moveRightJustStarted = movingRight && !prevMovingRight;
+        boolean movingUp = moveDirection.y > 0f;
+        boolean movingDown = moveDirection.y < 0f;
+        moveUpJustStarted = movingUp && !prevMovingUp;
+        moveDownJustStarted = movingDown && !prevMovingDown;
+        prevMovingUp = movingUp;
+        prevMovingDown = movingDown;
         prevMovingLeft = movingLeft;
         prevMovingRight = movingRight;
     }
@@ -261,6 +278,8 @@ public class InputManager {
     public boolean isMoveJustStarted() { return moveJustStarted; }
     public boolean isMoveLeftJustStarted() { return moveLeftJustStarted; }
     public boolean isMoveRightJustStarted() { return moveRightJustStarted; }
+    public boolean isMoveUpJustStarted() { return moveUpJustStarted; }
+    public boolean isMoveDownJustStarted() { return moveDownJustStarted; }
     public boolean isBombJustPressed() { return bombJustPressed; }
     public boolean isWeaponSwitchJustPressed() { return weaponSwitchJustPressed; }
     public boolean isHyperAttackJustPressed() { return hyperAttackJustPressed; }

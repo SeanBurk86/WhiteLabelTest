@@ -53,11 +53,6 @@ public class StageDefinition {
     // the bulb into its interior (see MandelbulbShader.setDiveDistance()). null means "a few units
     // before the boss trigger" (see GameController.loadStage()).
     public Float mandelbulbDiveDistance;
-    // Where this stage sits on the stage-select map (see StageSelect), each 0..1 with x rightward and y
-    // upward across the map panel. null (either one) means "spread evenly along the path in sequence
-    // order" - see StageSelect.defaultX()/defaultY().
-    public Float mapX;
-    public Float mapY;
     public Float groundScrollSpeed;
     public String music;
     public Array<BackgroundLayerDef> backgroundLayers;
