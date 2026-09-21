@@ -963,6 +963,7 @@ public class GameController implements Disposable {
 
     public static int destroyEnemy(AudioManager audio, EntityManager entityManager, AssetManager assets, float worldWidth, float worldHeight, Enemy enemy, ScoreManager scoreManager) {
         scoreManager.registerEnemyDestroyed(enemy.getDefinitionId());
+        if (enemy.getSpawnGroup() != null) scoreManager.registerGroupDestroyed(enemy.getSpawnGroup());
         int scoreValue = enemy.getScore();
 
         if (enemy.cancelsBulletsOnDeath()) entityManager.destroyEnemyBullets(enemy, assets);

@@ -55,7 +55,7 @@ public class PropertiesPanel extends ScrollPane {
     private static final String[] CONDITION_TYPES = {
         "shoot", "bomb", "weaponSwitch", "moved", "movedLeft", "movedRight",
         "hyperAttack", "hyperAttackReleased", "enemiesDestroyed", "enemyTypeDestroyed",
-        "gemsCollected", "grazed"
+        "spawnDestroyed", "gemsCollected", "grazed"
     };
 
     // Ordered key -> display label for the Action combo - see applyActionKind()/actionKindKey().
@@ -307,6 +307,10 @@ public class PropertiesPanel extends ScrollPane {
         // at node-creation time, so it stays stale until the next full canvas rebuild (reload/save
         // round trip). Acceptable for this pass: retyping an already-placed enemy is rare.
         root.getChildren().add(comboRow("Enemy type", enemyIdOptions(), trigger.type, v -> { trigger.type = v; onEdited(); }));
+        // Names this spawn (a single enemy, or the whole wave if one is set below) so another trigger can wait for it
+        // to be destroyed in its entirety - a "spawnDestroyed" condition, see Condition. Leave blank if nothing does.
+        root.getChildren().add(textRow("Trigger ID (for \"spawnDestroyed\" conditions)", trigger.id,
+            v -> { trigger.id = v.isBlank() ? null : v.trim(); onEdited(); }));
         root.getChildren().add(numberRow("Spawn X", trigger.x, v -> { trigger.x = v; onEdited(); }));
         // "Spawn Y" doubles as the ARRIVAL point once "Enters from above" below is checked - see
         // that checkbox's own doc - rather than the actual spawn position in that case.
@@ -691,6 +695,72 @@ public class PropertiesPanel extends ScrollPane {
         root.getChildren().add(add);
     }
 
+    /** Every OTHER enemy-spawn trigger in the open stage (a trigger can't wait on itself), nearest the start first -
+     *  what a "spawnDestroyed" condition can wait on. Listed by what they are rather than by Trigger.id, so there's
+     *  something to pick before anything has been named - see spawnDestroyedRow(). */
+    private List<Trigger> spawnTriggerCandidates() {
+        List<Trigger> candidates = new ArrayList<>();
+        for (Trigger t : canvas.getDocument().getTriggers()) {
+            if (t != trigger && "enemy".equals(actionKindKey(t))) candidates.add(t);
+        }
+        candidates.sort(java.util.Comparator.comparingDouble(t -> t.distance));
+        return candidates;
+    }
+
+    /** A one-line description of a spawn trigger for the dropdown: its id (if it has one), enemy type, distance and
+     *  whether it's a wave, e.g. "waveA - IceKnight @ 12.5 (wave)". */
+    private static String describeSpawn(Trigger t) {
+        StringBuilder sb = new StringBuilder();
+        if (t.id != null && !t.id.isBlank()) sb.append(t.id).append(" - ");
+        sb.append(t.type).append(" @ ").append(FormControls.formatFloat(t.distance));
+        if (t.waveShape != null) sb.append(" (wave)");
+        return sb.toString();
+    }
+
+    /** The "Spawn trigger" picker of a spawnDestroyed condition: every other enemy-spawn trigger in the stage, by
+     *  description. Choosing one that has no Trigger.id yet gives it one automatically (its enemy type plus a number,
+     *  unique in the file), since the condition refers to it by that id - no need to go and name it first. */
+    private HBox spawnDestroyedRow(Condition condition) {
+        List<Trigger> candidates = spawnTriggerCandidates();
+        List<String> labels = new ArrayList<>();
+        String currentLabel = "";
+        for (Trigger t : candidates) {
+            String label = describeSpawn(t);
+            // Two spawns can read identically (same type, same distance) - keep the entries distinguishable.
+            for (int n = 2; labels.contains(label); n++) label = describeSpawn(t) + " #" + n;
+            labels.add(label);
+            if (condition.triggerId != null && condition.triggerId.equals(t.id)) currentLabel = label;
+        }
+        // A condition pointing at an id no spawn trigger has (deleted, renamed, or set on a non-spawn trigger) stays
+        // visible rather than silently showing as blank.
+        if (condition.triggerId != null && currentLabel.isEmpty()) {
+            currentLabel = "(missing) " + condition.triggerId;
+            labels.add(currentLabel);
+        }
+        return comboRow("Spawn trigger", withBlank(labels), currentLabel, picked -> {
+            int index = labels.indexOf(picked);
+            if (picked.isEmpty() || index < 0 || index >= candidates.size()) {
+                if (picked.isEmpty()) condition.triggerId = null;
+                onEdited();
+                return;
+            }
+            Trigger chosen = candidates.get(index);
+            if (chosen.id == null || chosen.id.isBlank()) chosen.id = uniqueTriggerId(chosen.type);
+            condition.triggerId = chosen.id;
+            canvas.getDocument().markDirty();
+            onEdited();
+        });
+    }
+
+    /** A Trigger.id not used by any trigger in the open stage: `base_1`, `base_2`, ... */
+    private String uniqueTriggerId(String base) {
+        java.util.Set<String> used = new java.util.HashSet<>();
+        for (Trigger t : canvas.getDocument().getTriggers()) if (t.id != null) used.add(t.id);
+        int n = 1;
+        while (used.contains(base + "_" + n)) n++;
+        return base + "_" + n;
+    }
+
     private VBox buildConditionRow(Condition condition) {
         VBox box = new VBox(4);
         box.setStyle("-fx-background-color: #26272c; -fx-padding: 6; -fx-background-radius: 6;");
@@ -716,6 +786,10 @@ public class PropertiesPanel extends ScrollPane {
                     if ("enemyTypeDestroyed".equals(condition.type)) condition.enemyType = v; else condition.weaponId = v;
                     onEdited();
                 }));
+        }
+        if ("spawnDestroyed".equals(condition.type)) {
+            box.getChildren().add(spawnDestroyedRow(condition));
+            box.getChildren().add(sectionLabel("Satisfied once every enemy that spawn produced is destroyed (a whole wave, if it's one)."));
         }
         if (List.of("enemiesDestroyed", "enemyTypeDestroyed", "gemsCollected", "grazed").contains(condition.type)) {
             box.getChildren().add(numberRow("Count", condition.count, v -> { condition.count = v.intValue(); onEdited(); }));

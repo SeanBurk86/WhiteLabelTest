@@ -15,6 +15,7 @@ import com.badlogic.gdx.utils.Array;
 import com.badlogic.gdx.utils.Json;
 import com.badlogic.gdx.utils.ObjectMap;
 import com.badlogic.gdx.utils.SerializationException;
+import whitelabeltest.enemy.Enemy;
 import whitelabeltest.enemy.EnemyDefinition;
 import whitelabeltest.enemy.HealthPhase;
 import whitelabeltest.enemy.MovementPatternDef;
@@ -83,6 +84,12 @@ public class TriggerManager {
     // stationary boss fight, then resuming at the same rate once it's destroyed).
     private final float baseSpeed;
     private Array<Trigger> triggers;
+    // Trigger.id -> trigger, for Condition "spawnDestroyed" lookups - built once in the constructor.
+    private final ObjectMap<String, Trigger> triggersById = new ObjectMap<>();
+    // Trigger.id -> how many enemies that spawn trigger produces in total (1 for a single spawn, the formation
+    // size for a wave), recorded the moment it fires - see registerSpawnGroup(). A spawn trigger that has fired
+    // but has NO entry here was skipped by a seekTo() rather than played, which "spawnDestroyed" treats as done.
+    private final ObjectMap<String, Integer> spawnGroupExpected = new ObjectMap<>();
     // Live text cues fired via a Trigger.text action - see fire()/getTextCues(). GameController
     // merges this alongside SpawnScheduler's own (wall-clock) textCues into one combined list for
     // UIManager to draw, exactly as if they'd come from a single source.
@@ -196,6 +203,13 @@ public class TriggerManager {
                 return Float.compare(t1.distance, t2.distance);
             }
         });
+        for (Trigger trigger : triggers) {
+            if (trigger.id == null || trigger.id.isBlank()) continue;
+            if (triggersById.containsKey(trigger.id)) {
+                Gdx.app.error("TriggerManager", "Duplicate trigger id '" + trigger.id + "' in " + triggerFilePath + " - conditions referring to it will use the last one");
+            }
+            triggersById.put(trigger.id, trigger);
+        }
         camera = new LevelCamera(worldWidth, initialSpeed);
         baseSpeed = initialSpeed;
     }
@@ -235,6 +249,7 @@ public class TriggerManager {
                     || "gemsCollected".equals(c.type) || "grazed".equals(c.type)) {
                     sb.append('(').append(c.count).append(')');
                 }
+                if ("spawnDestroyed".equals(c.type)) sb.append('=').append(c.triggerId);
             }
         }
         return sb.toString();
@@ -337,6 +352,7 @@ public class TriggerManager {
                 // gemsAtLastWaypointSpawn, just for a spawned enemy's own kill instead of a gem's
                 // own collection.
                 enemiesDestroyedAtLastSpawn = scoreManager.getEnemiesDestroyed();
+                registerSpawnGroup(trigger, scoreManager);
             }
         }
         if (trigger.requireConfirm && !trigger.confirmed) {
@@ -457,6 +473,19 @@ public class TriggerManager {
         return !any; // ALL: nothing failed -> true. ANY: nothing matched -> false.
     }
 
+    /** "spawnDestroyed": true once every enemy the spawn trigger `id` produced has been destroyed. False while
+     *  that trigger hasn't fired yet, or has but not everything it spawned (a wave included - members still
+     *  waiting to spawn count as not yet destroyed) is dead. True for an id no trigger has (a typo mustn't
+     *  soft-lock content) and for a spawn a seekTo() skipped past (see spawnGroupExpected's doc). */
+    private boolean isSpawnDestroyed(String id, ScoreManager scoreManager) {
+        Trigger source = id == null ? null : triggersById.get(id);
+        if (source == null) return true;
+        if (!source.actionFired) return false;
+        Integer expected = spawnGroupExpected.get(id);
+        if (expected == null) return true;
+        return scoreManager.getGroupDestroyed(id) >= expected;
+    }
+
     private boolean isConditionSatisfied(Condition condition, InputManager input, ScoreManager scoreManager, Player player) {
         if (condition.type == null) return true;
         return switch (condition.type) {
@@ -472,6 +501,7 @@ public class TriggerManager {
             case "enemyTypeDestroyed" -> scoreManager.getEnemiesDestroyedByType(condition.enemyType) - condition.baseline >= condition.count;
             case "gemsCollected" -> scoreManager.getGemsCollected() - condition.baseline >= condition.count;
             case "grazed" -> player.getGrazePoints() - condition.baseline >= condition.count;
+            case "spawnDestroyed" -> isSpawnDestroyed(condition.triggerId, scoreManager);
             default -> true; // unrecognized condition string - don't soft-lock content over a typo
         };
     }
@@ -516,9 +546,11 @@ public class TriggerManager {
             if (trigger.waveShape != null) {
                 fireWave(trigger, realTime);
             } else {
+                int enemiesBefore = entityManager.getEnemies().size;
                 EnemySpawnOps.spawnEnemy(entityManager, enemyDefinitions, assets, worldWidth, worldHeight,
                     trigger.type, trigger.x, trigger.y, trigger.offsetX, trigger.offsetY, trigger.movementPattern, trigger.firingPattern,
                     trigger.inverseMovement, trigger.powerup, trigger, camera.getSpeed(), trigger.healthPhases);
+                tagSpawnGroup(entityManager, enemiesBefore, trigger);
             }
         }
     }
@@ -753,10 +785,12 @@ public class TriggerManager {
         for (int i = pendingWaveSpawns.size - 1; i >= 0; i--) {
             PendingWaveSpawn pending = pendingWaveSpawns.get(i);
             if (pending.dueRealTime > realTime) continue;
+            int enemiesBefore = entityManager.getEnemies().size;
             EnemySpawnOps.spawnEnemy(entityManager, enemyDefinitions, assets, worldWidth, worldHeight,
                 pending.source.type, pending.x, pending.y, pending.offsetX, pending.offsetY,
                 pending.movementPatternId, pending.source.firingPattern, pending.source.inverseMovement,
                 pending.source.powerup, pending.entranceView, camera.getSpeed(), pending.healthPhases);
+            tagSpawnGroup(entityManager, enemiesBefore, pending.source);
             pendingWaveSpawns.removeIndex(i);
         }
     }
@@ -786,6 +820,25 @@ public class TriggerManager {
         }
         liveTextCues.add(cue);
         trigger.liveTextCue = cue;
+    }
+
+    /** Tags the enemy a spawn call just added (it goes on the end of the enemy list) with trigger's id, so
+     *  GameController.destroyEnemy() can count its death toward that spawn - see Condition's "spawnDestroyed".
+     *  `enemiesBefore` is the list size from before the spawn call, since a spawn can add nothing (an unknown
+     *  enemy type) and the last entry would then belong to somebody else. A no-op for a trigger with no id. */
+    private static void tagSpawnGroup(EntityManager entityManager, int enemiesBefore, Trigger trigger) {
+        if (trigger.id == null || trigger.id.isBlank()) return;
+        Array<Enemy> enemies = entityManager.getEnemies();
+        if (enemies.size > enemiesBefore) enemies.peek().setSpawnGroup(trigger.id);
+    }
+
+    /** Called as an enemy-spawn trigger with an id fires: records how many enemies it will produce in all (so
+     *  "spawnDestroyed" knows when it's all been killed) and starts its kill tally from zero. */
+    private void registerSpawnGroup(Trigger trigger, ScoreManager scoreManager) {
+        if (trigger.id == null || trigger.id.isBlank() || trigger.type == null) return;
+        int members = trigger.waveShape != null ? WaveSpawnPlanner.plan(trigger, 0f, 0f).size : 1;
+        spawnGroupExpected.put(trigger.id, members);
+        scoreManager.clearGroupDestroyed(trigger.id);
     }
 
     /** True for a Trigger that actually spawns an enemy (the default action, same as an ordinary
@@ -932,6 +985,7 @@ public class TriggerManager {
         camera.seekTo(targetDistance);
         liveTextCues.clear();
         activeGate = null;
+        spawnGroupExpected.clear();
         gemsAtLastWaypointSpawn = -1;
         enemiesDestroyedAtLastSpawn = -1;
         for (Trigger trigger : triggers) {

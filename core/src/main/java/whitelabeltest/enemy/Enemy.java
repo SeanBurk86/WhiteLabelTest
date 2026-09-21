@@ -118,6 +118,10 @@ public interface Enemy extends Pool.Poolable {
     default String getDefinitionId() { return null; }
 
 
+    /** The Trigger.id of the enemy-spawn trigger that spawned this enemy, or null - see Condition's
+     *  "spawnDestroyed". Set by TriggerManager right after spawning; read by GameController.destroyEnemy(). */
+    default String getSpawnGroup() { return null; }
+    default void setSpawnGroup(String group) {}
     default int getHealth() { return 0; }
     default int getMaxHealth() { return 0; }
 

@@ -20,6 +20,12 @@ import whitelabeltest.gamemanagers.TextCue;
 public class Trigger {
     public float distance;
 
+    // Optional name for this trigger. On an enemy-spawn trigger (a single enemy, or a wave) it lets another
+    // trigger wait for THAT spawn to be destroyed in its entirety - see Condition's "spawnDestroyed" type - by
+    // tagging every enemy this trigger spawns with it. Must be unique within a trigger file; null (the default)
+    // means nothing refers to this trigger and its enemies aren't tracked.
+    public String id;
+
     // Zero or more gameplay conditions (see Condition's own doc) that must additionally be
     // satisfied, on top of reaching `distance`, before this trigger fires. Null/empty (the default)
     // means no extra gating - fires the instant the camera reaches `distance`.

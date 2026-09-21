@@ -14,13 +14,20 @@ package whitelabeltest.gamemanagers.trigger;
  * "movedRight" (movement freshly started, optionally in that direction), "enemiesDestroyed"
  * (+count - any enemy, since this condition armed), "enemyTypeDestroyed" (+enemyType,+count - only
  * that EnemyDefinition id's kills, since armed), "gemsCollected" (+count, since armed), "grazed"
- * (+count of graze POINTS, not raw graze events - see GateCue's own doc). An unrecognized/null type
+ * (+count of graze POINTS, not raw graze events - see GateCue's own doc), "spawnDestroyed" (+triggerId - the
+ * Trigger.id of an enemy-spawn trigger: satisfied once EVERY enemy that trigger spawned has been destroyed -
+ * one enemy for an ordinary spawn, the whole formation for a wave, including members still waiting to spawn.
+ * Only kills count: an enemy that despawns or flies off alive never does, so a spawn like that would leave
+ * this waiting forever). Referring to a trigger that was skipped by a debug/checkpoint seek counts as
+ * already satisfied, and an id no trigger has is treated as satisfied too. An unrecognized/null type
  * is treated as already satisfied, same "a typo can't soft-lock content" rule GateCue follows. */
 public class Condition {
     public String type;
     public int count = 1;
     public String enemyType;
     public String weaponId;
+    // "spawnDestroyed" only - see Trigger.id.
+    public String triggerId;
 
     // Snapshotted by TriggerManager.armConditions() the moment this condition's Trigger arms - not
     // authored in JSON, purely runtime bookkeeping (same role as SpawnScheduler's

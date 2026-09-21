@@ -481,9 +481,19 @@ public abstract class BaseEnemy implements Enemy {
         this.invertMovement = invert;
     }
 
+    // See Enemy.getSpawnGroup().
+    private String spawnGroup;
+
+    @Override
+    public String getSpawnGroup() { return spawnGroup; }
+
+    @Override
+    public void setSpawnGroup(String group) { this.spawnGroup = group; }
+
     @Override
     public void reset() {
         animationTime = 0;
+        spawnGroup = null;
         damageFlashTimer = 0;
         guaranteedPowerup = null;
         invertMovement = false; // Reset on pool

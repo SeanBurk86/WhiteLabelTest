@@ -29,6 +29,9 @@ public class ScoreManager {
     // whitelabeltest.gamemanagers.trigger.Condition's "enemyTypeDestroyed" type, the reason this
     // exists at all (nothing else currently reads it).
     private final ObjectMap<String, Integer> enemiesDestroyedByType = new ObjectMap<>();
+    // Kills per spawn group (Trigger.id) - see registerGroupDestroyed(). Kept apart from the by-type counts since a
+    // group is one specific spawn (a single enemy or one wave), not every enemy of that type.
+    private final ObjectMap<String, Integer> enemiesDestroyedByGroup = new ObjectMap<>();
 
     public ScoreManager(float defaultChainWindow) {
         this.defaultChainWindow = defaultChainWindow;
@@ -103,6 +106,7 @@ public class ScoreManager {
         maxChainCount = 0;
         gemsCollected = 0;
         enemiesDestroyedByType.clear();
+        enemiesDestroyedByGroup.clear();
     }
 
     public int getScore() { return score; }
@@ -113,4 +117,15 @@ public class ScoreManager {
     public int getMaxChainCount() { return maxChainCount; }
     public int getGemsCollected() { return gemsCollected; }
     public int getEnemiesDestroyedByType(String definitionId) { return enemiesDestroyedByType.get(definitionId, 0); }
+
+    /** Counts a kill toward the spawn group (Trigger.id) its enemy came from. */
+    public void registerGroupDestroyed(String group) {
+        enemiesDestroyedByGroup.put(group, enemiesDestroyedByGroup.get(group, 0) + 1);
+    }
+
+    public int getGroupDestroyed(String group) { return enemiesDestroyedByGroup.get(group, 0); }
+
+    /** Starts a group's count over - called when its spawn trigger fires, so a kill tally left from an earlier
+     *  attempt at the same spawn (a checkpoint restart replays it) never counts toward this one. */
+    public void clearGroupDestroyed(String group) { enemiesDestroyedByGroup.remove(group); }
 }
