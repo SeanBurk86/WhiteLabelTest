@@ -49,6 +49,15 @@ public class StageDefinition {
     // Camera distance at which the "kaleidoscope" shader background swaps from the phosphene to the
     // tentacles tunnel. null means "a few units before the boss trigger" (see GameController.loadStage()).
     public Float kaleidoscopeTransitionDistance;
+    // Camera distance at which the "mandelbulb" shader background's camera starts diving from orbiting
+    // the bulb into its interior (see MandelbulbShader.setDiveDistance()). null means "a few units
+    // before the boss trigger" (see GameController.loadStage()).
+    public Float mandelbulbDiveDistance;
+    // Where this stage sits on the stage-select map (see StageSelect), each 0..1 with x rightward and y
+    // upward across the map panel. null (either one) means "spread evenly along the path in sequence
+    // order" - see StageSelect.defaultX()/defaultY().
+    public Float mapX;
+    public Float mapY;
     public Float groundScrollSpeed;
     public String music;
     public Array<BackgroundLayerDef> backgroundLayers;
@@ -63,7 +72,7 @@ public class StageDefinition {
     // backgroundLayers - same "plays immediately, covers the whole screen" role as backgroundVideo,
     // just procedural rather than a decoded video file. Takes priority over backgroundVideo if both
     // are somehow set. null (the default) means no shader background; otherwise must be one of the
-    // ids createShaderBackground() recognizes ("boxTunnel", "kaleidoscope").
+    // ids createShaderBackground() recognizes ("boxTunnel", "kaleidoscope", "mandelbulb").
     public String shaderBackground = null;
     // When true, the stage's ordinary backgroundLayers (NOT shaderBackground/backgroundVideo, which
     // this has no effect on) are drawn with a hue-rotating shader instead of their native colors -

@@ -60,6 +60,11 @@ public class GameController implements Disposable {
     private float colorFadeDistance = -1f;
     // How many distance units before the boss trigger the kaleidoscope background swaps to the tentacles.
     private static final float KALEIDOSCOPE_SWITCH_LEAD = 4f;
+    // How many distance units before the boss trigger the mandelbulb background's camera starts diving
+    // into the bulb. The camera itself needs a few seconds after that to reach the bulb and burst through
+    // its skin (it only starts once the blend passes halfway - MandelbulbShader.DIVE_BLEND_DISTANCE units
+    // in - see MandelbulbCamera), so this is sized to have it settled inside a few units before the boss.
+    private static final float MANDELBULB_DIVE_LEAD = 10f;
     // spawnScheduler's own (wall-clock) textCues plus triggerManager's (distance-driven) ones,
     // refreshed every update() - see getTextCues(). A stage like stage1, whose schedule.json no
     // longer authors any text cues at all, just contributes an empty list here, so UIManager keeps
@@ -82,6 +87,14 @@ public class GameController implements Disposable {
     // GameController (re-resolved on every reset() in case the underlying JSON changed, e.g. via
     // the debug enemy/pattern editor's live-reload path).
     private Array<String> stageSequence;
+    // The sequence's stage ids in their ORIGINAL order (stageSequence itself gets reordered as the player
+    // picks stages - see confirmStageSelect()), so the stage-select map keeps every stage at the same
+    // place along its path however they were chosen.
+    private Array<String> stageMapOrder;
+    // See StageSequenceDefinition.chooseNextStage.
+    private boolean chooseNextStage;
+    // Non-null while the stage-select map is up after a stage clear - see openStageSelect().
+    private StageSelect stageSelect;
     // Explicit index into stageSequence (not raw position in AssetManager's stage pool) of the
     // currently-loaded stage - see loadStage()/advanceToNextStage().
     private int stageIndex;
@@ -321,7 +334,7 @@ public class GameController implements Disposable {
             return;
         }
         if (levelComplete) {
-            handleLevelCompleteInput();
+            handleLevelCompleteInput(delta);
             return;
         }
 
@@ -345,6 +358,7 @@ public class GameController implements Disposable {
         if (triggerManager != null) {
             triggerManager.update(delta, entities, audio, input, scoreManager);
             background.setKaleidoscopeStageDistance(triggerManager.getCamera().getPosition());
+            background.setMandelbulbStageDistance(triggerManager.getCamera().getPosition());
         }
         combinedTextCues.clear();
         if (spawnScheduler != null) combinedTextCues.addAll(spawnScheduler.getTextCues());
@@ -609,12 +623,61 @@ public class GameController implements Disposable {
         }
     }
 
-    private void handleLevelCompleteInput() {
+    private void handleLevelCompleteInput(float delta) {
+        if (stageSelect != null) {
+            handleStageSelectInput(delta);
+            return;
+        }
         if (input.isRestartJustPressed()) {
-            if (hasNextStage()) advanceToNextStage(); else reset();
+            if (!hasNextStage()) reset();
+            else if (chooseNextStage && stageSequence.size - (stageIndex + 1) > 1) openStageSelect();
+            else advanceToNextStage();
         } else if (input.isQuitJustPressed()) {
             quitToMenuRequested = true;
         }
+    }
+
+    /** Builds the stage-select map from the sequence's stages - see StageSelect. Every stage is a node, in
+     *  the sequence's original order (the path runs through them in that order); the ones the player has
+     *  already been through (everything up to and including the stage just cleared) are marked cleared
+     *  and can't be picked again. */
+    private void openStageSelect() {
+        StageSelect select = new StageSelect();
+        for (int i = 0; i < stageMapOrder.size; i++) {
+            String id = stageMapOrder.get(i);
+            StageDefinition def = assets.getStageDefinition(id);
+            boolean cleared = stageSequence.indexOf(id, false) <= stageIndex;
+            select.addNode(id, def.name != null ? def.name : id,
+                def.mapX != null ? def.mapX : Float.NaN, def.mapY != null ? def.mapY : Float.NaN,
+                cleared, i, stageMapOrder.size);
+        }
+        stageSelect = select;
+    }
+
+    /** Left/right pick between the remaining stages and the same confirm key as the STAGE CLEAR screen
+     *  launches the highlighted one. All of it comes from the recorded/replayed input stream (move edges +
+     *  confirm), so a replay makes the same choices with nothing extra to record. */
+    private void handleStageSelectInput(float delta) {
+        stageSelect.tick(delta);
+        if (input.isMoveLeftJustStarted()) stageSelect.move(-1);
+        if (input.isMoveRightJustStarted()) stageSelect.move(1);
+        if (input.isRestartJustPressed()) {
+            confirmStageSelect();
+        } else if (input.isQuitJustPressed()) {
+            quitToMenuRequested = true;
+        }
+    }
+
+    /** Moves the chosen stage to be the next one in stageSequence (swapping it with whichever was there,
+     *  so the untaken stages simply stay in the pool behind it) and starts it like any other advance. */
+    private void confirmStageSelect() {
+        StageSelect.Node chosen = stageSelect.getSelected();
+        stageSelect = null;
+        if (chosen != null) {
+            int at = stageSequence.indexOf(chosen.id, false);
+            if (at > stageIndex + 1) stageSequence.swap(stageIndex + 1, at);
+        }
+        advanceToNextStage();
     }
 
     private void loadStage(int index) {
@@ -641,6 +704,8 @@ public class GameController implements Disposable {
         float tentacleSwitchDistance = stageDef.kaleidoscopeTransitionDistance != null ? stageDef.kaleidoscopeTransitionDistance
             : (bossDistance > 0f ? Math.max(0f, bossDistance - KALEIDOSCOPE_SWITCH_LEAD) : -1f);
         background.setKaleidoscopeDistances(colorFadeDistance, tentacleSwitchDistance);
+        background.setMandelbulbDiveDistance(stageDef.mandelbulbDiveDistance != null ? stageDef.mandelbulbDiveDistance
+            : (bossDistance > 0f ? Math.max(0f, bossDistance - MANDELBULB_DIVE_LEAD) : -1f));
         groundScrollSpeed = stageDef.groundScrollSpeed != null ? stageDef.groundScrollSpeed
             : (spawnScheduler != null ? spawnScheduler.getGroundScrollSpeed() : ScrollingBackground.DEFAULT_SCROLL_SPEED);
         // A trigger-authored boss video (see Trigger.triggerBossVideo) wins over the schedule's own
@@ -658,6 +723,7 @@ public class GameController implements Disposable {
     }
 
     private void advanceToNextStage() {
+        stageSelect = null;
         loadStage(stageIndex + 1);
         entities.clearWorld();
         entities.getPlayer().resetForNewStage();
@@ -693,6 +759,9 @@ public class GameController implements Disposable {
         recorder = null;
         stageSequence = new Array<>();
         stageSequence.add(stageId);
+        stageMapOrder = stageSequence;
+        chooseNextStage = false;
+        stageSelect = null;
         loadStage(0);
         entities.clearWorld();
         gameOver = false;
@@ -732,7 +801,16 @@ public class GameController implements Disposable {
     }
 
     public boolean hasNextStage() { return stageIndex + 1 < stageSequence.size; }
-    public int getStageNumber() { return stageIndex + 1; }
+    /** The current stage's number for display ("STAGE n CLEAR"). On a choose-your-stage sequence that's its
+     *  place on the map, NOT how many stages have been played: the player can take them out of order, and
+     *  clearing the map's third stage as their second must still say STAGE 3. */
+    public int getStageNumber() {
+        if (chooseNextStage) {
+            int onMap = stageMapOrder.indexOf(stageSequence.get(stageIndex), false);
+            if (onMap >= 0) return onMap + 1;
+        }
+        return stageIndex + 1;
+    }
 
     /** Overrides entities.reset(loadout)'s ordinary WeaponSelectScreen-driven loadout with a stage
      *  sequence's fixed StartingLoadoutDefinition (e.g. "tutorial"'s) - see reset(). Runs right
@@ -1014,7 +1092,12 @@ public class GameController implements Disposable {
         levelCompleteRank = LevelRank.D;
         totalEnemiesAcrossRun = 0;
         StageSequenceDefinition sequenceDef = assets.getStageSequence(stageSequenceId);
-        stageSequence = sequenceDef.stageIds;
+        // Copied: choosing stages reorders stageSequence (see confirmStageSelect()), which must never touch the
+        // sequence definition AssetManager keeps around and hands out again on the next reset().
+        stageSequence = new Array<>(sequenceDef.stageIds);
+        stageMapOrder = new Array<>(sequenceDef.stageIds);
+        chooseNextStage = sequenceDef.chooseNextStage;
+        stageSelect = null;
         loadStage(0);
         audio.stopVictory();
         patternPreviewer.close(entities);
@@ -1053,6 +1136,9 @@ public class GameController implements Disposable {
     public float getGameOverTimer() { return gameOverTimer; }
     public boolean isQuitToMenuRequested() { return quitToMenuRequested; }
     public boolean isLevelComplete() { return levelComplete; }
+    /** True while the stage-select map is showing (only ever during the STAGE CLEAR screen). */
+    public boolean isStageSelectActive() { return stageSelect != null; }
+    public StageSelect getStageSelect() { return stageSelect; }
     public int getLevelCompleteBombBonus() { return levelCompleteBombBonus; }
     public int getLevelCompleteLivesMultiplier() { return levelCompleteLivesMultiplier; }
     public int getEnemiesDestroyed() { return scoreManager.getEnemiesDestroyed(); }

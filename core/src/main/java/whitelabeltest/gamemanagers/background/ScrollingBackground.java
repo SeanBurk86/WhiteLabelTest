@@ -148,6 +148,7 @@ public class ScrollingBackground {
         return switch (shaderBackgroundId) {
             case "boxTunnel" -> new TutorialBoxTunnelShader();
             case "kaleidoscope" -> new Stage2KaleidoscopeShader();
+            case "mandelbulb" -> new MandelbulbShader();
             default -> throw new IllegalArgumentException("Unknown shaderBackground id: " + shaderBackgroundId);
         };
     }
@@ -187,6 +188,22 @@ public class ScrollingBackground {
     public void setKaleidoscopeStageDistance(float distance) {
         if (shaderBackground instanceof Stage2KaleidoscopeShader kaleidoscope) {
             kaleidoscope.setStageDistance(distance);
+        }
+    }
+
+    /** Passes the camera's current distance into the stage down to the mandelbulb shader - see
+     *  MandelbulbShader.setStageDistance(). Same no-op-for-other-backgrounds contract as
+     *  setKaleidoscopeStageDistance(). */
+    public void setMandelbulbStageDistance(float distance) {
+        if (shaderBackground instanceof MandelbulbShader mandelbulb) {
+            mandelbulb.setStageDistance(distance);
+        }
+    }
+
+    /** See MandelbulbShader.setDiveDistance(). */
+    public void setMandelbulbDiveDistance(float diveDistance) {
+        if (shaderBackground instanceof MandelbulbShader mandelbulb) {
+            mandelbulb.setDiveDistance(diveDistance);
         }
     }
 

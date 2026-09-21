@@ -408,6 +408,8 @@ public class Main extends ApplicationAdapter {
 
         if (isGameOver) {
             ui.drawGameOver(spriteBatch, PLAY_AREA_WIDTH, PLAY_AREA_HEIGHT, game.getGameOverTimer());
+        } else if (game.isLevelComplete() && game.isStageSelectActive()) {
+            ui.drawStageSelect(spriteBatch, PLAY_AREA_WIDTH, PLAY_AREA_HEIGHT, game.getStageSelect());
         } else if (game.isLevelComplete()) {
             ui.drawLevelComplete(spriteBatch, PLAY_AREA_WIDTH, PLAY_AREA_HEIGHT, game.getScore(),
                 game.getLevelCompleteBombBonus(), game.getLevelCompleteLivesMultiplier(),

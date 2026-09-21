@@ -36,7 +36,7 @@ import static whitelabeltest.editor.FormControls.withBlank;
  * EditorDocument.setStageDefinition() already pointed the open document at, and with StagePalette's
  * own list), and "Save stages.json" persists the whole list - see StageLibrary.saveStages(). */
 public class StageDefinitionPanel extends ScrollPane {
-    private static final List<String> SHADER_IDS = List.of("boxTunnel", "kaleidoscope");
+    private static final List<String> SHADER_IDS = List.of("boxTunnel", "kaleidoscope", "mandelbulb");
 
     private final StageLibrary library;
     private final VBox root = new VBox(8);
@@ -88,6 +88,15 @@ public class StageDefinitionPanel extends ScrollPane {
         root.getChildren().add(numberRowNullable("Kaleidoscope -> tentacles at distance (blank = just before boss)",
             stage.kaleidoscopeTransitionDistance != null ? stage.kaleidoscopeTransitionDistance : Float.NaN,
             v -> stage.kaleidoscopeTransitionDistance = Float.isNaN(v) ? null : v));
+        root.getChildren().add(numberRowNullable("Mandelbulb dive starts at distance (blank = just before boss)",
+            stage.mandelbulbDiveDistance != null ? stage.mandelbulbDiveDistance : Float.NaN,
+            v -> stage.mandelbulbDiveDistance = Float.isNaN(v) ? null : v));
+        root.getChildren().add(numberRowNullable("Stage-select map X, 0..1 (blank = spread along path)",
+            stage.mapX != null ? stage.mapX : Float.NaN,
+            v -> stage.mapX = Float.isNaN(v) ? null : v));
+        root.getChildren().add(numberRowNullable("Stage-select map Y, 0..1 (blank = spread along path)",
+            stage.mapY != null ? stage.mapY : Float.NaN,
+            v -> stage.mapY = Float.isNaN(v) ? null : v));
         root.getChildren().add(numberRowNullable("Ground scroll speed (blank = engine default)",
             stage.groundScrollSpeed != null ? stage.groundScrollSpeed : Float.NaN,
             v -> stage.groundScrollSpeed = Float.isNaN(v) ? null : v));

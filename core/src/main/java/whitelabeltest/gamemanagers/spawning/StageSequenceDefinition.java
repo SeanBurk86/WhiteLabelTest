@@ -11,6 +11,11 @@ import com.badlogic.gdx.utils.Array;
 public class StageSequenceDefinition {
     public String id;
     public Array<String> stageIds;
+    // When true, clearing a stage doesn't just advance to the next entry in stageIds: it opens a stage-select
+    // map (see StageSelect) and the player picks which of the not-yet-played stages to do next. The first
+    // entry is always the opening stage; the choice only starts after it. false (the default) keeps the
+    // fixed order, as every other sequence (tutorial, ...) has.
+    public boolean chooseNextStage = false;
     // See StartingLoadoutDefinition - null (the default) means this sequence uses whatever loadout
     // the player picked on WeaponSelectScreen, same as "campaign" always has.
     public StartingLoadoutDefinition startingLoadout;

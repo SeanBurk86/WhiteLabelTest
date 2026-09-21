@@ -1051,6 +1051,129 @@ public class UIManager implements Disposable {
         drawCentered(batch, prompt, centerX, statsBottom - 0.5f, HUD_LABEL);
     }
 
+    /** The stage-select map shown after a stage clear on a sequence with chooseNextStage (see
+     *  StageSelect) - same terminal look as drawLevelComplete(). A winding path climbs from the lower
+     *  left to the upper right with a node at each of its peaks (one per stage, in sequence order): the
+     *  ones already cleared are lit green, the ones still to play are amber, and the cursor sits on one
+     *  of the amber ones, pulsing, with its name and the controls in a panel underneath. */
+    public void drawStageSelect(SpriteBatch batch, float worldWidth, float worldHeight, StageSelect select) {
+        batch.setColor(0f, 0f, 0f, 0.9f);
+        batch.draw(whitePixel, 0, 0, worldWidth, worldHeight);
+        batch.setColor(Color.WHITE);
+
+        float centerX = worldWidth / 2f;
+        float titleY = worldHeight - 0.9f;
+        drawGlowCentered(batch, "SELECT NEXT STAGE", centerX, titleY, 2.2f, HUD_GREEN_DIM, Color.WHITE);
+        float subtitleY = titleY - 0.5f;
+        drawCentered(batch, "-- CHOOSE YOUR ROUTE --", centerX, subtitleY, HUD_GREEN);
+
+        float margin = 0.6f;
+        float panelX = margin;
+        float panelWidth = worldWidth - margin * 2f;
+        float panelTop = subtitleY - 0.5f;
+        float panelBottom = 3.2f;
+        float panelHeight = panelTop - panelBottom;
+        batch.setColor(0.03f, 0.09f, 0.06f, 1f);
+        batch.draw(whitePixel, panelX, panelBottom, panelWidth, panelHeight);
+        batch.setColor(Color.WHITE);
+        drawBoxBorder(batch, panelX, panelBottom, panelWidth, panelHeight, HUD_GREEN_DIM);
+
+        // Node coordinates are 0..1 across the area inside the panel's padding. Labels go ABOVE their node (the path
+        // never rises above a peak, so that's the one clear side), hence the extra room at the top.
+        float mapLeft = panelX + 0.9f;
+        float mapWidth = panelWidth - 1.8f;
+        float mapBottom = panelBottom + 0.8f;
+        float mapHeight = panelHeight - 0.8f - 1.3f;
+
+        Array<StageSelect.Node> nodes = select.getNodes();
+        float time = select.getTime();
+
+        // The path: from each node (a peak) it drops away into a valley and climbs to the next one, like the
+        // reference sketch's sawtooth climb. Lit only where both ends are cleared.
+        final int samples = 28;
+        for (int i = 0; i < nodes.size - 1; i++) {
+            StageSelect.Node a = nodes.get(i);
+            StageSelect.Node b = nodes.get(i + 1);
+            float ax = mapLeft + a.x * mapWidth, ay = mapBottom + a.y * mapHeight;
+            float bx = mapLeft + b.x * mapWidth, by = mapBottom + b.y * mapHeight;
+            float dip = 0.3f * (float) Math.hypot(bx - ax, by - ay);
+            boolean lit = a.cleared && b.cleared;
+            float px = ax, py = ay;
+            for (int s = 1; s <= samples; s++) {
+                float t = s / (float) samples;
+                // The exponent < 1 keeps the ends sharp (peaks) and the middle broad (valley). Kept above the
+                // panel's floor so a deep valley never runs out of the box.
+                float qx = MathUtils.lerp(ax, bx, t);
+                float qy = MathUtils.lerp(ay, by, t) - dip * (float) Math.pow(MathUtils.sin(MathUtils.PI * t), 0.5);
+                qy = Math.max(qy, panelBottom + 0.25f);
+                if (lit) {
+                    drawPathSegment(batch, px, py, qx, qy, 0.22f, 0.35f, 1f, 0.55f, 0.16f);
+                    drawPathSegment(batch, px, py, qx, qy, 0.07f, 0.35f, 1f, 0.55f, 1f);
+                } else {
+                    drawPathSegment(batch, px, py, qx, qy, 0.05f, 0.16f, 0.4f, 0.24f, 1f);
+                }
+                px = qx;
+                py = qy;
+            }
+        }
+
+        StageSelect.Node selected = select.getSelected();
+        for (int i = 0; i < nodes.size; i++) {
+            StageSelect.Node node = nodes.get(i);
+            float nx = mapLeft + node.x * mapWidth, ny = mapBottom + node.y * mapHeight;
+            boolean isSelected = node == selected;
+            Color accent = node.cleared ? HUD_GREEN : HUD_AMBER;
+            float size = 0.5f;
+            if (isSelected) size += 0.12f + 0.06f * MathUtils.sin(time * 6f);
+
+            if (isSelected) {
+                // A pulsing halo behind the cursor node.
+                batch.setColor(accent.r, accent.g, accent.b, 0.14f + 0.06f * MathUtils.sin(time * 6f));
+                drawRotatedQuad(batch, nx - size * 0.85f, ny - size * 0.85f, size * 0.85f, size * 0.85f, size * 1.7f, size * 1.7f, 45f);
+                batch.setColor(Color.WHITE);
+            }
+            batch.setColor(accent);
+            drawRotatedQuad(batch, nx - size / 2f, ny - size / 2f, size / 2f, size / 2f, size, size, 45f);
+            batch.setColor(node.cleared ? 0.04f : 0.12f, node.cleared ? 0.22f : 0.08f, node.cleared ? 0.1f : 0.02f, 1f);
+            float inner = size * 0.68f;
+            drawRotatedQuad(batch, nx - inner / 2f, ny - inner / 2f, inner / 2f, inner / 2f, inner, inner, 45f);
+            batch.setColor(Color.WHITE);
+            if (node.cleared) drawDiamondIcon(batch, nx, ny, size * 0.3f, HUD_GREEN);
+
+            drawCentered(batch, node.label, nx, ny + size + 0.4f, isSelected ? Color.WHITE : accent);
+            if (node.cleared) drawCentered(batch, "CLEARED", nx, ny + size + 0.75f, HUD_LABEL);
+        }
+
+        // Info panel under the map: the highlighted stage's name and the controls.
+        float infoHeight = 2.4f;
+        float infoBottom = panelBottom - 0.3f - infoHeight;
+        drawBoxBorder(batch, panelX, infoBottom, panelWidth, infoHeight, HUD_GREEN_DIM);
+        if (selected != null) {
+            drawCentered(batch, "NEXT TARGET", centerX, infoBottom + infoHeight - 0.45f, HUD_LABEL);
+            drawGlowCentered(batch, selected.label, centerX, infoBottom + infoHeight - 1.05f, 1.8f, HUD_GREEN_DIM, Color.WHITE);
+        }
+        String prompt;
+        if (inputType == InputType.KEYBOARD) {
+            prompt = select.getChoiceCount() > 1 ? "LEFT / RIGHT = SELECT   R = LAUNCH   Q = QUIT" : "R = LAUNCH   Q = QUIT";
+        } else {
+            prompt = select.getChoiceCount() > 1 ? "LEFT / RIGHT = SELECT   START = LAUNCH" : "START = LAUNCH";
+        }
+        drawCentered(batch, prompt, centerX, infoBottom + 0.5f, HUD_LABEL);
+    }
+
+    /** A straight, `thickness`-wide line between two points - one piece of the stage-select path. */
+    private void drawPathSegment(SpriteBatch batch, float x1, float y1, float x2, float y2, float thickness,
+                                 float r, float g, float b, float a) {
+        float dx = x2 - x1, dy = y2 - y1;
+        // A touch longer than the segment so neighbouring pieces overlap instead of leaving gaps at the bends.
+        float length = (float) Math.hypot(dx, dy) + thickness * 0.5f;
+        float angle = MathUtils.atan2(dy, dx) * MathUtils.radiansToDegrees;
+        float cx = (x1 + x2) / 2f, cy = (y1 + y2) / 2f;
+        batch.setColor(r, g, b, a);
+        drawRotatedQuad(batch, cx - length / 2f, cy - thickness / 2f, length / 2f, thickness / 2f, length, thickness, angle);
+        batch.setColor(Color.WHITE);
+    }
+
     /** The mockup's side "TACTICAL RANK" card: a bordered box (border tinted by rank) holding a
      *  full CircleMeterEffect ring around the big letter grade, with "TACTICAL RANK" and the
      *  rank's flavor subtitle (LevelRank.subtitle) centered below it. */
