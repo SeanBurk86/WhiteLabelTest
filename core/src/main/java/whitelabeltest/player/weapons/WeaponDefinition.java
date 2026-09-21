@@ -39,6 +39,14 @@ public class WeaponDefinition {
     // tall as the halo, 0.5 = half that.
     public float haloCollisionScale = 0.75f;
 
+    // Chain-lightning arcs (Thunderbolt): when one of this weapon's bolts hits an enemy it also arcs out to the
+    // arcTargets nearest OTHER enemies within arcRange world units of the one it hit, each taking that bolt's
+    // damage times arcDamageMultiplier - see CollisionManager.arcLightning(). 0 targets (the default) = no arcs, so
+    // every other weapon is unaffected.
+    public int arcTargets = 0;
+    public float arcDamageMultiplier = 0.5f;
+    public float arcRange = 3.5f;
+
     // Thunderbolt's Hyper Attack (see Player's thunderbolt charge/detonate state machine) - the
     // halo hovers thunderboltHaloFrontDistance in front of the ship, charging through one damage/
     // blast-radius tier every thunderboltChargeLevelTime seconds it's held (both arrays indexed by

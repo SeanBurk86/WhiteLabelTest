@@ -22,6 +22,7 @@ import whitelabeltest.player.powerups.WeaponPowerup;
 import whitelabeltest.player.weapons.GreenLightningBurst;
 import whitelabeltest.player.weapons.OrbitWeapon;
 import whitelabeltest.player.weapons.ReflectedBolt;
+import whitelabeltest.player.weapons.ThunderboltWeapon;
 import whitelabeltest.player.weapons.Weapon;
 
 public class CollisionManager {
@@ -211,6 +212,9 @@ public class CollisionManager {
                         scoreManager.addScore(GameController.destroyEnemy(audio, entityManager, assets, worldWidth, worldHeight, enemy, scoreManager), bullet.getChainWindow());
                     }
                     bullet.onHit(enemy, bullets, assets);
+                    if (bullet instanceof ThunderboltWeapon bolt && bolt.getArcTargets() > 0) {
+                        bolt.spawnArcs(bullets, enemy, enemies);
+                    }
                     spawnHitEffect(bullet, entityManager);
                     if (bullet instanceof OrbitWeapon) audio.playOrbitGong();
                 }

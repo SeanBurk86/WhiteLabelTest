@@ -75,6 +75,11 @@ public class ThunderboltWeapon extends BaseWeapon {
     // so the normal per-frame CollisionManager overlap test resolves against it directly.
     private Enemy target;
     private boolean hit;
+    // True for a bolt spawned by another bolt's hit (see spawnArcs()) rather than fired by the player: it
+    // deals reduced damage and never arcs on itself.
+    private boolean arcBolt;
+    // Scratch buffer for spawnArcs()' candidate sort.
+    private final Array<Enemy> arcCandidates = new Array<>(false, 16);
     // Whether the equipped instance's most recent spawn() found any enemy to strike - see
     // playFireSound(). Meaningless on a pooled per-bolt instance; only the equipped weapon-slot
     // instance's spawn()/playFireSound() pair reads and writes it.
@@ -330,6 +335,70 @@ public class ThunderboltWeapon extends BaseWeapon {
         return false;
     }
 
+    /** Chain lightning: this bolt has just hit `hit`, so strike up to arcTargets OTHER enemies near it (within
+     *  arcRange of it) with bolts of their own - real Thunderbolt strikes, drawn and resolved exactly like a fired
+     *  one (same thick bolt, same hit animation, same damage/score handling in CollisionManager) but for this
+     *  bolt's damage times arcDamageMultiplier, and unable to arc further. Enemies no live bolt is already striking
+     *  come first - the point is to spread onto ADDITIONAL targets - then nearest first; if there aren't enough of
+     *  those it doubles up on ones already being struck rather than not arcing at all. */
+    public void spawnArcs(Array<Weapon> activeWeapons, Enemy hit, Array<Enemy> enemies) {
+        if (arcBolt || def.arcTargets <= 0) return;
+
+        Rectangle hitRect = hit.getRectangle();
+        float originX = hitRect.x + hitRect.width / 2f;
+        float originY = hitRect.y + hitRect.height / 2f;
+        float rangeSq = def.arcRange * def.arcRange;
+
+        arcCandidates.clear();
+        for (int i = 0; i < enemies.size; i++) {
+            Enemy other = enemies.get(i);
+            if (other == hit || !other.isActive() || !other.isTargetableByHoming()) continue;
+            if (distanceSqFrom(originX, originY, other) <= rangeSq) arcCandidates.add(other);
+        }
+        if (arcCandidates.size == 0) return;
+        arcCandidates.sort((a, b) -> {
+            boolean struckA = isBeingStruck(activeWeapons, a);
+            boolean struckB = isBeingStruck(activeWeapons, b);
+            if (struckA != struckB) return struckA ? 1 : -1;
+            return Float.compare(distanceSqFrom(originX, originY, a), distanceSqFrom(originX, originY, b));
+        });
+
+        int arcDamage = Math.max(1, Math.round(damage * def.arcDamageMultiplier));
+        float width = def.size * (1f + (level - 1) * WIDTH_GROWTH_PER_LEVEL);
+        Vector2 origin = new Vector2(originX, originY);
+        int count = Math.min(def.arcTargets, arcCandidates.size);
+        for (int i = 0; i < count; i++) {
+            ThunderboltWeapon arc = ObjectPools.thunderboltWeaponPool.obtain();
+            arc.setLevel(level);
+            arc.init(def, texture, circleTexture, origin, arcCandidates.get(i), width);
+            arc.damage = arcDamage;
+            arc.arcBolt = true;
+            activeWeapons.add(arc);
+        }
+    }
+
+    /** True if a bolt that hasn't finished striking yet (fired or arced) is aimed at `enemy`. */
+    private static boolean isBeingStruck(Array<Weapon> activeWeapons, Enemy enemy) {
+        for (int i = 0; i < activeWeapons.size; i++) {
+            if (activeWeapons.get(i) instanceof ThunderboltWeapon bolt && bolt.target == enemy && bolt.lifeTime < STRIKE_DURATION) return true;
+        }
+        return false;
+    }
+
+    private static float distanceSqFrom(float x, float y, Enemy enemy) {
+        Rectangle r = enemy.getRectangle();
+        float dx = r.x + r.width / 2f - x;
+        float dy = r.y + r.height / 2f - y;
+        return dx * dx + dy * dy;
+    }
+
+    /** How many other enemies a hit from this bolt arcs on to, and at what fraction of its damage / within what
+     *  range - from weapons.json (see WeaponDefinition.arcTargets). */
+    public boolean isArcBolt() { return arcBolt; }
+    public int getArcTargets() { return def.arcTargets; }
+    public float getArcDamageMultiplier() { return def.arcDamageMultiplier; }
+    public float getArcRange() { return def.arcRange; }
+
     @Override
     public boolean hasDamaged(Enemy enemy) {
         if (lifeTime >= STRIKE_DURATION) return true;
@@ -414,6 +483,7 @@ public class ThunderboltWeapon extends BaseWeapon {
         lifeTime = 0f;
         target = null;
         hit = false;
+        arcBolt = false;
         segCount = 0;
     }
 }
