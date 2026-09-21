@@ -45,18 +45,28 @@ public class PointGem implements Pool.Poolable {
     // Skips the pop/gravity/homing entirely so it just sits at its spawn point, waiting to be flown
     // into, instead of drifting off wherever gravity and the player's position happen to take it.
     private boolean stationary;
+    // Size and point-value multiplier - see init()'s valueScale.
+    private float valueScale = 1f;
 
     public void init(Animation<TextureRegion> animation, float x, float y, float worldWidth, float worldHeight) {
         init(animation, x, y, worldWidth, worldHeight, false);
     }
 
     public void init(Animation<TextureRegion> animation, float x, float y, float worldWidth, float worldHeight, boolean stationary) {
+        init(animation, x, y, worldWidth, worldHeight, stationary, 1f);
+    }
+
+    /** @param valueScale multiplies both the gem's size and the points it's worth when collected - see
+     *  GameBalance.gemScaleForDistance() and CollisionManager.checkPlayerGemCollisions(). 1 is the base gem. */
+    public void init(Animation<TextureRegion> animation, float x, float y, float worldWidth, float worldHeight, boolean stationary, float valueScale) {
         this.animation = animation;
         this.stateTime = 0f;
         this.worldWidth = worldWidth;
         this.worldHeight = worldHeight;
         this.stationary = stationary;
-        rectangle.set(x - SIZE / 2f, y - SIZE / 2f, SIZE, SIZE);
+        this.valueScale = valueScale;
+        float size = SIZE * valueScale;
+        rectangle.set(x - size / 2f, y - size / 2f, size, size);
         rotation = MathUtils.random(0f, 360f);
 
         if (stationary) {
@@ -128,6 +138,11 @@ public class PointGem implements Pool.Poolable {
         return rectangle;
     }
 
+    /** The multiplier this gem's size and point value were scaled by when it spawned. */
+    public float getValueScale() {
+        return valueScale;
+    }
+
     @Override
     public void reset() {
         vx = 0f;
@@ -136,5 +151,6 @@ public class PointGem implements Pool.Poolable {
         rotation = 0f;
         stateTime = 0f;
         stationary = false;
+        valueScale = 1f;
     }
 }

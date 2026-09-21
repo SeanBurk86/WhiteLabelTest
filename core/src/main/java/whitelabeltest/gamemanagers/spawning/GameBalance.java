@@ -22,7 +22,22 @@ public class GameBalance {
     public float defaultChainWindow;
     public int gemPoints;
     public int gemsPerEnemyHealth;
+    // Gems dropped by a dying enemy scale with how close the player was to it when it died - both their
+    // size and their point value (see gemScaleForDistance()): gemMaxScale with the player right up against
+    // the enemy, easing linearly down to gemMinScale at gemFullDistance world units away or more.
+    // Defaulted here so a balance.json without them behaves the same as one that spells the defaults out.
+    public float gemMinScale = 0.75f;
+    public float gemMaxScale = 1.75f;
+    public float gemFullDistance = 8f;
     public RankThresholds rankThresholds;
 
     public GameBalance() {}
+
+    /** The size/value multiplier for a gem dropped when the player was `distance` world units from the dying
+     *  enemy (measured to the enemy's nearest edge, so 0 = touching): gemMaxScale at 0, gemMinScale at
+     *  gemFullDistance or beyond, linear in between. */
+    public float gemScaleForDistance(float distance) {
+        float t = gemFullDistance <= 0f ? 1f : Math.max(0f, Math.min(1f, distance / gemFullDistance));
+        return gemMaxScale + (gemMinScale - gemMaxScale) * t;
+    }
 }

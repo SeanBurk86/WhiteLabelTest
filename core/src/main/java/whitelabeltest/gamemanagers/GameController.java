@@ -34,6 +34,8 @@ import com.badlogic.gdx.graphics.Texture;
 import com.badlogic.gdx.graphics.g2d.Animation;
 import com.badlogic.gdx.graphics.g2d.TextureRegion;
 import com.badlogic.gdx.math.MathUtils;
+import com.badlogic.gdx.math.Rectangle;
+import com.badlogic.gdx.math.Vector2;
 import com.badlogic.gdx.utils.Array;
 import com.badlogic.gdx.utils.Disposable;
 import com.badlogic.gdx.utils.ObjectMap;
@@ -982,9 +984,18 @@ public class GameController implements Disposable {
         if (gemCount > 0) {
             Animation<TextureRegion> gemAnimation =
                 AnimationCache.get(assets.pointGemTexture, 6, 4, 24, 0.05f, Animation.PlayMode.LOOP);
+            // The closer the player is when the enemy dies, the bigger - and more valuable - its gems: see
+            // GameBalance.gemScaleForDistance(). Distance is from the player to the enemy's nearest edge, so
+            // ramming an enemy (or being inside its bounds) counts as point-blank.
+            Player player = entityManager.getPlayer();
+            Rectangle bounds = enemy.getRectangle();
+            float nearestX = MathUtils.clamp(player.getCenterX(), bounds.x, bounds.x + bounds.width);
+            float nearestY = MathUtils.clamp(player.getCenterY(), bounds.y, bounds.y + bounds.height);
+            float gemScale = assets.getGameBalance().gemScaleForDistance(
+                Vector2.dst(player.getCenterX(), player.getCenterY(), nearestX, nearestY));
             for (int i = 0; i < gemCount; i++) {
                 PointGem gem = ObjectPools.pointGemPool.obtain();
-                gem.init(gemAnimation, centerX, centerY, worldWidth, worldHeight);
+                gem.init(gemAnimation, centerX, centerY, worldWidth, worldHeight, false, gemScale);
                 entityManager.getPointGems().add(gem);
             }
         }

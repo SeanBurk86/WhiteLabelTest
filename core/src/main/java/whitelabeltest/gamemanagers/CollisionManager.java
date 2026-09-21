@@ -179,7 +179,8 @@ public class CollisionManager {
         for (int i = gems.size - 1; i >= 0; i--) {
             PointGem gem = gems.get(i);
             if (Intersector.overlaps(player.getGrazeHitbox(), gem.getRectangle())) {
-                scoreManager.addBonus(assets.getGameBalance().gemPoints);
+                // A bigger gem (dropped with the player close to the enemy) is worth proportionally more.
+                scoreManager.addBonus(Math.round(assets.getGameBalance().gemPoints * gem.getValueScale()));
                 scoreManager.registerGemCollected();
                 audio.playPointGem();
                 gems.removeIndex(i);
