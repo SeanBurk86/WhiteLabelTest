@@ -10,12 +10,16 @@ import com.badlogic.gdx.graphics.Color;
 import com.badlogic.gdx.graphics.GL20;
 import com.badlogic.gdx.graphics.g2d.SpriteBatch;
 import com.badlogic.gdx.graphics.glutils.ShapeRenderer;
+import com.badlogic.gdx.math.Circle;
 import com.badlogic.gdx.math.MathUtils;
 import com.badlogic.gdx.math.Rectangle;
 import com.badlogic.gdx.math.Vector3;
+import com.badlogic.gdx.utils.Array;
 import com.badlogic.gdx.utils.ScreenUtils;
 import com.badlogic.gdx.utils.viewport.ExtendViewport;
 import whitelabeltest.enemy.Enemy;
+import whitelabeltest.enemy.EnemyHitboxes;
+import whitelabeltest.enemy.HitboxDef;
 import whitelabeltest.enemy.bullets.EnemyBullet;
 import whitelabeltest.gamemanagers.audio.AudioSettings;
 import whitelabeltest.gamemanagers.EntityManager;
@@ -85,6 +89,9 @@ public class Main extends ApplicationAdapter {
 
     private SpriteBatch spriteBatch;
     private ShapeRenderer shapeRenderer;
+    // Scratch shapes for drawDebug()'s enemy hitbox overlay.
+    private final Circle debugCircle = new Circle();
+    private final Rectangle debugRect = new Rectangle();
     private ExtendViewport viewport;
 
     private final float PLAY_AREA_WIDTH = 9f;
@@ -474,7 +481,24 @@ public class Main extends ApplicationAdapter {
             // comment - GenericEnemy's sprite always uses setOriginCenter()), so the origin offset
             // passed to this rotated overload is always exactly half its width/height.
             Rectangle r = enemy.getRectangle();
-            shapeRenderer.rect(r.x, r.y, r.width / 2f, r.height / 2f, r.width, r.height, 1f, 1f, enemy.getRotation());
+            Array<HitboxDef> boxes = enemy.getHitboxDefs();
+            if (boxes == null) {
+                shapeRenderer.rect(r.x, r.y, r.width / 2f, r.height / 2f, r.width, r.height, 1f, 1f, enemy.getRotation());
+                continue;
+            }
+            // Custom hitboxes (EnemyDefinition.hitboxes) - the actual shapes collisions test, each rotated with
+            // the sprite around its centre, via the same EnemyHitboxes math CollisionManager uses.
+            for (int i = 0; i < boxes.size; i++) {
+                HitboxDef box = boxes.get(i);
+                if (box.isCircle()) {
+                    EnemyHitboxes.circle(box, r, enemy.getRotation(), debugCircle);
+                    shapeRenderer.circle(debugCircle.x, debugCircle.y, debugCircle.radius, 16);
+                } else {
+                    // Centred where the hitbox really is, turned about its own centre - see EnemyHitboxes.rect().
+                    Rectangle hb = EnemyHitboxes.rect(box, r, enemy.getRotation(), debugRect);
+                    shapeRenderer.rect(hb.x, hb.y, hb.width / 2f, hb.height / 2f, hb.width, hb.height, 1f, 1f, EnemyHitboxes.totalRotation(box, enemy.getRotation()));
+                }
+            }
         }
 
         shapeRenderer.setColor(Color.ORANGE);

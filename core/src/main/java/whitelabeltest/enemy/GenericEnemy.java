@@ -5,6 +5,7 @@ import com.badlogic.gdx.graphics.g2d.Animation;
 import com.badlogic.gdx.graphics.g2d.Sprite;
 import com.badlogic.gdx.graphics.g2d.TextureRegion;
 import com.badlogic.gdx.math.MathUtils;
+import com.badlogic.gdx.utils.Array;
 import whitelabeltest.gamemanagers.effects.AnimationCache;
 import whitelabeltest.gamemanagers.ObjectPools;
 import whitelabeltest.gamemanagers.trigger.EnemyEntranceMovement;
@@ -16,6 +17,11 @@ import whitelabeltest.enemy.movementpatterns.MovementPattern;
 public class GenericEnemy extends BaseEnemy {
 
     private EnemyDefinition def;
+
+    @Override
+    public Array<HitboxDef> getHitboxDefs() {
+        return def != null && def.hitboxes != null && def.hitboxes.size > 0 ? def.hitboxes : null;
+    }
     private Texture bulletTexture;
     private Texture spawnTexture;
     private Texture deathTexture;

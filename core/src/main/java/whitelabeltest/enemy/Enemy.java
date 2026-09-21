@@ -32,6 +32,9 @@ public interface Enemy extends Pool.Poolable {
     // away from upright) - CollisionManager's enemy collision checks fall back to a plain AABB test
     // whenever this is 0, same cost as before this existed.
     default float getRotation() { return 0f; }
+    // The enemy's custom collision shapes (see EnemyDefinition.hitboxes/EnemyHitboxes), or null for the default:
+    // one box exactly the size of getRectangle().
+    default Array<HitboxDef> getHitboxDefs() { return null; }
     // World-space point getRotation() rotates getRectangle() around - see GenericEnemy's
     // sprite.setOriginCenter(), the only origin an enemy sprite is ever given, so this is always
     // getRectangle()'s own center regardless of enemy type.

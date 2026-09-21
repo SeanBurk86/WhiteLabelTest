@@ -85,6 +85,7 @@ public class EnemyDefinitionPanel extends ScrollPane {
         root.getChildren().add(numberRow("Health", def.health, v -> def.health = v.intValue()));
         root.getChildren().add(numberRow("Score", def.score, v -> def.score = v.intValue()));
         root.getChildren().add(numberRow("Health regen/sec", def.healthRegenPerSecond, v -> def.healthRegenPerSecond = v));
+        root.getChildren().add(buildHitboxSection());
         // Movement is deliberately NOT configured here - see EnemyDefinition.java's own doc. Every
         // placed spawn gets its own movement (a WaypointPath, usually) assigned individually via
         // PropertiesPanel's "Movement Path" section once it's on the Stage canvas, with no
@@ -203,6 +204,21 @@ public class EnemyDefinitionPanel extends ScrollPane {
 
         row.getChildren().addAll(label, combo, remove);
         return row;
+    }
+
+    /** Where an enemy's collision shapes are edited - see HitboxEditorDialog. Shows a one-line summary of what
+     *  it has now (the default whole-sprite box, or how many custom shapes) next to the button that opens it. */
+    private VBox buildHitboxSection() {
+        VBox box = new VBox(4);
+        int count = def.hitboxes == null ? 0 : def.hitboxes.size;
+        Label summary = new Label(count == 0 ? "Hitbox: default (one box, the whole sprite)"
+            : "Hitbox: " + count + " custom shape" + (count == 1 ? "" : "s"));
+        summary.setTextFill(Color.LIGHTGRAY);
+        summary.setStyle("-fx-font-size: 10px;");
+        Button edit = new Button("Edit Hitboxes...");
+        edit.setOnAction(e -> HitboxEditorDialog.show(getScene() != null ? getScene().getWindow() : null, def, library, this::refresh));
+        box.getChildren().addAll(summary, edit);
+        return box;
     }
 
     private ImageView buildPreview() {

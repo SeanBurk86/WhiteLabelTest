@@ -1,5 +1,6 @@
 package whitelabeltest.enemy;
 
+import com.badlogic.gdx.utils.Array;
 import com.badlogic.gdx.utils.ObjectMap;
 
 public class EnemyDefinition {
@@ -11,6 +12,11 @@ public class EnemyDefinition {
     public int rows = 1;
     public float frameDuration = 0.1f;
     public float size;
+    // The enemy's collision shapes - any number of rectangles/circles placed over the sprite (see HitboxDef and the
+    // editor's hitbox editor), which is what bullets, the player's ship, the halo and blasts actually hit. null or
+    // empty (the default) keeps the classic single box exactly the size of the sprite, so an enemy that never
+    // gets one behaves exactly as before.
+    public Array<HitboxDef> hitboxes;
     public int health;
     // Movement is deliberately NOT part of this type definition - see Trigger.movementPattern's own
     // doc. Every placed spawn gets its own movement (ideally a WaypointPath, authored via the
