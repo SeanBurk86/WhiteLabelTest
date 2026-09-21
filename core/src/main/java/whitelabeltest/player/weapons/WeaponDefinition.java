@@ -34,6 +34,10 @@ public class WeaponDefinition {
     public float haloReturnSpeed;
     public float haloFastReturnSpeed;
     public int haloDashDamage;
+    // How big the halo-collision burst is (images/weapons/halo-collision.png, played where the dashing halo hits an
+    // enemy - see CollisionManager.spawnHaloCollisionEffect()), as a multiple of the halo's own diameter: 1 = as
+    // tall as the halo, 0.5 = half that.
+    public float haloCollisionScale = 0.75f;
 
     // Thunderbolt's Hyper Attack (see Player's thunderbolt charge/detonate state machine) - the
     // halo hovers thunderboltHaloFrontDistance in front of the ship, charging through one damage/

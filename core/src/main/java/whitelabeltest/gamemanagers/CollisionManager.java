@@ -1,8 +1,10 @@
 package whitelabeltest.gamemanagers;
+import whitelabeltest.gamemanagers.effects.AnimationCache;
 import whitelabeltest.gamemanagers.effects.HitEffect;
 import whitelabeltest.gamemanagers.audio.AudioManager;
 import whitelabeltest.gamemanagers.effects.PointGem;
 
+import com.badlogic.gdx.graphics.Texture;
 import com.badlogic.gdx.graphics.g2d.Animation;
 import com.badlogic.gdx.graphics.g2d.Sprite;
 import com.badlogic.gdx.graphics.g2d.TextureRegion;
@@ -282,12 +284,36 @@ public class CollisionManager {
 
             player.markHaloDamaged(enemy);
             player.triggerHaloBashFlash();
+            spawnHaloCollisionEffect(haloHitbox, player.getHaloCollisionScale(), enemy, entityManager, assets);
             audio.playHaloBash();
             scoreManager.registerWeaponHit(0.1f, 2.0f);
             if (enemy.takeDamage(player.getHaloDashDamage()) && enemy.getPairId() == null) {
                 scoreManager.addScore(GameController.destroyEnemy(audio, entityManager, assets, worldWidth, worldHeight, enemy, scoreManager), 2.0f);
             }
         }
+    }
+
+    // halo-collision.png: one row of 5 frames, played once per hit.
+    private static final String HALO_COLLISION_TEXTURE = "images/weapons/halo-collision.png";
+    private static final float HALO_COLLISION_FRAME_DURATION = 0.05f;
+    private static final float HALO_COLLISION_FRAME_ASPECT = 82f / 92f;
+
+    /** Plays the halo-collision burst where the halo meets an enemy - at the point on the enemy's bounds
+     *  nearest the halo's centre (the halo's own centre if that's already inside the enemy). Once per enemy per
+     *  dash, since it sits behind the same hasHaloDamaged() gate as the damage. */
+    private void spawnHaloCollisionEffect(Circle haloHitbox, float sizeInHaloDiameters, Enemy enemy, EntityManager entityManager, AssetManager assets) {
+        Texture texture = assets.ensureTexture(HALO_COLLISION_TEXTURE);
+        if (texture == null) return;
+        Animation<TextureRegion> animation =
+            AnimationCache.get(texture, 5, 1, 5, HALO_COLLISION_FRAME_DURATION, Animation.PlayMode.NORMAL);
+
+        Rectangle bounds = enemy.getRectangle();
+        float x = Math.max(bounds.x, Math.min(haloHitbox.x, bounds.x + bounds.width));
+        float y = Math.max(bounds.y, Math.min(haloHitbox.y, bounds.y + bounds.height));
+        float height = haloHitbox.radius * 2f * sizeInHaloDiameters;
+        HitEffect effect = ObjectPools.hitEffectPool.obtain();
+        effect.init(animation, x, y, height * HALO_COLLISION_FRAME_ASPECT, height);
+        entityManager.getHitEffects().add(effect);
     }
 
     /** ThunderboltWeapon's Hyper Attack detonation (see Player.triggerThunderboltHyperAttack/

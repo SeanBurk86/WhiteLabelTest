@@ -825,6 +825,7 @@ public class Player {
     public boolean hasHaloDamaged(Enemy enemy) { return haloDashHitEnemies.contains(enemy, true); }
     public void markHaloDamaged(Enemy enemy) { haloDashHitEnemies.add(enemy); }
     public int getHaloDashDamage() { return basicWeaponDef.haloDashDamage; }
+    public float getHaloCollisionScale() { return basicWeaponDef.haloCollisionScale; }
     public boolean hasPendingThunderboltDetonation() { return thunderboltDetonationPending; }
     public float getThunderboltDetonationX() { return thunderboltDetonationX; }
     public float getThunderboltDetonationY() { return thunderboltDetonationY; }
