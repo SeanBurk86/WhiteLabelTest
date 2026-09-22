@@ -352,8 +352,14 @@ public class GameController implements Disposable {
         float cameraSpeedScale = triggerManager != null ? triggerManager.getSpeedScale() : 1f;
         background.setScrollSpeedScale(cameraSpeedScale);
         background.update(delta);
-        entities.update(delta, input, assets, audio, weaponsDisabled, hyperAttackDisabled,
-            (spawnScheduler != null ? spawnScheduler.getGroundScrollSpeed() : groundScrollSpeed) * cameraSpeedScale, background);
+        float effectiveGroundScrollSpeed =
+            (spawnScheduler != null ? spawnScheduler.getGroundScrollSpeed() : groundScrollSpeed) * cameraSpeedScale;
+        entities.update(delta, input, assets, audio, weaponsDisabled, hyperAttackDisabled, effectiveGroundScrollSpeed, background);
+        // Keeps the phosphene lattice overlay's downward drift (kaleidoscope_source.frag) riding
+        // along at exactly this frame's real ground-scroll rate - see
+        // ScrollingBackground.setKaleidoscopeGroundScrollSpeed()'s own doc. No-op for any other
+        // shaderBackground/no-shader stage, so this is safe to call unconditionally every frame.
+        background.setKaleidoscopeGroundScrollSpeed(effectiveGroundScrollSpeed);
         if (spawnScheduler != null) {
             spawnScheduler.update(delta, entities, audio, input,
                 scoreManager.getEnemiesDestroyed(), scoreManager.getGemsCollected(), entities.getPlayer().getGrazePoints());

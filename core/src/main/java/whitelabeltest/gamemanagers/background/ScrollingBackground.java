@@ -214,6 +214,15 @@ public class ScrollingBackground {
         }
     }
 
+    /** See Stage2KaleidoscopeShader.setGroundScrollSpeed(). Same no-op-for-other-backgrounds
+     *  contract as setKaleidoscopeStageDistance() - GameController calls this unconditionally every
+     *  frame without checking which shaderBackground (if any) this stage picked. */
+    public void setKaleidoscopeGroundScrollSpeed(float groundScrollSpeed) {
+        if (shaderBackground instanceof Stage2KaleidoscopeShader kaleidoscope) {
+            kaleidoscope.setGroundScrollSpeed(groundScrollSpeed);
+        }
+    }
+
     /** Passes a stage's schedule-configured boss-video cue time down as the hue cycle's period - see
      *  SpawnScheduler.getBackgroundVideoTime()/HueCycleShader.setPeriod(). No-op if this stage didn't
      *  set StageDefinition.hueCycleBackground, so GameController can call this unconditionally after

@@ -11,6 +11,11 @@ import com.badlogic.gdx.graphics.glutils.ShaderProgram;
  *  raymarched "tentacles" tunnel for the rest of the stage. Both effects live in
  *  kaleidoscope_source.frag and render in a single pass.
  *
+ *  While the phosphene is showing, kaleidoscope_source.frag also screen-blends a hue-cycling lattice
+ *  overlay (latticeOverlay()) on top of it - a "cosine set" plane-wave field that continuously
+ *  deforms between a square and a hexagonal grid. Purely a shader-side addition (driven off the same
+ *  u_time this class already pushes in) - no Java-side uniform of its own.
+ *
  *  Colour: the stage starts out monochrome (the original grey palettes) and fades toward a colour
  *  cosine palette (PAL_A..PAL_D in kaleidoscope_source.frag) as the player progresses through the
  *  stage - see colorMix(). Both effects share the same fade, so it carries straight through the
@@ -41,6 +46,10 @@ public class Stage2KaleidoscopeShader implements BackgroundShader {
     // Distances at which the colour fade completes / the tentacles take over; <= 0 = not distance-driven.
     private float colorFadeDistance = -1f;
     private float tentacleSwitchDistance = -1f;
+    // World-units/sec grounded enemies currently drift down the screen by - see
+    // setGroundScrollSpeed()/kaleidoscope_source.frag's own u_groundScrollSpeed doc. 0 (the default,
+    // before GameController's first per-frame push) just means the lattice overlay sits static.
+    private float groundScrollSpeed;
 
     public Stage2KaleidoscopeShader() {
         sourceShader = ShaderLoader.compile("Stage2KaleidoscopeShader source pass", "background.vert", "kaleidoscope_source.frag");
@@ -72,6 +81,16 @@ public class Stage2KaleidoscopeShader implements BackgroundShader {
     public void setDistances(float colorFadeDistance, float tentacleSwitchDistance) {
         this.colorFadeDistance = colorFadeDistance;
         this.tentacleSwitchDistance = tentacleSwitchDistance;
+    }
+
+    /** The same signed world-units/sec value BaseEnemy.applyGroundScroll() moves a grounded enemy
+     *  by (negative = downward) - see GameController's own per-frame push of this same value into
+     *  EntityManager.update(). Keeps the phosphene lattice overlay's downward drift in lockstep with
+     *  however fast/slow/frozen/reversed the stage's ground scroll actually is right now, including
+     *  a Trigger.setSpeed() scale or schedule-level override - see kaleidoscope_source.frag's own
+     *  u_groundScrollSpeed doc for the uv-space conversion this feeds into. */
+    public void setGroundScrollSpeed(float groundScrollSpeed) {
+        this.groundScrollSpeed = groundScrollSpeed;
     }
 
     @Override
@@ -108,6 +127,7 @@ public class Stage2KaleidoscopeShader implements BackgroundShader {
         sourceShader.setUniformf("u_resolution", worldWidth, worldHeight);
         sourceShader.setUniformf("u_tentacles", useTentacles() ? 1f : 0f);
         sourceShader.setUniformf("u_colorMix", colorMix());
+        sourceShader.setUniformf("u_groundScrollSpeed", groundScrollSpeed);
         // quadTexture (a harmless dummy - assets.pixelTexture) purely triggers the draw call; its
         // pixel content is never read, sourceShader computes everything procedurally.
         batch.draw(quadTexture, 0, 0, worldWidth, worldHeight);
