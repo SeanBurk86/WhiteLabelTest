@@ -82,9 +82,30 @@ public final class FormControls {
      *  value that isn't in the folder (a hand-typed path, or a placeholder like CHANGE_ME.mp3) is
      *  kept as an extra entry so opening the panel never silently rewrites it. */
     public static HBox soundRow(String label, String initial, Consumer<String> onCommit) {
-        List<String> options = withBlank(PatternIds.sfxPaths());
-        if (initial != null && !initial.isEmpty() && !options.contains(initial)) options.add(initial);
-        return comboRow(label, options, initial, onCommit);
+        return comboRowKeepingCurrent(label, PatternIds.sfxPaths(), initial, onCommit);
+    }
+
+    /** A blank-able combo of the enemy textures under images/enemies (see
+     *  PatternIds.enemyTexturePaths()). A current value that isn't in the folder (a hand-typed path,
+     *  or art not yet dropped in) is kept as an extra entry so opening the panel never silently
+     *  rewrites it. */
+    public static HBox enemyTextureRow(String label, String initial, Consumer<String> onCommit) {
+        return comboRowKeepingCurrent(label, PatternIds.enemyTexturePaths(), initial, onCommit);
+    }
+
+    /** Same as enemyTextureRow but for the bullet textures under images/bullets (see
+     *  PatternIds.bulletTexturePaths()). */
+    public static HBox bulletTextureRow(String label, String initial, Consumer<String> onCommit) {
+        return comboRowKeepingCurrent(label, PatternIds.bulletTexturePaths(), initial, onCommit);
+    }
+
+    /** Shared by soundRow/enemyTextureRow/bulletTextureRow: a blank-able combo of the given options,
+     *  with the current value added as an extra entry when it isn't already one of them, so opening
+     *  the panel never silently rewrites a hand-typed or not-yet-present path. */
+    private static HBox comboRowKeepingCurrent(String label, List<String> options, String initial, Consumer<String> onCommit) {
+        List<String> withCurrent = withBlank(options);
+        if (initial != null && !initial.isEmpty() && !withCurrent.contains(initial)) withCurrent.add(initial);
+        return comboRow(label, withCurrent, initial, onCommit);
     }
 
     public static CheckBox checkBox(String label, boolean initial, Consumer<Boolean> onCommit) {

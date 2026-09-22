@@ -57,6 +57,32 @@ public final class PatternIds {
         }
     }
 
+    /** Enemy sprite-sheet texture paths (e.g. "images/enemies/ICE006.png") for
+     *  EnemyDefinitionPanel's "Texture" combo - same form EnemyDefinition.texture already stores. */
+    public static List<String> enemyTexturePaths() {
+        return listImagePaths(Path.of("images/enemies"), "images/enemies/");
+    }
+
+    /** Bullet texture paths (e.g. "images/bullets/enemybullet.png") for EnemyDefinitionPanel's
+     *  "Bullet texture" combo - same form EnemyDefinition.bulletTexture already stores. */
+    public static List<String> bulletTexturePaths() {
+        return listImagePaths(Path.of("images/bullets"), "images/bullets/");
+    }
+
+    private static List<String> listImagePaths(Path dir, String prefix) {
+        if (!Files.isDirectory(dir)) return new ArrayList<>();
+        try (Stream<Path> files = Files.list(dir)) {
+            return files
+                .map(p -> p.getFileName().toString())
+                .filter(name -> name.endsWith(".png") || name.endsWith(".jpg") || name.endsWith(".jpeg"))
+                .map(name -> prefix + name)
+                .sorted(Comparator.naturalOrder())
+                .collect(java.util.stream.Collectors.toCollection(ArrayList::new));
+        } catch (IOException e) {
+            throw new UncheckedIOException("Failed to list " + dir.toAbsolutePath(), e);
+        }
+    }
+
     private static List<String> listJsonIds(Path path) {
         if (!Files.exists(path)) return new ArrayList<>();
         try {

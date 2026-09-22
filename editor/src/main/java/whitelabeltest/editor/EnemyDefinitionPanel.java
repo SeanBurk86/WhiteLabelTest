@@ -21,8 +21,10 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 
+import static whitelabeltest.editor.FormControls.bulletTextureRow;
 import static whitelabeltest.editor.FormControls.checkBox;
 import static whitelabeltest.editor.FormControls.comboRow;
+import static whitelabeltest.editor.FormControls.enemyTextureRow;
 import static whitelabeltest.editor.FormControls.numberRow;
 import static whitelabeltest.editor.FormControls.sectionLabel;
 import static whitelabeltest.editor.FormControls.textRow;
@@ -72,8 +74,8 @@ public class EnemyDefinitionPanel extends ScrollPane {
         if (preview != null) root.getChildren().add(preview);
 
         root.getChildren().add(sectionLabel("Identity"));
-        root.getChildren().add(textRow("Texture", def.texture, v -> { def.texture = v; refresh(); }));
-        root.getChildren().add(textRow("Bullet texture", def.bulletTexture, v -> { def.bulletTexture = v; }));
+        root.getChildren().add(enemyTextureRow("Texture", def.texture, v -> { def.texture = v.isEmpty() ? null : v; refresh(); }));
+        root.getChildren().add(bulletTextureRow("Bullet texture", def.bulletTexture, v -> def.bulletTexture = v.isEmpty() ? null : v));
         root.getChildren().add(numberRow("Frame count", def.frameCount, v -> def.frameCount = v.intValue()));
         root.getChildren().add(numberRow("Columns", def.columns, v -> def.columns = v.intValue()));
         root.getChildren().add(numberRow("Rows", def.rows, v -> def.rows = v.intValue()));
