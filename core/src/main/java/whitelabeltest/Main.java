@@ -50,15 +50,21 @@ public class Main extends ApplicationAdapter {
         // 1, same as an ordinary equip - see Player.setSlotWeapon()), not "set it to 0".
         public final int slotALevel;
         public final int slotBLevel;
+        // Which device transitionToQuickPlay() should poll - chosen in QuickPlayDialog's own Launch
+        // tab, since (unlike an ordinary run) there's no StartScreen input-detection step to read
+        // this from when skipping straight to gameplay. Never null - Lwjgl3Launcher.readQuickPlayConfig()
+        // falls back to KEYBOARD for a missing/unrecognized quickPlay.input property.
+        public final InputType inputType;
 
         public QuickPlayConfig(String stageId, float startDistance, String slotAWeaponId, String slotBWeaponId,
-                                int slotALevel, int slotBLevel) {
+                                int slotALevel, int slotBLevel, InputType inputType) {
             this.stageId = stageId;
             this.startDistance = startDistance;
             this.slotAWeaponId = slotAWeaponId;
             this.slotBWeaponId = slotBWeaponId;
             this.slotALevel = slotALevel;
             this.slotBLevel = slotBLevel;
+            this.inputType = inputType;
         }
     }
 
@@ -225,14 +231,15 @@ public class Main extends ApplicationAdapter {
      *  how quickPlay gets here. Skips StartScreen/WeaponSelectScreen entirely, the same shape
      *  transitionToTutorial() above already uses for its own skip-weapon-select path: the
      *  WeaponLoadout passed to the constructor here is just a placeholder, immediately overridden
-     *  by GameController.quickStartAtStage()'s explicit slot ids. Always keyboard input - there's no
-     *  start-screen input detection to read here the way transitionToWeaponSelect()'s does. */
+     *  by GameController.quickStartAtStage()'s explicit slot ids. quickPlay.inputType is whatever
+     *  QuickPlayDialog's Launch tab had selected - there's no start-screen input detection to read
+     *  here the way transitionToWeaponSelect()'s does. */
     private void transitionToQuickPlay() {
         game = new GameController(PLAY_AREA_WIDTH, PLAY_AREA_HEIGHT, keyBindings, audioSettings, WeaponLoadout.BASIC_THUNDERBOLT);
         game.quickStartAtStage(quickPlay.stageId, quickPlay.startDistance, quickPlay.slotAWeaponId, quickPlay.slotBWeaponId,
             quickPlay.slotALevel, quickPlay.slotBLevel);
-        game.setActiveInput(InputType.KEYBOARD);
-        ui = new UIManager(InputType.KEYBOARD);
+        game.setActiveInput(quickPlay.inputType);
+        ui = new UIManager(quickPlay.inputType);
         state = AppState.PLAYING;
     }
 

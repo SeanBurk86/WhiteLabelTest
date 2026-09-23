@@ -14,6 +14,7 @@ import javafx.scene.layout.VBox;
 import javafx.scene.paint.Color;
 import javafx.stage.Modality;
 import javafx.stage.Stage;
+import whitelabeltest.gamemanagers.input.InputType;
 import whitelabeltest.gamemanagers.spawning.StageDefinition;
 import whitelabeltest.player.PlayerDefinition;
 import whitelabeltest.player.WeaponLoadout;
@@ -32,13 +33,18 @@ import java.util.List;
  *  GameController.quickStartAtStage()/Main.QuickPlayConfig/Lwjgl3Launcher.readQuickPlayConfig() for
  *  how the launched process actually receives these three things.
  *
- * Two tabs: "Launch" (a read-only summary of what's about to start, plus the actual Launch button)
- * and "Weapons" (the two starting-slot combos, each paired with its own starting LEVEL combo) - the
- * four real weapon ids (Player.weaponById()'s own list), not just the three curated WeaponLoadout
- * presets (WaveBlastWeapon is deliberately powerup-only there) - this is a dev testing tool, not
- * real progression, so the extra freedom is fine here. Level range is read from player.json's own
- * maxWeaponLevel (see loadMaxWeaponLevel()) rather than hardcoded, so it never drifts out of sync
- * with what Player.setWeaponLevel() itself actually allows. */
+ * Two tabs: "Launch" (a read-only summary of what's about to start, the Input combo, and the actual
+ * Launch button) and "Weapons" (the two starting-slot combos, each paired with its own starting
+ * LEVEL combo) - the four real weapon ids (Player.weaponById()'s own list), not just the three
+ * curated WeaponLoadout presets (WaveBlastWeapon is deliberately powerup-only there) - this is a dev
+ * testing tool, not real progression, so the extra freedom is fine here. Level range is read from
+ * player.json's own maxWeaponLevel (see loadMaxWeaponLevel()) rather than hardcoded, so it never
+ * drifts out of sync with what Player.setWeaponLevel() itself actually allows.
+ *
+ * The Input combo (Keyboard/Gamepad) exists because Quick Play skips StartScreen entirely - see
+ * Main.transitionToQuickPlay()'s own doc - so there's no "press any key/button" step to auto-detect
+ * the device from the way an ordinary run does; without this a Quick Play session was always stuck
+ * polling keyboard regardless of what the tester actually wanted to play with. */
 public final class QuickPlayDialog {
     private static final List<String> WEAPON_IDS = List.of("BasicWeapon", "WaveBlastWeapon", "OrbitWeapon", "Thunderbolt");
     // Matches player.json's own current maxWeaponLevel - used only if that file can't be read for
@@ -66,6 +72,9 @@ public final class QuickPlayDialog {
         ComboBox<String> slotBLevelCombo = new ComboBox<>(FXCollections.observableArrayList(levelOptions));
         slotBLevelCombo.setValue("1");
 
+        ComboBox<InputType> inputCombo = new ComboBox<>(FXCollections.observableArrayList(InputType.values()));
+        inputCombo.setValue(InputType.KEYBOARD);
+
         Stage dialog = new Stage();
         dialog.initOwner(owner);
         dialog.initModality(Modality.APPLICATION_MODAL);
@@ -84,11 +93,11 @@ public final class QuickPlayDialog {
             document.save();
             library.saveStages();
             launchProcess(stageDef.id, timelineBar.getValue(), slotACombo.getValue(), slotBCombo.getValue(),
-                Integer.parseInt(slotALevelCombo.getValue()), Integer.parseInt(slotBLevelCombo.getValue()));
+                Integer.parseInt(slotALevelCombo.getValue()), Integer.parseInt(slotBLevelCombo.getValue()), inputCombo.getValue());
             dialog.close();
         });
 
-        VBox launchTab = new VBox(10, summary, launch);
+        VBox launchTab = new VBox(10, summary, FormControls.fieldLabel("Input"), inputCombo, launch);
         launchTab.setPadding(new Insets(12));
 
         VBox weaponsTab = new VBox(10,
@@ -120,7 +129,7 @@ public final class QuickPlayDialog {
      *  UI thread never blocks on the forked game's lifetime; inheritIO() surfaces Gradle/game output
      *  in the editor's own console for troubleshooting a failed launch. */
     private static void launchProcess(String stageId, float distance, String slotA, String slotB,
-                                       int slotALevel, int slotBLevel) {
+                                       int slotALevel, int slotBLevel, InputType inputType) {
         boolean isWindows = System.getProperty("os.name", "").toLowerCase().contains("win");
         String gradlew = isWindows ? "gradlew.bat" : "./gradlew";
         // The editor's own run task sets its working directory to assets/ (see editor/build.gradle) -
@@ -136,7 +145,8 @@ public final class QuickPlayDialog {
                 "-PquickPlaySlotA=" + slotA,
                 "-PquickPlaySlotB=" + slotB,
                 "-PquickPlaySlotALevel=" + slotALevel,
-                "-PquickPlaySlotBLevel=" + slotBLevel
+                "-PquickPlaySlotBLevel=" + slotBLevel,
+                "-PquickPlayInput=" + inputType.name()
             );
             pb.directory(repoRoot.toFile());
             pb.inheritIO();

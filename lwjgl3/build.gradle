@@ -74,6 +74,7 @@ run {
   if (project.hasProperty('quickPlaySlotB')) jvmArgs += "-DquickPlay.slotB=${project.property('quickPlaySlotB')}"
   if (project.hasProperty('quickPlaySlotALevel')) jvmArgs += "-DquickPlay.slotALevel=${project.property('quickPlaySlotALevel')}"
   if (project.hasProperty('quickPlaySlotBLevel')) jvmArgs += "-DquickPlay.slotBLevel=${project.property('quickPlaySlotBLevel')}"
+  if (project.hasProperty('quickPlayInput')) jvmArgs += "-DquickPlay.input=${project.property('quickPlayInput')}"
 }
 
 jar {

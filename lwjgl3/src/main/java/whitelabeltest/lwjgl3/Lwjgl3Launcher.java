@@ -3,6 +3,7 @@ package whitelabeltest.lwjgl3;
 import com.badlogic.gdx.backends.lwjgl3.Lwjgl3Application;
 import com.badlogic.gdx.backends.lwjgl3.Lwjgl3ApplicationConfiguration;
 import whitelabeltest.Main;
+import whitelabeltest.gamemanagers.input.InputType;
 
 /** Launches the desktop (LWJGL3) application. */
 public class Lwjgl3Launcher {
@@ -26,7 +27,20 @@ public class Lwjgl3Launcher {
         String slotB = System.getProperty("quickPlay.slotB");
         int slotALevel = parseInt(System.getProperty("quickPlay.slotALevel"), 0);
         int slotBLevel = parseInt(System.getProperty("quickPlay.slotBLevel"), 0);
-        return new Main.QuickPlayConfig(stageId, distance, blankToNull(slotA), blankToNull(slotB), slotALevel, slotBLevel);
+        InputType inputType = parseInputType(System.getProperty("quickPlay.input"));
+        return new Main.QuickPlayConfig(stageId, distance, blankToNull(slotA), blankToNull(slotB), slotALevel, slotBLevel, inputType);
+    }
+
+    /** quickPlay.input is QuickPlayDialog's InputType combo, forwarded as its enum name (e.g.
+     *  "GAMEPAD") - falls back to KEYBOARD for a missing/blank property (an older quickPlay call
+     *  that predates this field) or one that doesn't match a known InputType, rather than throwing. */
+    private static InputType parseInputType(String value) {
+        if (value == null || value.isBlank()) return InputType.KEYBOARD;
+        try {
+            return InputType.valueOf(value);
+        } catch (IllegalArgumentException e) {
+            return InputType.KEYBOARD;
+        }
     }
 
     private static float parseFloat(String value, float fallback) {
