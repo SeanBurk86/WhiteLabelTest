@@ -14,6 +14,7 @@ import com.badlogic.gdx.utils.Disposable;
 import com.badlogic.gdx.utils.Json;
 import com.badlogic.gdx.utils.ObjectMap;
 import whitelabeltest.enemy.BulletDef;
+import whitelabeltest.enemy.EnemyAnimationDef;
 import whitelabeltest.enemy.EnemyDefinition;
 import whitelabeltest.enemy.ExplosionPatternDef;
 import whitelabeltest.enemy.FiringPatternDef;
@@ -87,6 +88,11 @@ public class AssetManager implements Disposable {
             if (def.bulletTexture != null) loadTexture(def.bulletTexture);
             if (def.spawnTexture != null) loadTexture(def.spawnTexture);
             if (def.deathTexture != null) loadTexture(def.deathTexture);
+            if (def.animations != null) {
+                for (EnemyAnimationDef anim : def.animations.values()) {
+                    if (anim.texture != null) loadTexture(anim.texture);
+                }
+            }
             loadFiringPatternTextures(PatternRegistry.getFiring(def.firingPattern));
         }
 

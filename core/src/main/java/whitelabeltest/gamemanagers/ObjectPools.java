@@ -15,6 +15,7 @@ import whitelabeltest.enemy.bullets.FeatherBullet;
 import whitelabeltest.enemy.bullets.LaserBullet;
 import whitelabeltest.enemy.bullets.OrbitingBullet;
 import whitelabeltest.enemy.bullets.SineBullet;
+import whitelabeltest.enemy.bullets.ShapeBullet;
 import whitelabeltest.enemy.firingpatterns.ExplodingAimedBullet;
 import whitelabeltest.player.powerups.Powerup;
 import whitelabeltest.player.powerups.WeaponPowerup;
@@ -60,6 +61,9 @@ public class ObjectPools {
     };
     public static final Pool<OrbitingBullet> orbitingBulletPool = new Pool<OrbitingBullet>() {
         @Override protected OrbitingBullet newObject() { return new OrbitingBullet(); }
+    };
+    public static final Pool<ShapeBullet> shapeBulletPool = new Pool<ShapeBullet>() {
+        @Override protected ShapeBullet newObject() { return new ShapeBullet(); }
     };
     public static final Pool<LaserBullet> laserBulletPool = new Pool<LaserBullet>() {
         @Override protected LaserBullet newObject() { return new LaserBullet(); }
@@ -107,6 +111,7 @@ public class ObjectPools {
         else if (b instanceof FeatherBullet) featherBulletPool.free((FeatherBullet)b);
         else if (b instanceof OrbitingBullet) orbitingBulletPool.free((OrbitingBullet)b);
         else if (b instanceof LaserBullet) laserBulletPool.free((LaserBullet)b);
+        else if (b instanceof ShapeBullet) shapeBulletPool.free((ShapeBullet)b);
     }
 
     public static void freeEnemy(Enemy e) {

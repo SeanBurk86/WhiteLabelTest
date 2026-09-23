@@ -43,7 +43,7 @@ import java.util.function.Supplier;
  *  Disk" row is confirmed. */
 public class PatternPreviewer {
     private static final String[] MOVEMENT_TYPES = {"None", "Straight", "ZigZag", "Seeking", "MoveToPoint", "Spline", "Sequence", "Squadron"};
-    private static final String[] FIRING_TYPES = {"None", "SelfDestruct", "ExplodingAimed", "BurstAimed", "Sweep", "SineWave", "Feather", "Orbiting", "Wall", "PolkaDot", "RadialNearMiss", "SpawnEnemy", "Aimed", "QuarterCircle", "AimedAtPoint", "Laser", "Sequence", "Combined"};
+    private static final String[] FIRING_TYPES = {"None", "SelfDestruct", "ExplodingAimed", "BurstAimed", "Sweep", "SineWave", "Feather", "Orbiting", "Wall", "PolkaDot", "RadialNearMiss", "SpawnEnemy", "Aimed", "QuarterCircle", "AimedAtPoint", "Laser", "Shape", "Sequence", "Combined"};
     private static final String NONE_LABEL = "(none)";
     // See HitboxSpec.Shape - NONE_LABEL here means "null", i.e. let the bullet class's own default
     // shape stand (see each bullet class's getHitRadius()) rather than forcing one.
@@ -501,6 +501,10 @@ public class PatternPreviewer {
             d.spawnColumns = src.spawnColumns;
             d.spawnRows = src.spawnRows;
             d.spawnDuration = src.spawnDuration;
+            d.spawnFrameDuration = src.spawnFrameDuration;
+            d.animations = src.animations;
+            d.flipWithDirection = src.flipWithDirection;
+            d.uniformPixelScale = src.uniformPixelScale;
             d.deathTexture = src.deathTexture;
             d.deathFrameCount = src.deathFrameCount;
             d.deathColumns = src.deathColumns;

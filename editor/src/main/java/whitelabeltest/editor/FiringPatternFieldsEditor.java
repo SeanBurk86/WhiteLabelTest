@@ -48,7 +48,7 @@ final class FiringPatternFieldsEditor {
 
     static final List<String> TYPES = List.of("None", "SelfDestruct", "ExplodingAimed", "BurstAimed", "Sweep",
         "SineWave", "Feather", "Orbiting", "Wall", "PolkaDot", "RadialNearMiss", "SpawnEnemy", "Aimed", "QuarterCircle",
-        "AimedAtPoint", "Laser", "Sequence", "Combined");
+        "AimedAtPoint", "Laser", "Shape", "Sequence", "Combined");
 
     // Shared across every Sub-Patterns list this editor opens (including nested ones), so a
     // sub-pattern copied out of one Sequence/Combined pattern can be pasted into a completely
@@ -157,6 +157,26 @@ final class FiringPatternFieldsEditor {
         box.getChildren().add(sectionLabel("Radial Near-Miss"));
         box.getChildren().add(numberRow("Near-miss distance", def.nearMissDistance, v -> { def.nearMissDistance = v; onDirty.run(); }));
         box.getChildren().add(numberRow("Volley count", def.volleyCount, v -> { def.volleyCount = v.intValue(); onDirty.run(); }));
+
+        box.getChildren().add(new Separator());
+        box.getChildren().add(sectionLabel("Shape (Number of bullets = shapes per volley, Fixed fire angle = direction)"));
+        HBox pointsRow = FormControls.textRow("Shape points (x0, y0, x1, y1, ...)", formatFloatArray(def.shapePoints),
+            v -> { def.shapePoints = parseFloatArray(v); onDirty.run(); });
+        box.getChildren().add(pointsRow);
+        Button draw = new Button("Draw shape...");
+        draw.setOnAction(e -> ShapeEditorDialog.show(box.getScene() != null ? box.getScene().getWindow() : null, def, points -> {
+            def.shapePoints = points;
+            // Keep the raw-coordinates field in step with what was just drawn.
+            pointsRow.getChildren().stream().filter(n -> n instanceof javafx.scene.control.TextField)
+                .forEach(n -> ((javafx.scene.control.TextField) n).setText(formatFloatArray(points)));
+            onDirty.run();
+        }));
+        box.getChildren().add(draw);
+        box.getChildren().add(numberRow("Shape scale when formed", def.shapeScale, v -> { def.shapeScale = v; onDirty.run(); }));
+        box.getChildren().add(numberRow("Shape form time (sec, 0 = rigid)", def.shapeFormTime, v -> { def.shapeFormTime = v; onDirty.run(); }));
+        box.getChildren().add(numberRow("Shape drift ratio (1 = no accel, <1 = slows into shape)", def.shapeDriftRatio, v -> { def.shapeDriftRatio = v; onDirty.run(); }));
+        box.getChildren().add(checkBox("Mirror shape (flip X)", def.shapeFlipX, v -> { def.shapeFlipX = v; onDirty.run(); }));
+        box.getChildren().add(checkBox("Rotate shape with direction", def.shapeRotateWithDirection, v -> { def.shapeRotateWithDirection = v; onDirty.run(); }));
         return scrollOf(box);
     }
 
@@ -469,6 +489,37 @@ final class FiringPatternFieldsEditor {
         }
         if (count == 0) return null;
         int[] trimmed = new int[count];
+        System.arraycopy(result, 0, trimmed, 0, count);
+        return trimmed;
+    }
+
+    private static String formatFloatArray(float[] values) {
+        if (values == null || values.length == 0) return "";
+        StringBuilder sb = new StringBuilder();
+        for (int i = 0; i < values.length; i++) {
+            if (i > 0) sb.append(", ");
+            sb.append(values[i]);
+        }
+        return sb.toString();
+    }
+
+    private static float[] parseFloatArray(String text) {
+        text = text.trim();
+        if (text.isEmpty()) return null;
+        String[] parts = text.split(",");
+        float[] result = new float[parts.length];
+        int count = 0;
+        for (String part : parts) {
+            part = part.trim();
+            if (part.isEmpty()) continue;
+            try {
+                result[count++] = Float.parseFloat(part);
+            } catch (NumberFormatException ignored) {
+                // leave malformed entries out rather than crashing on a stray comma/typo
+            }
+        }
+        if (count == 0) return null;
+        float[] trimmed = new float[count];
         System.arraycopy(result, 0, trimmed, 0, count);
         return trimmed;
     }

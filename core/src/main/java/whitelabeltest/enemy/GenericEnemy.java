@@ -8,6 +8,7 @@ import com.badlogic.gdx.math.MathUtils;
 import com.badlogic.gdx.utils.Array;
 import whitelabeltest.gamemanagers.effects.AnimationCache;
 import whitelabeltest.gamemanagers.ObjectPools;
+import whitelabeltest.gamemanagers.spawning.EnemySpawnRegistry;
 import whitelabeltest.gamemanagers.trigger.EnemyEntranceMovement;
 import whitelabeltest.gamemanagers.trigger.Trigger;
 import whitelabeltest.enemy.firingpatterns.FiringPattern;
@@ -108,6 +109,10 @@ public class GenericEnemy extends BaseEnemy {
             sprite.setSize(def.size * aspect, def.size);
         }
         sprite.setOriginCenter();
+        this.unitsPerPixel = def.uniformPixelScale
+            ? def.size / Math.max(frames[0].getRegionWidth(), frames[0].getRegionHeight())
+            : Float.NaN;
+        this.flipWithDirection = def.flipWithDirection;
 
         if (!Float.isNaN(startX)) {
             sprite.setX(startX);
@@ -156,7 +161,8 @@ public class GenericEnemy extends BaseEnemy {
 
         this.spawnDuration = def.spawnDuration;
         this.spawnAnimation = (spawnTexture != null && def.spawnFrameCount > 0)
-            ? AnimationCache.get(spawnTexture, def.spawnColumns > 0 ? def.spawnColumns : def.spawnFrameCount, def.spawnRows, def.spawnFrameCount, 0.05f, Animation.PlayMode.NORMAL)
+            ? AnimationCache.get(spawnTexture, def.spawnColumns > 0 ? def.spawnColumns : def.spawnFrameCount, def.spawnRows, def.spawnFrameCount,
+                def.spawnFrameDuration > 0f ? def.spawnFrameDuration : 0.05f, Animation.PlayMode.NORMAL)
             : null;
 
         this.deathDuration = def.deathDuration;
@@ -227,6 +233,19 @@ public class GenericEnemy extends BaseEnemy {
         FiringPatternDef patternDef = PatternRegistry.getFiring(firingPatternId);
         if (patternDef == null) return null;
         return PatternFactory.createFiring(def, patternDef, worldWidth, worldHeight);
+    }
+
+    /** Builds the named entry of this enemy's own def.animations - see EnemyAnimationDef. Null (no
+     *  swap) if the definition has no such animation or its texture isn't loaded. */
+    @Override
+    protected Animation<TextureRegion> resolveAnimation(String animationName) {
+        if (def == null || def.animations == null) return null;
+        EnemyAnimationDef animDef = def.animations.get(animationName);
+        if (animDef == null) return null;
+        Texture texture = EnemySpawnRegistry.getTexture(animDef.texture);
+        if (texture == null) return null;
+        return AnimationCache.get(texture, animDef.columns > 0 ? animDef.columns : animDef.frameCount, animDef.rows, animDef.frameCount,
+            animDef.frameDuration, animDef.loop ? Animation.PlayMode.LOOP : Animation.PlayMode.NORMAL);
     }
 
     /** Builds `movementPatternId` starting from wherever this enemy is right now - a WaypointPath's

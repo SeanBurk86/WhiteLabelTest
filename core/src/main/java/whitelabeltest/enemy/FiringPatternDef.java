@@ -104,6 +104,19 @@ public class FiringPatternDef implements Json.Serializable {
     // BurstAimed's seconds-between-shots-within-a-burst - see BurstAimedFiring's burstInterval
     // constructor param. -1 (the default) falls back to BurstAimedFiring's own 0.15s default.
     public float burstInterval = -1f;
+    // Shape's bullet picture - see ShapeFiring/ShapeBullet. shapePoints is a flat x0,y0,x1,y1...
+    // list of dot positions (world units at scale 1, drawn as the shape looks travelling straight
+    // down); numBullets is the number of shapes per volley (fanned over spreadDegrees) and fireAngle
+    // their fixed center direction (NaN = aimed at the player). Every dot of a picture leaves the
+    // emitter together; shapeFormTime is how many seconds later they line up into the picture at
+    // shapeScale (non-positive = formed and rigid from the start), shapeDriftRatio how fast they then
+    // drift apart relative to their average forming speed (1 = no acceleration) - see ShapeBullet.
+    public float[] shapePoints;
+    public float shapeScale = -1f;
+    public float shapeFormTime = 1f;
+    public float shapeDriftRatio = 1f;
+    public boolean shapeFlipX = false;
+    public boolean shapeRotateWithDirection = true;
     public Array<FiringPatternDef> patterns;
 
     public FiringPatternDef() {}
@@ -161,6 +174,12 @@ public class FiringPatternDef implements Json.Serializable {
         if (volleyCount >= 0) json.writeValue("volleyCount", volleyCount);
         if (phaseOffset != 0f) json.writeValue("phaseOffset", phaseOffset);
         if (burstInterval > 0) json.writeValue("burstInterval", burstInterval);
+        if (shapePoints != null && shapePoints.length > 0) json.writeValue("shapePoints", shapePoints);
+        if (shapeScale > 0) json.writeValue("shapeScale", shapeScale);
+        if (shapeFormTime != 1f) json.writeValue("shapeFormTime", shapeFormTime);
+        if (shapeDriftRatio != 1f) json.writeValue("shapeDriftRatio", shapeDriftRatio);
+        if (shapeFlipX) json.writeValue("shapeFlipX", shapeFlipX);
+        if (!shapeRotateWithDirection) json.writeValue("shapeRotateWithDirection", shapeRotateWithDirection);
         if (patterns != null) json.writeValue("patterns", patterns, Array.class, FiringPatternDef.class);
     }
 
@@ -234,6 +253,13 @@ public class FiringPatternDef implements Json.Serializable {
         volleyCount = data.getInt("volleyCount", -1);
         phaseOffset = data.getFloat("phaseOffset", 0f);
         burstInterval = data.getFloat("burstInterval", -1f);
+        JsonValue shapePointsData = data.get("shapePoints");
+        shapePoints = shapePointsData != null ? shapePointsData.asFloatArray() : null;
+        shapeScale = data.getFloat("shapeScale", -1f);
+        shapeFormTime = data.getFloat("shapeFormTime", 1f);
+        shapeDriftRatio = data.getFloat("shapeDriftRatio", 1f);
+        shapeFlipX = data.getBoolean("shapeFlipX", false);
+        shapeRotateWithDirection = data.getBoolean("shapeRotateWithDirection", true);
         JsonValue patternsData = data.get("patterns");
         if (patternsData != null) {
             patterns = new Array<>();

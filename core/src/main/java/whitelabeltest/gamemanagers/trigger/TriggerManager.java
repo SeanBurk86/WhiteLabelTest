@@ -671,7 +671,7 @@ public class TriggerManager {
                     if (phaseMovement != null && PatternRegistry.getMovement(phaseMovement) != null) {
                         phaseMovement = registerShiftedClone(phaseMovement, slot.x - trigger.x, slot.y - trigger.y);
                     }
-                    memberPhases.add(new HealthPhase(phase.healthPercent, phaseMovement, phase.firingPattern));
+                    memberPhases.add(phase.withMovementPattern(phaseMovement));
                 }
             }
 

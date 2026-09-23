@@ -17,6 +17,11 @@ public class HealthPhase {
     public float healthPercent;
     public String movementPattern;
     public String firingPattern;
+    // Key into the enemy's own EnemyDefinition.animations to switch its art to - null/blank leaves the
+    // current animation playing.
+    public String animation;
+    // Non-null turns EnemyDefinition.flipWithDirection on/off from this phase on - null leaves it as is.
+    public Boolean flipWithDirection;
 
     public HealthPhase() {}
 
@@ -24,5 +29,14 @@ public class HealthPhase {
         this.healthPercent = healthPercent;
         this.movementPattern = movementPattern;
         this.firingPattern = firingPattern;
+    }
+
+    /** A copy of this phase with only its movementPattern replaced - see TriggerManager.fireWave(),
+     *  which gives each wave member its own shifted copy of the movement. */
+    public HealthPhase withMovementPattern(String movementPattern) {
+        HealthPhase copy = new HealthPhase(healthPercent, movementPattern, firingPattern);
+        copy.animation = animation;
+        copy.flipWithDirection = flipWithDirection;
+        return copy;
     }
 }

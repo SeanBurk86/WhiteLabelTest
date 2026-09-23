@@ -253,6 +253,15 @@ public class PatternFactory {
                 return new PolkaDotFiring(resolve(bulletSize(def, bulletDef), 0.25f), resolve(bulletSpeed(def, bulletDef), 5f), bulletDamage(def, bulletDef), spriteOverride,
                     speedProfile(def, bulletDef), hitboxSpec(def, bulletDef), worldWidth, marginX, spacing, rowFireRate);
             }
+            case "Shape": {
+                BulletDef bulletDef = PatternRegistry.getBullet(def.bulletId);
+                Animation<TextureRegion> spriteOverride = buildBulletAnimation(enemyDef, def, bulletDef);
+                float shapeFireRate = def.fireRate > 0 ? def.fireRate : 1f;
+                return new ShapeFiring(shapeFireRate, resolve(bulletSize(def, bulletDef), 0.25f), resolve(bulletSpeed(def, bulletDef), 3f), spriteOverride, def.offsetX, def.offsetY, bulletDamage(def, bulletDef),
+                    speedProfile(def, bulletDef), hitboxSpec(def, bulletDef), def.shapePoints, resolve(def.numBullets, 1), Math.max(0f, def.spreadDegrees), def.fireAngle,
+                    def.targetOffsetX, def.targetOffsetY, def.shapeScale > 0 ? def.shapeScale : 1f, def.shapeFormTime, def.shapeDriftRatio,
+                    def.shapeFlipX, def.shapeRotateWithDirection);
+            }
             case "RadialNearMiss": {
                 BulletDef bulletDef = PatternRegistry.getBullet(def.bulletId);
                 Animation<TextureRegion> spriteOverride = buildBulletAnimation(enemyDef, def, bulletDef);

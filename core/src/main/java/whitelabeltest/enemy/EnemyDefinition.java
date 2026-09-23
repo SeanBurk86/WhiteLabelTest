@@ -93,11 +93,32 @@ public class EnemyDefinition {
     // whose own weaponSets map that same key to a different pattern.
     public ObjectMap<String, String> weaponSets;
 
+    // Named alternate animations (name -> sheet) a HealthPhase can switch this enemy to via its own
+    // `animation` key - see EnemyAnimationDef/BaseEnemy.enterHealthPhase(). Null/empty (the default)
+    // means the enemy only ever plays its base texture animation above.
+    public ObjectMap<String, EnemyAnimationDef> animations;
+
+    // True: the sprite mirrors horizontally to face whichever way it's currently moving - see
+    // BaseEnemy.updateFacing(). The art is assumed to be drawn facing LEFT, so the sprite flips while
+    // moving right. A HealthPhase can turn this on/off mid-fight via its own flipWithDirection.
+    public boolean flipWithDirection = false;
+
+    // True: every animation this enemy plays (base, spawn, and each of `animations`) is drawn at the
+    // SAME world-units-per-pixel scale as the base animation's first frame, with the sprite resized
+    // around its own center whenever a frame's pixel size differs - so sheets cut at different frame
+    // sizes keep the character the same size on screen instead of each being squashed into the base
+    // animation's box. False (the default) keeps the classic behavior of drawing every frame into
+    // the one sprite box sized from the base animation.
+    public boolean uniformPixelScale = false;
+
     public String spawnTexture;
     public int spawnFrameCount;
     public int spawnColumns = 0;
     public int spawnRows = 1;
     public float spawnDuration = 0.4f;
+    // Seconds per frame of the spawn animation (it plays once, holding its last frame if
+    // spawnDuration outlasts it).
+    public float spawnFrameDuration = 0.05f;
 
 
     public String deathTexture;

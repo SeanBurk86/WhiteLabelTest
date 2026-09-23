@@ -38,6 +38,16 @@ public abstract class BaseEnemy implements Enemy {
     protected Animation<TextureRegion> animation;
     protected float animationTime = 0;
 
+    // See EnemyDefinition.uniformPixelScale - world units per source pixel every frame is drawn at, or
+    // NaN (the default) to keep drawing every frame into the sprite's existing box.
+    protected float unitsPerPixel = Float.NaN;
+
+    // See EnemyDefinition.flipWithDirection/updateFacing(). lastCenterX is NaN until the first
+    // movement update after a spawn, so there's no bogus "movement" measured from a stale position.
+    protected boolean flipWithDirection = false;
+    private boolean facingRight = false;
+    private float lastCenterX = Float.NaN;
+
     protected Animation<TextureRegion> bulletAnimation;
 
     protected float damageFlashTimer = 0;
@@ -146,6 +156,7 @@ public abstract class BaseEnemy implements Enemy {
             }
             if (facePlayer) applyFacePlayer(playerHitbox);
             applyGroundScroll(delta, groundScrollSpeed);
+            updateFacing();
             if (lifecycleTime >= spawnDuration) {
                 lifecycleState = LifecycleState.ACTIVE;
                 lifecycleTime = 0f;
@@ -156,7 +167,7 @@ public abstract class BaseEnemy implements Enemy {
 
         animationTime += delta;
         if (animation != null) {
-            sprite.setRegion(animation.getKeyFrame(animationTime));
+            applyFrame(animation.getKeyFrame(animationTime));
         }
 
         if (damageFlashTimer > 0) {
@@ -173,6 +184,7 @@ public abstract class BaseEnemy implements Enemy {
         }
         if (facePlayer) applyFacePlayer(playerHitbox);
         applyGroundScroll(delta, groundScrollSpeed);
+        updateFacing();
 
         if (healthRegenPerSecond > 0f && health < maxHealth) {
             healthRegenAccumulator += healthRegenPerSecond * delta;
@@ -262,9 +274,44 @@ public abstract class BaseEnemy implements Enemy {
         rectangle.setPosition(sprite.getX(), sprite.getY());
     }
 
+    /** Shows `frame`, resizing the sprite around its own center to the frame's pixel size times
+     *  unitsPerPixel when that's set (see EnemyDefinition.uniformPixelScale) - so sheets cut at
+     *  different frame sizes stay at one consistent on-screen scale. The hitbox rectangle follows
+     *  the new size immediately. */
+    protected void applyFrame(TextureRegion frame) {
+        sprite.setRegion(frame);
+        if (Float.isNaN(unitsPerPixel)) return;
+        float width = frame.getRegionWidth() * unitsPerPixel;
+        float height = frame.getRegionHeight() * unitsPerPixel;
+        if (width == sprite.getWidth() && height == sprite.getHeight()) return;
+        float centerX = sprite.getX() + sprite.getWidth() / 2f;
+        float centerY = sprite.getY() + sprite.getHeight() / 2f;
+        sprite.setSize(width, height);
+        sprite.setOriginCenter();
+        sprite.setCenter(centerX, centerY);
+        rectangle.set(sprite.getX(), sprite.getY(), width, height);
+    }
+
+    /** See EnemyDefinition.flipWithDirection - mirrors the sprite (art drawn facing left) to face
+     *  whichever way it moved horizontally this frame, keeping its last facing while it holds still.
+     *  Runs after movement, and must re-apply the flip every frame because applyFrame()'s
+     *  setRegion() resets it. */
+    private void updateFacing() {
+        float centerX = sprite.getX() + sprite.getWidth() / 2f;
+        if (flipWithDirection && !Float.isNaN(lastCenterX)) {
+            float dx = centerX - lastCenterX;
+            if (dx > 0.0001f) facingRight = true;
+            else if (dx < -0.0001f) facingRight = false;
+        }
+        lastCenterX = centerX;
+        // Only touches the flip for an enemy that uses (or just stopped using) direction flipping, so
+        // every other enemy's frames are drawn exactly as their sheet has them.
+        if (flipWithDirection || facingRight) sprite.setFlip(flipWithDirection && facingRight, false);
+    }
+
     private void updateSpawnAnimation() {
         if (spawnAnimation != null) {
-            sprite.setRegion(spawnAnimation.getKeyFrame(lifecycleTime, false));
+            applyFrame(spawnAnimation.getKeyFrame(lifecycleTime, false));
         } else {
             float t = Math.min(1f, lifecycleTime / spawnDuration);
             sprite.setColor(1, 1, 1, t);
@@ -425,7 +472,19 @@ public abstract class BaseEnemy implements Enemy {
             FiringPattern resolved = resolveFiringPattern(phase.firingPattern);
             if (resolved != null) firing = resolved;
         }
+        if (phase.animation != null && !phase.animation.isBlank()) {
+            Animation<TextureRegion> resolved = resolveAnimation(phase.animation);
+            if (resolved != null) {
+                animation = resolved;
+                animationTime = 0f;
+            }
+        }
+        if (phase.flipWithDirection != null) flipWithDirection = phase.flipWithDirection;
     }
+
+    /** Builds the named alternate animation (see EnemyDefinition.animations) - a no-op hook here for
+     *  the same reason resolveWeaponSet() is. Null = no swap. */
+    protected Animation<TextureRegion> resolveAnimation(String animationName) { return null; }
 
     /** Builds a live MovementPattern for the given movement-pattern id, starting from this enemy's
      *  current position - a no-op hook here for the same reason resolveWeaponSet() is: only
@@ -499,6 +558,10 @@ public abstract class BaseEnemy implements Enemy {
         invertMovement = false; // Reset on pool
         rotateWithMovement = true;
         facePlayer = false;
+        unitsPerPixel = Float.NaN;
+        flipWithDirection = false;
+        facingRight = false;
+        lastCenterX = Float.NaN;
         hasFiredOnce = false;
         pairResolved = false;
         pairGraceTimer = -1f;
@@ -510,6 +573,7 @@ public abstract class BaseEnemy implements Enemy {
         if (sprite != null) {
             sprite.setRotation(0);
             sprite.setColor(1, 1, 1, 1);
+            sprite.setFlip(false, false);
         }
         if (movement != null) movement.reset();
         if (firing != null) firing.reset();

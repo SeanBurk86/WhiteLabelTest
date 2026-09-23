@@ -57,7 +57,10 @@ final class FiringPatternPreviewCanvas extends Canvas {
     private static final float ENEMY_Y = (float) WORLD_HEIGHT - 1.6f;
     private static final float MAX_STEP = 0.05f; // clamps a debugger-pause/tab-switch stall to a sane single step
 
-    private enum Kind { STRAIGHT, SINE, LASER }
+    // One per real bullet class's own motion: STRAIGHT (AimedEnemyBullet/DrifterBullet), SINE
+    // (SineBullet), FEATHER (FeatherBullet), ORBIT (OrbitingBullet), EXPLODING (ExplodingAimedBullet),
+    // SHAPE (ShapeBullet), LASER (LaserBullet).
+    private enum Kind { STRAIGHT, SINE, FEATHER, ORBIT, EXPLODING, SHAPE, LASER }
 
     /** The decoded sprite sheet a leaf pattern's bullets actually use in-game, resolved once per
      *  rebuild() (see resolveBulletSprite()) rather than per-shot - mirrors PatternFactory.
@@ -110,11 +113,23 @@ final class FiringPatternPreviewCanvas extends Canvas {
         float minSpeed, maxSpeed = Float.MAX_VALUE;
         int phaseIndex;
         float phaseTimer;
-        // SINE-only: the straight-line path the wave is drawn around, plus how far along it this
+        // SINE/FEATHER/ORBIT/SHAPE: the spawn point the motion is evaluated from, plus how far the
         // bullet has actually traveled so far - accumulated frame-by-frame (not a closed-form
-        // speed*age) specifically so a ramping speed (see above) bends this bullet's effective
-        // wavelength the same way it would in the real game, instead of silently ignoring the ramp.
+        // speed*age) so a ramping speed (see above) bends the path the same way it does in-game.
+        // amplitude/frequency are the sway (SINE/FEATHER, frequency in radians/sec like the real
+        // bullets) or the orbit radius/angular speed (ORBIT).
         float originX, originY, amplitude, frequency, traveled;
+        // ORBIT: the orbit center's constant drift velocity and this bullet's starting orbit phase.
+        float velocityX, velocityY, phase;
+        // SHAPE: this dot's oriented offset in its picture at scale 1, the picture's size when formed,
+        // and its forming time and spread speeds/acceleration - see ShapeBullet.
+        float offsetX, offsetY, formScale, formTime, spreadSpeed, spreadAcceleration, driftSpeed;
+        // EXPLODING: whether it has already re-aimed at the player - see ExplodingAimedBullet.
+        boolean aimed;
+        // Direction the sprite is drawn facing (degrees, same convention as angleDeg) - see
+        // drawBulletSprite(). Travel direction for most bullets; set separately where the real
+        // bullet's sprite rotation isn't its heading (FEATHER's rocking, SHAPE's fixed upright dots).
+        float facingDeg;
         // LASER-only: seconds remaining before this beam despawns, and its own rotation rate.
         float remaining, angularSpeed, length;
     }
@@ -133,6 +148,11 @@ final class FiringPatternPreviewCanvas extends Canvas {
         boolean bursting;
         float burstTimer;
         int currentBurstShot;
+        // Sweep's ping-pong position (0 = start angle, 1 = end angle) and direction - see SweepFiring.
+        float sweepT;
+        float sweepDirection = 1f;
+        // Wall/RadialNearMiss volleys fired, PolkaDot rows fired, SelfDestruct's one-shot latch.
+        int volleysFired;
         // This leaf's own resolved bullet art (null for Sequence/Combined, or a leaf with no
         // texture anywhere in its chain) - see BulletSprite's own doc.
         BulletSprite sprite;
@@ -220,11 +240,37 @@ final class FiringPatternPreviewCanvas extends Canvas {
         } else {
             r.sprite = resolveBulletSprite(def);
         }
-        // Mirrors BurstAimedFiring's own constructor seeding shootTimer = phaseOffset - see
-        // stepBurstAimed()'s own doc on what that's for.
-        if ("BurstAimed".equals(def.type)) r.timer = def.phaseOffset;
+        resetRunning(r);
         return r;
     }
+
+    /** Puts `r` (and, for Sequence/Combined, its whole subtree) back into the state the real
+     *  pattern's own constructor/reset() leaves it in - which matters because a Sequence resets each
+     *  stage as it leaves it (see SequencedFiringPattern.update()), and the types that "fire
+     *  immediately" (Sweep, SineWave, Feather, Orbiting, Shape) do so again every time their stage
+     *  comes back round, while the rest wait a full fireRate first. Getting this wrong is what made
+     *  a Sequence stage shorter than its own fireRate never fire at all in this preview. */
+    private void resetRunning(RunningPattern r) {
+        FiringPatternDef d = r.def;
+        String type = d.type == null ? "None" : d.type;
+        r.stageIndex = 0;
+        r.stageTime = 0f;
+        r.bursting = false;
+        r.burstTimer = 0f;
+        r.currentBurstShot = 0;
+        r.sweepT = 0f;
+        r.sweepDirection = 1f;
+        r.volleysFired = 0;
+        switch (type) {
+            case "Sweep", "SineWave", "Feather", "Orbiting" -> r.timer = d.fireRate;
+            case "Shape" -> r.timer = shapeFireRate(d);
+            case "BurstAimed" -> r.timer = d.phaseOffset;
+            default -> r.timer = 0f;
+        }
+        if (r.children != null) for (RunningPattern child : r.children) resetRunning(child);
+    }
+
+    private static float shapeFireRate(FiringPatternDef d) { return d.fireRate > 0 ? d.fireRate : 1f; }
 
     // --- Bullet sprite resolution - see BulletSprite's own doc -----------------------------------
 
@@ -336,15 +382,20 @@ final class FiringPatternPreviewCanvas extends Canvas {
         String type = d.type == null ? "None" : d.type;
         switch (type) {
             case "Sequence" -> {
+                // Same order as SequencedFiringPattern.update(): advance the stage clock, and on
+                // expiry reset the stage being left before moving on, then run whichever stage is
+                // now current.
                 if (r.children == null || r.children.isEmpty()) return;
                 RunningPattern active = r.children.get(r.stageIndex % r.children.size());
-                stepPattern(active, delta);
                 r.stageTime += delta;
                 float dur = active.def.duration > 0 ? active.def.duration : 3.0f;
                 if (r.stageTime >= dur) {
                     r.stageTime = 0f;
+                    resetRunning(active);
                     r.stageIndex = (r.stageIndex + 1) % r.children.size();
+                    active = r.children.get(r.stageIndex);
                 }
+                stepPattern(active, delta);
             }
             case "Combined" -> {
                 if (r.children == null) return;
@@ -354,51 +405,90 @@ final class FiringPatternPreviewCanvas extends Canvas {
         }
     }
 
+    /** One frame of a leaf pattern - each case mirrors that type's real FiringPattern.update()
+     *  timing (see PatternFactory.createFiring()'s dispatch for which class each type builds). */
     private void stepLeaf(RunningPattern r, FiringPatternDef d, String type, float delta) {
         switch (type) {
             case "None", "SpawnEnemy" -> {} // no visible bullets to preview
-            case "Wall", "PolkaDot" -> {
-                float rate = d.fireRate > 0 ? d.fireRate : 0.3f;
-                r.timer += delta;
-                if (r.timer >= rate) { r.timer -= rate; spawnWallRow(d, r.sprite); }
+            case "Wall" -> { // WallFiring: first volley immediately, one volley per gapLaneSequence entry (or just one)
+                int totalVolleys = d.gapLaneSequence != null && d.gapLaneSequence.length > 0 ? d.gapLaneSequence.length : 1;
+                if (r.volleysFired >= totalVolleys) return;
+                if (r.volleysFired > 0) {
+                    r.timer += delta;
+                    if (r.timer < (d.fireRate > 0 ? d.fireRate : 0.3f)) return;
+                    r.timer = 0f;
+                }
+                int gapStart = totalVolleys > 1 ? d.gapLaneSequence[r.volleysFired] : Math.max(d.gapLaneStart, 0);
+                r.volleysFired++;
+                spawnLaneRow(d, r.sprite, lane -> lane < gapStart || lane >= gapStart + (d.gapLaneCount >= 0 ? d.gapLaneCount : 1));
+            }
+            case "PolkaDot" -> { // PolkaDotFiring: alternating even/odd lane rows forever, first row immediately
+                if (r.volleysFired > 0) {
+                    r.timer += delta;
+                    if (r.timer < (d.fireRate > 0 ? d.fireRate : 0.3f)) return;
+                    r.timer = 0f;
+                }
+                boolean evenRow = r.volleysFired % 2 == 0;
+                r.volleysFired++;
+                spawnLaneRow(d, r.sprite, lane -> (lane % 2 == 0) == evenRow);
             }
             case "Orbiting" -> {
-                float rate = d.fireRate;
-                r.timer += delta;
-                if (r.timer >= rate) { r.timer -= rate; spawnOrbitBullet(d, r.sprite); }
+                if (fireReady(r, d.fireRate, delta)) spawnOrbitPair(d, r.sprite);
             }
-            case "Sweep" -> {
-                float rate = d.fireRate;
-                r.timer += delta;
-                if (r.timer >= rate) { r.timer -= rate; spawnSweepShot(d, r.sprite); }
+            case "Sweep" -> { // SweepFiring: ping-pongs start->end->start, one shot per fireRate
+                float sweepDuration = d.sweepDuration > 0 ? d.sweepDuration : 2f;
+                r.sweepT += r.sweepDirection * delta / sweepDuration;
+                if (r.sweepT >= 1f) { r.sweepT = 1f; r.sweepDirection = -1f; }
+                else if (r.sweepT <= 0f) { r.sweepT = 0f; r.sweepDirection = 1f; }
+                if (fireReady(r, d.fireRate, delta)) spawnSweepShot(d, r.sprite, r.sweepT);
             }
             case "Laser" -> {
                 float rate = d.fireRate > 0 ? d.fireRate : (d.duration > 0 ? d.duration + 0.5f : 2f);
-                r.timer += delta;
-                if (r.timer >= rate) { r.timer -= rate; spawnLaser(d); }
+                if (fireReady(r, rate, delta)) spawnLaser(d);
             }
-            case "RadialNearMiss" -> {
-                float rate = d.fireRate > 0 ? d.fireRate : 1.5f;
-                r.timer += delta;
-                if (r.timer >= rate) { r.timer -= rate; spawnRadialVolley(d, r.sprite); }
+            case "RadialNearMiss" -> { // RadialNearMissFiring: volleyCount volleys, each after a full fireRate
+                int volleyCount = d.volleyCount >= 0 ? d.volleyCount : 3;
+                if (r.volleysFired >= volleyCount) return;
+                if (fireReady(r, d.fireRate > 0 ? d.fireRate : 1.5f, delta)) {
+                    r.volleysFired++;
+                    spawnRadialVolley(d, r.sprite);
+                }
             }
             case "SineWave" -> {
-                float rate = d.fireRate;
-                r.timer += delta;
-                if (r.timer >= rate) { r.timer -= rate; spawnSineShot(d, r.sprite, 0.6f, 2f); }
+                if (fireReady(r, d.fireRate, delta)) spawnSwayShot(d, r.sprite, Kind.SINE, 1.0f, 4.0f, 5f, 0.2f);
             }
             case "Feather" -> {
-                float rate = d.fireRate;
+                if (fireReady(r, d.fireRate, delta)) spawnSwayShot(d, r.sprite, Kind.FEATHER, 1.4f, 1.1f, 1.5f, 0.2f);
+            }
+            case "Shape" -> {
+                if (fireReady(r, shapeFireRate(d), delta)) spawnShapeVolley(d, r.sprite);
+            }
+            case "SelfDestruct" -> {
+                // The real burst only goes off once the player is within 3 units of the enemy, which
+                // this preview's layout never allows - so show it once, a beat after the pattern starts.
+                if (r.volleysFired > 0) return;
                 r.timer += delta;
-                if (r.timer >= rate) { r.timer -= rate; spawnSineShot(d, r.sprite, 1.4f, 1.1f, 1.5f); }
+                if (r.timer < 0.5f) return;
+                r.volleysFired++;
+                for (int i = 0; i < 8; i++) spawnStraight(d, i * 45f, speedOf(d, 4f), sizeOf(d, 0.25f), r.sprite);
+            }
+            case "ExplodingAimed" -> {
+                if (fireReady(r, d.fireRate, delta)) spawnExplodingRing(d, r.sprite);
             }
             case "BurstAimed" -> stepBurstAimed(r, d, delta);
-            default -> { // Aimed, AimedAtPoint, QuarterCircle, SelfDestruct, ExplodingAimed
-                float rate = d.fireRate;
-                r.timer += delta;
-                if (r.timer >= rate) { r.timer -= rate; spawnAimedFamily(d, type, r.sprite); }
+            default -> { // Aimed, AimedAtPoint, QuarterCircle
+                if (fireReady(r, d.fireRate, delta)) spawnAimedFamily(d, type, r.sprite);
             }
         }
+    }
+
+    /** The "shootTimer += delta; if (shootTimer < fireRate) return; shootTimer = 0" gate nearly
+     *  every real FiringPattern uses. */
+    private static boolean fireReady(RunningPattern r, float fireRate, float delta) {
+        r.timer += delta;
+        if (r.timer < fireRate) return false;
+        r.timer = 0f;
+        return true;
     }
 
     // Mirrors BurstAimedFiring's own state machine exactly (see that class's own doc/fields:
@@ -470,68 +560,74 @@ final class FiringPatternPreviewCanvas extends Canvas {
         spawnStraight(d, angle, speed, size, sprite);
     }
 
-    private void spawnSweepShot(FiringPatternDef d, BulletSprite sprite) {
-        float start = !Float.isNaN(d.sweepStartAngle) ? d.sweepStartAngle : 45f;
-        float end = !Float.isNaN(d.sweepEndAngle) ? d.sweepEndAngle : 135f;
-        float duration = d.sweepDuration > 0 ? d.sweepDuration : 3f;
-        float t = (elapsed % duration) / duration;
-        float angle = start + (end - start) * t;
-        spawnStraight(d, angle, speedOf(d, 5f), sizeOf(d, 0.25f), sprite);
+    /** SweepFiring: one shot at the sweep's current angle (defaults 225 -> 315 over 2s, i.e. a
+     *  downward fan), `sweepT` being the running pattern's own ping-pong position. */
+    private void spawnSweepShot(FiringPatternDef d, BulletSprite sprite, float sweepT) {
+        float start = !Float.isNaN(d.sweepStartAngle) ? d.sweepStartAngle : 225f;
+        float end = !Float.isNaN(d.sweepEndAngle) ? d.sweepEndAngle : 315f;
+        spawnStraight(d, start + sweepT * (end - start), speedOf(d, 5f), sizeOf(d, 0.25f), sprite);
     }
 
-    private void spawnSineShot(FiringPatternDef d, BulletSprite sprite, float defaultAmplitude, float defaultFrequency) {
-        spawnSineShot(d, sprite, defaultAmplitude, defaultFrequency, 5f);
-    }
-
-    private void spawnSineShot(FiringPatternDef d, BulletSprite sprite, float defaultAmplitude, float defaultFrequency, float defaultSpeed) {
+    /** SineWaveFiring/FeatherFiring: one bullet falling straight down while swaying sideways -
+     *  never aimed. `frequency` is radians per second, same as the real SineBullet/FeatherBullet;
+     *  FEATHER additionally layers a faster secondary sway and a rocking rotation (see advance()). */
+    private void spawnSwayShot(FiringPatternDef d, BulletSprite sprite, Kind kind, float defaultAmplitude, float defaultFrequency, float defaultSpeed, float defaultSize) {
         PreviewBullet b = new PreviewBullet();
-        b.kind = Kind.SINE;
+        b.kind = kind;
         b.sprite = sprite;
         b.x = b.originX = emitterX(d);
         b.y = b.originY = emitterY(d);
-        b.angleDeg = aimAngle(d);
+        b.angleDeg = b.facingDeg = -90f;
         b.speed = speedOf(d, defaultSpeed);
         applySpeedProfile(b, d);
-        b.size = sizeOf(d, 0.2f);
+        b.size = sizeOf(d, defaultSize);
         b.amplitude = d.amplitude > 0 ? d.amplitude : defaultAmplitude;
         b.frequency = d.frequency > 0 ? d.frequency : defaultFrequency;
         bullets.add(b);
     }
 
-    private void spawnOrbitBullet(FiringPatternDef d, BulletSprite sprite) {
-        float radius = d.orbitRadius > 0 ? d.orbitRadius : 1.5f;
-        float orbitSpeed = d.orbitSpeed != 0 ? d.orbitSpeed : 2f;
-        PreviewBullet b = new PreviewBullet();
-        b.kind = Kind.SINE; // reuses the "origin + phase" evaluation; amplitude/frequency repurposed below
-        b.sprite = sprite;
-        b.originX = emitterX(d);
-        b.originY = emitterY(d) - radius; // drifts downward, orbiting as it goes - visually distinct from a straight sine shot
-        b.angleDeg = -90f; // downward
-        b.speed = speedOf(d, 4f);
-        b.rampable = false; // OrbitingFiring never threads a SpeedProfile through its bullets - see PreviewBullet.rampable's own doc
-        b.size = sizeOf(d, 0.5f);
-        b.amplitude = radius;
-        b.frequency = orbitSpeed / (float) (Math.PI * 2);
-        b.x = b.originX;
-        b.y = b.originY;
-        bullets.add(b);
+    /** OrbitingFiring: a pair of bullets half an orbit apart, circling a center that drifts straight
+     *  at the player (defaults: radius 0.4, 5 rad/sec) - the real bullets never ramp their speed. */
+    private void spawnOrbitPair(FiringPatternDef d, BulletSprite sprite) {
+        float radius = d.orbitRadius > 0 ? d.orbitRadius : 0.4f;
+        float orbitSpeed = d.orbitSpeed > 0 ? d.orbitSpeed : 5f;
+        float speed = speedOf(d, 4f);
+        double aim = Math.atan2(playerY - emitterY(d), playerX - emitterX(d));
+        for (int i = 0; i < 2; i++) {
+            PreviewBullet b = new PreviewBullet();
+            b.kind = Kind.ORBIT;
+            b.sprite = sprite;
+            b.originX = emitterX(d);
+            b.originY = emitterY(d);
+            b.velocityX = (float) Math.cos(aim) * speed;
+            b.velocityY = (float) Math.sin(aim) * speed;
+            b.amplitude = radius;
+            b.frequency = orbitSpeed;
+            b.phase = i == 0 ? 0f : (float) Math.PI;
+            b.rampable = false; // OrbitingFiring never threads a SpeedProfile through its bullets - see PreviewBullet.rampable's own doc
+            b.size = sizeOf(d, 0.5f);
+            b.x = b.originX + radius * (float) Math.cos(b.phase);
+            b.y = b.originY + radius * (float) Math.sin(b.phase);
+            bullets.add(b);
+        }
     }
 
-    private void spawnWallRow(FiringPatternDef d, BulletSprite sprite) {
+    /** WallFiring/PolkaDotFiring: one straight-down bullet per lane `includeLane` keeps, laid out in
+     *  world X across the whole field from the enemy's own center height (neither real pattern
+     *  applies offsetY) - same laneCount formula as the real classes. */
+    private void spawnLaneRow(FiringPatternDef d, BulletSprite sprite, java.util.function.IntPredicate includeLane) {
         float margin = d.wallMarginX > 0 ? d.wallMarginX : 0.25f;
         float spacing = d.wallSpacing > 0 ? d.wallSpacing : 0.4f;
-        int gapStart = Math.max(d.gapLaneStart, 0);
-        int gapCount = d.gapLaneCount >= 0 ? d.gapLaneCount : 1;
         float speed = speedOf(d, 5f);
         float size = sizeOf(d, 0.25f);
-        int lane = 0;
-        for (float x = margin; x < WORLD_WIDTH - margin; x += spacing, lane++) {
-            if (lane >= gapStart && lane < gapStart + gapCount) continue;
+        int laneCount = (int) ((WORLD_WIDTH - margin * 2f) / spacing + 0.0001f) + 1;
+        for (int lane = 0; lane < laneCount; lane++) {
+            if (!includeLane.test(lane)) continue;
             PreviewBullet b = new PreviewBullet();
             b.kind = Kind.STRAIGHT;
             b.sprite = sprite;
-            b.x = x;
-            b.y = emitterY(d);
+            b.x = margin + lane * spacing;
+            b.y = enemyY;
             b.angleDeg = -90f;
             b.speed = speed;
             applySpeedProfile(b, d);
@@ -540,22 +636,104 @@ final class FiringPatternPreviewCanvas extends Canvas {
         }
     }
 
+    /** RadialNearMissFiring: a ring of bullets spawned out on the play area's edges around the
+     *  player, each flying past the player at nearMissDistance on the same tangential side. */
     private void spawnRadialVolley(FiringPatternDef d, BulletSprite sprite) {
         int count = d.numBullets > 0 ? d.numBullets : 16;
+        float missDistance = d.nearMissDistance > 0 ? d.nearMissDistance : 0.35f;
         float speed = speedOf(d, 4f);
         float size = sizeOf(d, 0.3f);
+        float edge = 0.3f;
+        float xMin = edge, xMax = (float) WORLD_WIDTH - edge, yMin = -edge, yMax = (float) WORLD_HEIGHT + edge;
         for (int i = 0; i < count; i++) {
-            float angle = 360f * i / count;
-            spawnStraight(d, angle, speed, size, sprite);
+            double angle = Math.toRadians(360.0 * i / count);
+            float dx = (float) Math.cos(angle), dy = (float) Math.sin(angle);
+            float t = Float.MAX_VALUE;
+            if (dx > 0.0001f) t = Math.min(t, (xMax - playerX) / dx);
+            else if (dx < -0.0001f) t = Math.min(t, (xMin - playerX) / dx);
+            if (dy > 0.0001f) t = Math.min(t, (yMax - playerY) / dy);
+            else if (dy < -0.0001f) t = Math.min(t, (yMin - playerY) / dy);
+            if (t <= 0f || t == Float.MAX_VALUE) continue;
+            float spawnX = playerX + dx * t, spawnY = playerY + dy * t;
+            double perp = angle + Math.PI / 2;
+            float targetX = playerX + missDistance * (float) Math.cos(perp);
+            float targetY = playerY + missDistance * (float) Math.sin(perp);
+            PreviewBullet b = new PreviewBullet();
+            b.kind = Kind.STRAIGHT;
+            b.sprite = sprite;
+            b.x = spawnX;
+            b.y = spawnY;
+            b.angleDeg = (float) Math.toDegrees(Math.atan2(targetY - spawnY, targetX - spawnX));
+            b.speed = speed;
+            applySpeedProfile(b, d);
+            b.size = size;
+            bullets.add(b);
         }
     }
 
+    /** ExplodingAimedFiring: a ring of 8 that bursts outward, then after 0.4s each bullet turns
+     *  toward the player's position at that moment and speeds up by 20% - see ExplodingAimedBullet. */
+    private void spawnExplodingRing(FiringPatternDef d, BulletSprite sprite) {
+        for (int i = 0; i < 8; i++) {
+            spawnStraight(d, i * 45f, speedOf(d, 6f), sizeOf(d, 0.25f), sprite);
+            bullets.get(bullets.size() - 1).kind = Kind.EXPLODING;
+        }
+    }
+
+    /** ShapeFiring: shapeCount clusters fanned over spreadDegrees around the aim (fixed fireAngle,
+     *  else the player), each one bullet per shapePoints dot - flipped, then turned to face back at
+     *  the emitter exactly like the real pattern does before handing each dot to a ShapeBullet. */
+    private void spawnShapeVolley(FiringPatternDef d, BulletSprite sprite) {
+        float[] points = d.shapePoints != null && d.shapePoints.length >= 2 ? d.shapePoints : new float[]{0f, 0f};
+        int count = Math.max(1, d.numBullets > 0 ? d.numBullets : 1);
+        float spread = Math.max(0f, d.spreadDegrees);
+        float aim = !Float.isNaN(d.fireAngle) ? d.fireAngle : aimAngle(d);
+        float first = count > 1 ? aim - spread / 2f : aim;
+        float step = count > 1 ? spread / (count - 1) : 0f;
+        float speed = speedOf(d, 3f);
+        float size = sizeOf(d, 0.25f);
+        for (int s = 0; s < count; s++) {
+            float angle = first + s * step;
+            double turn = d.shapeRotateWithDirection ? Math.toRadians(angle - 270f) : 0.0;
+            float cos = (float) Math.cos(turn), sin = (float) Math.sin(turn);
+            for (int i = 0; i + 1 < points.length; i += 2) {
+                float px = d.shapeFlipX ? -points[i] : points[i];
+                float py = points[i + 1];
+                PreviewBullet b = new PreviewBullet();
+                b.kind = Kind.SHAPE;
+                b.sprite = sprite;
+                b.originX = emitterX(d);
+                b.originY = emitterY(d);
+                b.angleDeg = angle;
+                b.facingDeg = 90f; // ShapeBullet dots are drawn upright, never rotated
+                b.offsetX = px * cos - py * sin;
+                b.offsetY = px * sin + py * cos;
+                b.formScale = d.shapeScale > 0 ? d.shapeScale : 1f;
+                b.formTime = d.shapeFormTime;
+                if (b.formTime > 0f) {
+                    float r = Math.max(0f, Math.min(2f, d.shapeDriftRatio));
+                    b.spreadSpeed = (2f - r) * b.formScale / b.formTime;
+                    b.spreadAcceleration = 2f * (r - 1f) * b.formScale / (b.formTime * b.formTime);
+                    b.driftSpeed = r * b.formScale / b.formTime;
+                }
+                b.speed = speed;
+                applySpeedProfile(b, d);
+                b.size = size;
+                b.x = b.originX + b.offsetX * shapeSpread(b);
+                b.y = b.originY + b.offsetY * shapeSpread(b);
+                bullets.add(b);
+            }
+        }
+    }
+
+    /** LaserFiring: aims at the player when no fixed fireAngle is set. */
     private void spawnLaser(FiringPatternDef d) {
         PreviewBullet b = new PreviewBullet();
         b.kind = Kind.LASER;
         b.x = emitterX(d);
         b.y = emitterY(d);
-        b.angleDeg = !Float.isNaN(d.fireAngle) ? d.fireAngle : -90f;
+        b.angleDeg = !Float.isNaN(d.fireAngle) ? d.fireAngle
+            : (float) Math.toDegrees(Math.atan2(playerY - b.y, playerX - b.x));
         b.angularSpeed = d.angularSpeed;
         b.length = d.length > 0 ? d.length : 8f;
         b.size = sizeOf(d, 0.3f);
@@ -569,7 +747,7 @@ final class FiringPatternPreviewCanvas extends Canvas {
         b.sprite = sprite;
         b.x = emitterX(d);
         b.y = emitterY(d);
-        b.angleDeg = angleDeg;
+        b.angleDeg = b.facingDeg = angleDeg;
         b.speed = speed;
         applySpeedProfile(b, d);
         b.size = size;
@@ -633,22 +811,76 @@ final class FiringPatternPreviewCanvas extends Canvas {
                 b.x += (float) Math.cos(rad) * b.speed * delta;
                 b.y += (float) Math.sin(rad) * b.speed * delta;
             }
+            case EXPLODING -> {
+                // ExplodingAimedBullet: after its 0.4s burst, re-aims once at the player, 20% faster.
+                if (!b.aimed && b.age >= 0.4f) {
+                    b.aimed = true;
+                    b.angleDeg = (float) Math.toDegrees(Math.atan2(playerY - b.y, playerX - b.x));
+                    b.speed *= 1.2f;
+                }
+                b.speed = applyRamp(b, delta);
+                double rad = Math.toRadians(b.angleDeg);
+                b.x += (float) Math.cos(rad) * b.speed * delta;
+                b.y += (float) Math.sin(rad) * b.speed * delta;
+                b.facingDeg = b.angleDeg;
+            }
             case SINE -> {
+                // SineBullet: falls straight down, x = origin + amplitude * sin(frequency * t),
+                // sprite turned along its actual velocity.
+                b.speed = applyRamp(b, delta);
+                b.traveled += b.speed * delta;
+                float t = b.age;
+                b.x = b.originX + b.amplitude * (float) Math.sin(b.frequency * t);
+                b.y = b.originY - b.traveled;
+                float vx = b.amplitude * b.frequency * (float) Math.cos(b.frequency * t);
+                b.facingDeg = (float) Math.toDegrees(Math.atan2(-b.speed, vx));
+            }
+            case FEATHER -> {
+                // FeatherBullet: the same fall plus a faster, smaller secondary sway, and the sprite
+                // rocks +-28 degrees instead of pointing along its velocity.
+                b.speed = applyRamp(b, delta);
+                b.traveled += b.speed * delta;
+                float t = b.age;
+                float sway = b.amplitude * (float) Math.sin(b.frequency * t)
+                    + b.amplitude * 0.3f * (float) Math.sin(b.frequency * 2.3f * t + 1.7f);
+                b.x = b.originX + sway;
+                b.y = b.originY - b.traveled;
+                b.facingDeg = 90f + 28f * (float) Math.sin(b.frequency * 1.5f * t);
+            }
+            case ORBIT -> {
+                // OrbitingBullet: circles a center drifting at a constant velocity.
+                float t = b.age;
+                float angle = b.frequency * t + b.phase;
+                float cx = b.originX + b.velocityX * t;
+                float cy = b.originY + b.velocityY * t;
+                b.x = cx + b.amplitude * (float) Math.cos(angle);
+                b.y = cy + b.amplitude * (float) Math.sin(angle);
+                float vx = b.velocityX - b.amplitude * b.frequency * (float) Math.sin(angle);
+                float vy = b.velocityY + b.amplitude * b.frequency * (float) Math.cos(angle);
+                b.facingDeg = (float) Math.toDegrees(Math.atan2(vy, vx));
+            }
+            case SHAPE -> {
+                // ShapeBullet: the whole picture travels together; each dot sits at its offset times
+                // the picture's current spread (see shapeSpread()).
                 b.speed = applyRamp(b, delta);
                 b.traveled += b.speed * delta;
                 double rad = Math.toRadians(b.angleDeg);
-                float baseX = b.originX + (float) Math.cos(rad) * b.traveled;
-                float baseY = b.originY + (float) Math.sin(rad) * b.traveled;
-                double perpRad = rad + Math.PI / 2;
-                float wave = b.amplitude * (float) Math.sin(b.frequency * b.age * Math.PI * 2);
-                b.x = baseX + (float) Math.cos(perpRad) * wave;
-                b.y = baseY + (float) Math.sin(perpRad) * wave;
+                b.x = b.originX + (float) Math.cos(rad) * b.traveled + b.offsetX * shapeSpread(b);
+                b.y = b.originY + (float) Math.sin(rad) * b.traveled + b.offsetY * shapeSpread(b);
             }
             case LASER -> {
                 b.remaining -= delta;
                 b.angleDeg += b.angularSpeed * delta;
             }
         }
+    }
+
+    /** A SHAPE bullet's current spread - the same formula as ShapeBullet.spread(): accelerating from
+     *  0 into formScale at formTime, then drifting on at the spread speed it had at that moment. */
+    private static float shapeSpread(PreviewBullet b) {
+        if (b.formTime <= 0f) return b.formScale;
+        if (b.age < b.formTime) return b.spreadSpeed * b.age + 0.5f * b.spreadAcceleration * b.age * b.age;
+        return b.formScale + b.driftSpeed * (b.age - b.formTime);
     }
 
     /** Same phase-cycling ramp SpeedRamp.apply() drives in the real game (see that class's own
@@ -752,7 +984,7 @@ final class FiringPatternPreviewCanvas extends Canvas {
 
         g.save();
         g.translate(bx, by);
-        g.rotate(90 - b.angleDeg);
+        g.rotate(90 - b.facingDeg);
         g.drawImage(sprite.sheet, sx, sy, sprite.frameW, sprite.frameH, -width / 2, -height / 2, width, height);
         g.restore();
     }
