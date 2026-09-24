@@ -45,9 +45,10 @@ public class AudioManager implements Disposable {
     // BasicWeapon's Hyper Attack (see Player.updateHaloMovement): plays once, the moment the halo
     // finishes its glide back and reattaches to the ship.
     private final Sound haloLatchSound;
-    // Played when graze points earn a bomb, and again when the bomb cooldown ends - see
-    // playGrazeBombEarned()/playBombReady().
+    // Played when graze points earn a bomb - see playGrazeBombEarned().
     private final Sound grazeLevelUpSound;
+    // Played when the bomb cooldown ends with a bomb in stock - see playBombReady().
+    private final Sound bombReadySound;
     // Played when the orbit weapon's reflect shield finishes recharging - see playShieldsReady().
     private final Sound shieldsReadySound;
     // ThunderboltWeapon's Hyper Attack (see Player.updateThunderboltCharge/CollisionManager.
@@ -106,6 +107,7 @@ public class AudioManager implements Disposable {
         haloReturnSound = Gdx.audio.newSound(Gdx.files.internal("audio/sfx/halo_return.mp3"));
         haloLatchSound = Gdx.audio.newSound(Gdx.files.internal("audio/sfx/halo_latch.mp3"));
         grazeLevelUpSound = Gdx.audio.newSound(Gdx.files.internal("audio/sfx/grazelevelup.mp3"));
+        bombReadySound = Gdx.audio.newSound(Gdx.files.internal("audio/sfx/bombready.mp3"));
         shieldsReadySound = Gdx.audio.newSound(Gdx.files.internal("audio/sfx/shieldsready.mp3"));
         thunderboltHyperLevelSounds = new Sound[] {
             Gdx.audio.newSound(Gdx.files.internal("audio/sfx/thunderbolthyperlevel.wav")),
@@ -311,7 +313,7 @@ public class AudioManager implements Disposable {
     /** The bomb cooldown just ran out with a bomb in stock - see GameController.update(). */
     public void playBombReady() {
         PerfProbe.soundStarted();
-        if (!muted) grazeLevelUpSound.play(settings.getEffectiveSfxVolume());
+        if (!muted) bombReadySound.play(settings.getEffectiveSfxVolume());
     }
 
     /** The orbit weapon's reflect shield just finished recharging - see Player.advanceWeaponTimers(). */
@@ -443,6 +445,7 @@ public class AudioManager implements Disposable {
         haloReturnSound.dispose();
         haloLatchSound.dispose();
         grazeLevelUpSound.dispose();
+        bombReadySound.dispose();
         shieldsReadySound.dispose();
         for (Sound s : thunderboltHyperLevelSounds) s.dispose();
         thunderboltHyperExplosionSound.dispose();

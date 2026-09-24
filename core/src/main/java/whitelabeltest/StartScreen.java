@@ -97,7 +97,7 @@ public class StartScreen implements Disposable {
     // the bottom independent of the rest of the stack.
     private final Sign penTestSign = new Sign("images/ui/ThePenTestSign.png", 3, 4, 8.0f);
     private final Sign scathachSign = new Sign("images/ui/ScathachSign.png", 2, 6, 6.5f);
-    private final Sign revisionSign = new Sign("images/ui/1stRevSign.png", 3, 4, 5.0f);
+    private final Sign revisionSign = new Sign("images/ui/2ndRevSign.png", 3, 4, 5.0f);
     private final Sign pressButtonSign = new Sign("images/ui/PressButtonSign.png", 2, 6, 4.6f);
     private final Sign swanSoftSign = new Sign("images/ui/SwanSoftSign.png", 2, 6, 4.2f);
     private final Sign[] signs = { penTestSign, scathachSign, revisionSign, pressButtonSign, swanSoftSign };
