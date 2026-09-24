@@ -32,6 +32,7 @@ import whitelabeltest.player.WeaponLoadout;
 import whitelabeltest.player.powerups.Powerup;
 import whitelabeltest.player.weapons.ThunderboltWeapon;
 import whitelabeltest.player.weapons.Weapon;
+import whitelabeltest.perf.PerfProbe;
 
 public class Main extends ApplicationAdapter {
     private enum AppState { START, WEAPON_SELECT, OPTIONS, REPLAY_SELECT, PLAYING }
@@ -108,6 +109,27 @@ public class Main extends ApplicationAdapter {
 
     private boolean prevControllerBackDown;
 
+    // -DautoReplay=<replay json> starts that replay straight away (no menus) and quits when it ends -
+    // with -DautoReplay.seconds=<n>, after n seconds of play instead. For repeatable, hands-free
+    // performance runs (see PerfProbe). 0 = not an auto replay.
+    private float autoReplayLimit;
+    private float autoReplayElapsed;
+
+    private boolean startAutoReplay() {
+        String path = System.getProperty("autoReplay");
+        if (path == null || path.isBlank()) return false;
+        ReplayData data = new com.badlogic.gdx.utils.Json().fromJson(ReplayData.class, Gdx.files.absolute(path));
+        float seconds = Float.parseFloat(System.getProperty("autoReplay.seconds", "0"));
+        autoReplayLimit = seconds > 0f ? seconds : -1f;
+        replayFromMenu = true;
+        game = new GameController(PLAY_AREA_WIDTH, PLAY_AREA_HEIGHT, keyBindings, audioSettings, WeaponLoadout.BASIC_THUNDERBOLT);
+        game.setActiveInput(InputType.KEYBOARD);
+        game.startReplay(data);
+        ui = new UIManager(InputType.KEYBOARD);
+        state = AppState.PLAYING;
+        return true;
+    }
+
     @Override
     public void create() {
         spriteBatch = new SpriteBatch();
@@ -115,6 +137,8 @@ public class Main extends ApplicationAdapter {
         viewport = new ExtendViewport(PLAY_AREA_WIDTH, PLAY_AREA_HEIGHT);
         keyBindings = new KeyBindings();
         audioSettings = new AudioSettings();
+        PerfProbe.init();
+        if (startAutoReplay()) return;
         if (quickPlay != null) {
             transitionToQuickPlay();
         } else {
@@ -124,6 +148,13 @@ public class Main extends ApplicationAdapter {
 
     @Override
     public void render() {
+        PerfProbe.frameStart();
+        renderFrame();
+        PerfProbe.frameEnd();
+        if (autoReplayLimit > 0f && state == AppState.PLAYING && (autoReplayElapsed += Gdx.graphics.getDeltaTime()) >= autoReplayLimit) Gdx.app.exit();
+    }
+
+    private void renderFrame() {
         float delta = Gdx.graphics.getDeltaTime();
         if (state == AppState.START) {
             InputType detected = startScreen.update(delta);
@@ -171,8 +202,12 @@ public class Main extends ApplicationAdapter {
                 transitionToStartFromReplaySelect();
             }
         } else {
+            PerfProbe.begin(PerfProbe.Section.UPDATE);
             game.update(delta);
+            PerfProbe.end(PerfProbe.Section.UPDATE);
+            PerfProbe.begin(PerfProbe.Section.DRAW);
             drawGame();
+            PerfProbe.end(PerfProbe.Section.DRAW);
             if (replayFromMenu) {
                 boolean backPressed = Gdx.input.isKeyJustPressed(Input.Keys.ESCAPE) || isControllerBackJustPressed();
                 // !isReplaying() covers the replay finishing on its own (GameController auto-stops
@@ -306,6 +341,7 @@ public class Main extends ApplicationAdapter {
      *  disposed back in transitionToReplayWatch(). No equivalent path exists for an ordinary ARCADE
      *  MODE run - restarting/quitting are handled entirely inside GameController for that case. */
     private void transitionToStartFromReplayWatch() {
+        if (autoReplayLimit != 0f) { Gdx.app.exit(); return; }
         replayFromMenu = false;
         game.dispose();
         game = null;
@@ -406,6 +442,7 @@ public class Main extends ApplicationAdapter {
 
         game.draw(spriteBatch);
 
+        PerfProbe.begin(PerfProbe.Section.HUD_DRAW);
         ui.drawEnemyHealthBars(spriteBatch, game.getEntities().getEnemies());
 
         if (game.isDebugMode()) {
@@ -459,6 +496,7 @@ public class Main extends ApplicationAdapter {
                     game.getEntities().getPlayer(), game.isAudioMuted(), game.getDebugMenuStageIds(), game.getDebugMenuStageIndex());
             }
         }
+        PerfProbe.end(PerfProbe.Section.HUD_DRAW);
         spriteBatch.end();
 
         if (game.isDebugMode()) {
@@ -584,6 +622,7 @@ public class Main extends ApplicationAdapter {
 
     @Override
     public void dispose() {
+        PerfProbe.close();
         if (startScreen != null) startScreen.dispose();
         if (weaponSelectScreen != null) weaponSelectScreen.dispose();
         if (optionsScreen != null) optionsScreen.dispose();

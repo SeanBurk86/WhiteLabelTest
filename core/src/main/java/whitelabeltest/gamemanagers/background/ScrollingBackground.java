@@ -85,6 +85,7 @@ public class ScrollingBackground {
     // backgroundVideoFile, same "plays immediately, covers the whole screen" priority (checked
     // ahead of it in draw()/update() below since a stage only ever sets one or the other).
     private final BackgroundShader shaderBackground;
+    private final ReducedResolutionRenderer shaderRenderer = new ReducedResolutionRenderer();
     private final Texture shaderQuadTexture;
     // See StageDefinition.hueCycleBackground - null unless this stage opted in. Independent of
     // shaderBackground: this color-shifts the ordinary Layer draws below, not a replacement for them.
@@ -132,8 +133,10 @@ public class ScrollingBackground {
         }
         shaderBackground = createShaderBackground(shaderBackgroundId);
         shaderQuadTexture = shaderBackground != null ? assets.pixelTexture : null;
-        hueCycleShader = hueCycleBackground ? new HueCycleShader() : null;
-        playerFeedback = playerFeedbackBackground ? new PlayerFeedbackShader() : null;
+        // -Dperf.noHueCycle / -Dperf.noFeedback / -Dperf.noBossVideo turn these effects off for performance A/B runs
+        // (see PerfProbe) - never set in normal play.
+        hueCycleShader = hueCycleBackground && System.getProperty("perf.noHueCycle") == null ? new HueCycleShader() : null;
+        playerFeedback = playerFeedbackBackground && System.getProperty("perf.noFeedback") == null ? new PlayerFeedbackShader() : null;
         playerFeedbackQuadTexture = playerFeedback != null ? assets.pixelTexture : null;
         backgroundVideoPlayer = startVideo(backgroundVideoFile);
         backgroundVideoStarted = backgroundVideoPlayer != null;
@@ -317,7 +320,7 @@ public class ScrollingBackground {
      *  called by GameController once the spawn schedule's backgroundVideoTime cue fires. No-ops if
      *  this stage has no boss video. Ignored if the video is already playing. */
     public void triggerBossVideo() {
-        if (bossVideoStarted || bossVideoFile == null) return;
+        if (bossVideoStarted || bossVideoFile == null || System.getProperty("perf.noBossVideo") != null) return;
         bossVideoPlayer = startVideo(bossVideoFile);
         bossVideoStarted = bossVideoPlayer != null;
     }
@@ -356,7 +359,8 @@ public class ScrollingBackground {
     private void drawBaseContent(SpriteBatch batch) {
         if (bossVideoStarted && drawVideoFrame(batch, bossVideoPlayer)) return;
         if (shaderBackground != null) {
-            shaderBackground.render(batch, shaderQuadTexture, worldWidth, worldHeight);
+            // Drawn at reduced resolution and scaled up - see ReducedResolutionRenderer.
+            shaderRenderer.render(shaderBackground, batch, shaderQuadTexture, worldWidth, worldHeight);
             return;
         }
         if (backgroundVideoStarted && drawVideoFrame(batch, backgroundVideoPlayer)) return;
@@ -518,6 +522,7 @@ public class ScrollingBackground {
         }
         if (shaderBackground != null) {
             shaderBackground.dispose();
+            shaderRenderer.dispose();
         }
         if (hueCycleShader != null) {
             hueCycleShader.dispose();

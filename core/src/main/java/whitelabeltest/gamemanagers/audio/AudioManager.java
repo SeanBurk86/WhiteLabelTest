@@ -7,6 +7,7 @@ import com.badlogic.gdx.utils.Array;
 import com.badlogic.gdx.utils.Disposable;
 import com.badlogic.gdx.utils.Json;
 import com.badlogic.gdx.utils.ObjectMap;
+import whitelabeltest.perf.PerfProbe;
 
 public class AudioManager implements Disposable {
     private static final float STAGE_MUSIC_FADE_DURATION = 3f;
@@ -78,6 +79,19 @@ public class AudioManager implements Disposable {
     // asset path and loaded lazily the first time each is cued, since these are level-specific and
     // not worth preloading into a dedicated field like the sounds above.
     private final ObjectMap<String, Sound> cueSounds = new ObjectMap<>();
+
+    // Sounds that can fire many times in one frame (a gem shower being collected, a swarm or a bomb killing
+    // a dozen enemies at once, the orbit ring grinding through several enemies) play at most once per
+    // this many seconds each: one start per event piled up to hundreds of Sound.play() calls a frame,
+    // each hunting through the audio device's 64 sources, which showed up as frame-rate drops - and
+    // dozens of copies of one sound starting together sound no different from a single one.
+    private static final float POINT_GEM_SOUND_INTERVAL = 0.05f;
+    private static final float EXPLOSION_SOUND_INTERVAL = 0.04f;
+    private static final float ORBIT_GONG_SOUND_INTERVAL = 0.05f;
+    private static final float HALO_BASH_SOUND_INTERVAL = 0.05f;
+    // Seconds of audio time (see update()) and when each throttled sound last played.
+    private float clock;
+    private float lastPointGem = -1f, lastExplosion = -1f, lastOrbitGong = -1f, lastHaloBash = -1f;
 
     public AudioManager(AudioSettings settings) {
         this.settings = settings;
@@ -203,6 +217,7 @@ public class AudioManager implements Disposable {
     }
 
     public void update(float delta) {
+        clock += delta;
         if (fadingOutStageMusic) {
             stageMusicFadeTimer += delta;
             float t = Math.min(stageMusicFadeTimer / STAGE_MUSIC_FADE_DURATION, 1f);
@@ -215,18 +230,22 @@ public class AudioManager implements Disposable {
     }
 
     public void playPlayerDeath() {
+        PerfProbe.soundStarted();
         if (!muted) playerDeathSound.play(settings.getEffectiveSfxVolume());
     }
 
     public void playBomb() {
+        PerfProbe.soundStarted();
         if (!muted) bombSound.play(settings.getEffectiveSfxVolume());
     }
 
     public void playGameOver() {
+        PerfProbe.soundStarted();
         if (!muted) gameOverSound.play(settings.getEffectiveSfxVolume());
     }
 
     public void playPowerup() {
+        PerfProbe.soundStarted();
         if (!muted) powerupSound.play(settings.getEffectiveSfxVolume());
     }
 
@@ -235,6 +254,7 @@ public class AudioManager implements Disposable {
     // typewriter cue instead loops/stops via loopTextCue()/stopTextCueLoop() below, timed to its
     // own reveal.
     public void playTextCue() {
+        PerfProbe.soundStarted();
         if (!muted) textCueSound.play(settings.getEffectiveSfxVolume());
     }
 
@@ -254,14 +274,19 @@ public class AudioManager implements Disposable {
     }
 
     public void playHaloDetach() {
+        PerfProbe.soundStarted();
         if (!muted) haloDetachSound.play(settings.getEffectiveSfxVolume());
     }
 
     public void playHaloBash() {
+        if (clock - lastHaloBash < HALO_BASH_SOUND_INTERVAL && lastHaloBash >= 0f) return;
+        lastHaloBash = clock;
+        PerfProbe.soundStarted();
         if (!muted) haloBashSound.play(settings.getEffectiveSfxVolume());
     }
 
     public void playHaloReturn() {
+        PerfProbe.soundStarted();
         if (!muted) haloReturnSoundId = haloReturnSound.play(settings.getEffectiveSfxVolume());
     }
 
@@ -273,21 +298,25 @@ public class AudioManager implements Disposable {
             haloReturnSound.stop(haloReturnSoundId);
             haloReturnSoundId = -1;
         }
+        PerfProbe.soundStarted();
         if (!muted) haloLatchSound.play(settings.getEffectiveSfxVolume());
     }
 
     /** Graze points just earned the player another bomb - see Player.resolveGrazePoints(). */
     public void playGrazeBombEarned() {
+        PerfProbe.soundStarted();
         if (!muted) grazeLevelUpSound.play(settings.getEffectiveSfxVolume());
     }
 
     /** The bomb cooldown just ran out with a bomb in stock - see GameController.update(). */
     public void playBombReady() {
+        PerfProbe.soundStarted();
         if (!muted) grazeLevelUpSound.play(settings.getEffectiveSfxVolume());
     }
 
     /** The orbit weapon's reflect shield just finished recharging - see Player.advanceWeaponTimers(). */
     public void playShieldsReady() {
+        PerfProbe.soundStarted();
         if (!muted) shieldsReadySound.play(settings.getEffectiveSfxVolume());
     }
 
@@ -305,16 +334,25 @@ public class AudioManager implements Disposable {
     }
 
     public void playPointGem() {
+        if (clock - lastPointGem < POINT_GEM_SOUND_INTERVAL && lastPointGem >= 0f) return;
+        lastPointGem = clock;
+        PerfProbe.soundStarted();
         if (!muted && pointGemSounds != null) pointGemSounds.get(1).random().play(settings.getEffectiveSfxVolume());
     }
 
     public void playExplosion() {
+        if (clock - lastExplosion < EXPLOSION_SOUND_INTERVAL && lastExplosion >= 0f) return;
+        lastExplosion = clock;
+        PerfProbe.soundStarted();
         if (!muted && explosionSounds != null) explosionSounds.get(1).random().play(settings.getEffectiveSfxVolume());
     }
 
     /** OrbitWeapon's bullet-hits-enemy impact sound - see CollisionManager.checkBulletEnemyCollisions,
      *  which calls this once per orbit-bullet hit alongside its OrbitSparks.png hit effect. */
     public void playOrbitGong() {
+        if (clock - lastOrbitGong < ORBIT_GONG_SOUND_INTERVAL && lastOrbitGong >= 0f) return;
+        lastOrbitGong = clock;
+        PerfProbe.soundStarted();
         if (!muted && orbitGongSounds != null) orbitGongSounds.get(1).random().play(settings.getEffectiveSfxVolume());
     }
 
@@ -330,6 +368,7 @@ public class AudioManager implements Disposable {
      *  ring member each time that member completes a full lap, so it plays `level` times per
      *  rotation of the ring (one crack per orbiting blade). */
     public void playOrbitWhip() {
+        PerfProbe.soundStarted();
         if (!muted && orbitWhipSounds != null) orbitWhipSounds.get(1).random().play(settings.getEffectiveSfxVolume());
     }
 
@@ -340,6 +379,7 @@ public class AudioManager implements Disposable {
     /** See ThunderboltWeapon.playFireSound - the "whiff" sound for firing with no enemy on screen
      *  to strike, in place of the normal playThunderboltWeaponSound(). */
     public void playThunderboltNullSound() {
+        PerfProbe.soundStarted();
         if (!muted) thunderboltNullSound.play(settings.getEffectiveSfxVolume());
     }
 
@@ -348,10 +388,12 @@ public class AudioManager implements Disposable {
      *  its damage tiers (weapons.json's thunderboltChargeDamageByTier), in order, rather than
      *  picking randomly like the sound banks above. */
     public void playThunderboltHyperLevel(int tier) {
+        PerfProbe.soundStarted();
         if (!muted && tier >= 0 && tier < thunderboltHyperLevelSounds.length) thunderboltHyperLevelSounds[tier].play(settings.getEffectiveSfxVolume());
     }
 
     public void playThunderboltHyperExplosion() {
+        PerfProbe.soundStarted();
         if (!muted) thunderboltHyperExplosionSound.play(settings.getEffectiveSfxVolume());
     }
 
@@ -369,6 +411,14 @@ public class AudioManager implements Disposable {
      *  pitch 1.0 is unmodified, higher raises it, lower lowers it. `volume` here is multiplied
      *  into the effective SFX volume exactly like every other cue, not used in place of it, so the
      *  player's own SFX volume setting still applies on top. */
+    /** Loads a cue sound now, if it isn't already, so its first playCueSound() doesn't stall a frame decoding it
+     *  from disk - see GameController.loadStage(), which preloads every sound a stage can cue. */
+    public void preloadCueSound(String path) {
+        if (path == null || cueSounds.containsKey(path)) return;
+        if (!Gdx.files.internal(path).exists()) return;
+        cueSounds.put(path, Gdx.audio.newSound(Gdx.files.internal(path)));
+    }
+
     public void playCueSound(String path, float volume, float pitch) {
         if (path == null) return;
         Sound sound = cueSounds.get(path);
@@ -376,6 +426,7 @@ public class AudioManager implements Disposable {
             sound = Gdx.audio.newSound(Gdx.files.internal(path));
             cueSounds.put(path, sound);
         }
+        PerfProbe.soundStarted();
         if (!muted) sound.play(settings.getEffectiveSfxVolume() * volume, pitch, 0f);
     }
 

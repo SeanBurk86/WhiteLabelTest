@@ -11,7 +11,9 @@ import whitelabeltest.gamemanagers.effects.ScheduledSpriteEffect;
 
 import com.badlogic.gdx.Gdx;
 import com.badlogic.gdx.graphics.GL20;
+import com.badlogic.gdx.graphics.Texture;
 import com.badlogic.gdx.graphics.g2d.Animation;
+import com.badlogic.gdx.graphics.g2d.Sprite;
 import com.badlogic.gdx.graphics.g2d.SpriteBatch;
 import com.badlogic.gdx.graphics.g2d.TextureRegion;
 import com.badlogic.gdx.math.Rectangle;
@@ -266,7 +268,7 @@ public class EntityManager {
         }
 
         player.draw(batch);
-        for (EnemyBullet eb : enemyBullets) eb.draw(batch);
+        drawEnemyBulletsByTexture(batch);
 
         for (ScheduledSpriteEffect s : scheduledSprites) s.draw(batch);
     }
@@ -425,4 +427,35 @@ public class EntityManager {
     public Array<BulletCancelEffect> getBulletCancelEffects() { return bulletCancelEffects; }
     public Array<PointGem> getPointGems() { return pointGems; }
     public Array<GreenLightningBurst> getGreenLightningBursts() { return greenLightningBursts; }
+
+    // Scratch list of the distinct textures enemy bullets are using this frame - see drawEnemyBulletsByTexture().
+    private final Array<Texture> enemyBulletTextures = new Array<>(false, 8);
+
+    /** Draws enemy bullets one texture at a time. In spawn order a mix of bullet types (feathers, eggs'
+     *  shots, aimed pellets, shape volleys...) switches texture almost every bullet, and every switch
+     *  forces the sprite batch to flush a separate draw call - grouping by texture brings that down to one
+     *  per bullet texture on screen. Bullets of different types can now overlap in a different order than
+     *  they were fired, which isn't visible in practice. Bullets without a sprite (e.g. lasers) draw last,
+     *  in their original order. Index loops rather than for-each: libGDX Arrays can't nest iterators. */
+    private void drawEnemyBulletsByTexture(SpriteBatch batch) {
+        enemyBulletTextures.clear();
+        for (int i = 0; i < enemyBullets.size; i++) {
+            Sprite sprite = enemyBullets.get(i).getSprite();
+            Texture texture = sprite != null ? sprite.getTexture() : null;
+            if (texture != null && !enemyBulletTextures.contains(texture, true)) enemyBulletTextures.add(texture);
+        }
+        for (int t = 0; t < enemyBulletTextures.size; t++) {
+            Texture texture = enemyBulletTextures.get(t);
+            for (int i = 0; i < enemyBullets.size; i++) {
+                EnemyBullet bullet = enemyBullets.get(i);
+                Sprite sprite = bullet.getSprite();
+                if (sprite != null && sprite.getTexture() == texture) bullet.draw(batch);
+            }
+        }
+        for (int i = 0; i < enemyBullets.size; i++) {
+            EnemyBullet bullet = enemyBullets.get(i);
+            Sprite sprite = bullet.getSprite();
+            if (sprite == null || sprite.getTexture() == null) bullet.draw(batch);
+        }
+    }
 }

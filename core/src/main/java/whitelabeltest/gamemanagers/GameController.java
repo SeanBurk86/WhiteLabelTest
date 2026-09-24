@@ -42,6 +42,8 @@ import com.badlogic.gdx.utils.ObjectMap;
 import whitelabeltest.enemy.Enemy;
 import whitelabeltest.enemy.ExplosionPatternDef;
 import whitelabeltest.enemy.PatternRegistry;
+import whitelabeltest.enemy.MovementPatternDef;
+import whitelabeltest.perf.PerfProbe;
 import whitelabeltest.player.Player;
 import whitelabeltest.player.WeaponLoadout;
 import whitelabeltest.player.powerups.Powerup;
@@ -357,10 +359,14 @@ public class GameController implements Disposable {
         // no triggerManager at all, so this is a no-op everywhere that doesn't use setSpeed.
         float cameraSpeedScale = triggerManager != null ? triggerManager.getSpeedScale() : 1f;
         background.setScrollSpeedScale(cameraSpeedScale);
+        PerfProbe.begin(PerfProbe.Section.BACKGROUND_UPDATE);
         background.update(delta);
+        PerfProbe.end(PerfProbe.Section.BACKGROUND_UPDATE);
         float effectiveGroundScrollSpeed =
             (spawnScheduler != null ? spawnScheduler.getGroundScrollSpeed() : groundScrollSpeed) * cameraSpeedScale;
+        PerfProbe.begin(PerfProbe.Section.ENTITY_UPDATE);
         entities.update(delta, input, assets, audio, weaponsDisabled, hyperAttackDisabled, effectiveGroundScrollSpeed, background);
+        PerfProbe.end(PerfProbe.Section.ENTITY_UPDATE);
         // Keeps the phosphene lattice overlay's downward drift (kaleidoscope_source.frag) riding
         // along at exactly this frame's real ground-scroll rate - see
         // ScrollingBackground.setKaleidoscopeGroundScrollSpeed()'s own doc. No-op for any other
@@ -371,7 +377,9 @@ public class GameController implements Disposable {
                 scoreManager.getEnemiesDestroyed(), scoreManager.getGemsCollected(), entities.getPlayer().getGrazePoints());
         }
         if (triggerManager != null) {
+            PerfProbe.begin(PerfProbe.Section.TRIGGERS);
             triggerManager.update(delta, entities, audio, input, scoreManager);
+            PerfProbe.end(PerfProbe.Section.TRIGGERS);
             background.setKaleidoscopeStageDistance(triggerManager.getCamera().getPosition());
             background.setMandelbulbStageDistance(triggerManager.getCamera().getPosition());
         }
@@ -407,6 +415,7 @@ public class GameController implements Disposable {
             return;
         }
 
+        PerfProbe.begin(PerfProbe.Section.COLLISIONS);
         collisionManager.checkShieldReflections(entities.getPlayer(), entities.getEnemyBullets(), entities.getBullets(), assets);
 
         if (hitGraceTimer < 0f && !entities.getPlayer().isInvincible() && !entities.getPlayer().isDead()) {
@@ -435,6 +444,9 @@ public class GameController implements Disposable {
         // Must run after every check above - see its javadoc for why paired-enemy deaths are
         // deferred instead of resolved inline in each of those.
         collisionManager.resolvePairedEnemyDeaths(entities.getEnemies(), audio, entities, assets, worldWidth, worldHeight, scoreManager, delta);
+        PerfProbe.end(PerfProbe.Section.COLLISIONS);
+        PerfProbe.counts(entities.getEnemies().size, entities.getEnemyBullets().size, entities.getBullets().size, entities.getPointGems().size,
+            entities.getExplosions().size + entities.getHitEffects().size, triggerManager != null ? triggerManager.getCamera().getPosition() : Float.NaN);
     }
 
     private void updateFpsMonitor(float delta) {
@@ -592,6 +604,21 @@ public class GameController implements Disposable {
         audio.switchStageMusic(track != null ? track : stageMusicPath);
     }
 
+    /** Loads every sound this stage can cue - its triggers' sounds and any waypoint sound in the movement
+     *  patterns - up front, so none of them stalls a frame loading from disk the first time it plays mid-stage
+     *  (e.g. the Warning cue, or a boss' waypoint screech). Already-loaded ones are skipped. */
+    private void preloadStageSounds() {
+        if (triggerManager != null) for (String path : triggerManager.getCueSoundPaths()) audio.preloadCueSound(path);
+        for (String id : PatternRegistry.getMovementIds()) preloadWaypointSounds(PatternRegistry.getMovement(id));
+    }
+
+    private void preloadWaypointSounds(MovementPatternDef def) {
+        if (def == null) return;
+        if (def.soundName != null) audio.preloadCueSound(def.soundName);
+        if (def.patterns != null) for (MovementPatternDef sub : def.patterns) preloadWaypointSounds(sub);
+        preloadWaypointSounds(def.pattern);
+    }
+
     private void applyLevelCompleteBonus() {
         Player player = entities.getPlayer();
         GameBalance balance = assets.getGameBalance();
@@ -746,6 +773,7 @@ public class GameController implements Disposable {
         background.setHueCyclePeriod(bossVideoDistance >= 0f ? bossVideoDistance : (spawnScheduler != null ? spawnScheduler.getBackgroundVideoTime() : -1f));
         audio.loadStageMusic(stageDef.music);
         stageMusicPath = stageDef.music;
+        preloadStageSounds();
         totalEnemiesAcrossRun += (spawnScheduler != null ? spawnScheduler.getSchedule().size : 0) + (triggerManager != null ? triggerManager.getEnemySpawnCount() : 0);
         combinedTextCues.clear();
         bossVideoTriggered = false;
@@ -907,6 +935,9 @@ public class GameController implements Disposable {
     }
 
     private void applyPlayerHit() {
+        // Performance runs only (-Dperf.invincible, see PerfProbe): hits are ignored so a recorded run plays the
+        // whole stage even after it drifts out of sync with the current code, instead of ending at a game over.
+        if (PerfProbe.INVINCIBLE) return;
         // Scripted "safely stand in this fire" window (see SpawnScheduler.isPlayerInvincible) -
         // completely consequence-free, not even a chain break, unlike every other branch below. OR'd
         // with TriggerManager's own distance-based equivalent (see TriggerManager.isPlayerInvincible()).
@@ -1019,9 +1050,13 @@ public class GameController implements Disposable {
             float nearestY = MathUtils.clamp(player.getCenterY(), bounds.y, bounds.y + bounds.height);
             float gemScale = assets.getGameBalance().gemScaleForDistance(
                 Vector2.dst(player.getCenterX(), player.getCenterY(), nearestX, nearestY));
-            for (int i = 0; i < gemCount; i++) {
+            // Capped (see GameBalance.maxGemsPerEnemy): the first `extra` gems each stand for one more, so the
+            // gems that spawn always add up to exactly gemCount.
+            int spawned = Math.min(gemCount, Math.max(1, assets.getGameBalance().maxGemsPerEnemy));
+            int each = gemCount / spawned, extra = gemCount % spawned;
+            for (int i = 0; i < spawned; i++) {
                 PointGem gem = ObjectPools.pointGemPool.obtain();
-                gem.init(gemAnimation, centerX, centerY, worldWidth, worldHeight, false, gemScale);
+                gem.init(gemAnimation, centerX, centerY, worldWidth, worldHeight, false, gemScale, each + (i < extra ? 1 : 0));
                 entityManager.getPointGems().add(gem);
             }
         }
@@ -1089,19 +1124,29 @@ public class GameController implements Disposable {
 
         int layerCount = background.getLayerCount();
         if (background.isDrawingLayerStack() && layerCount > 0) {
+            PerfProbe.begin(PerfProbe.Section.BACKGROUND_DRAW);
             background.beginLayeredDraw(batch);
             for (int i = 0; i < layerCount; i++) {
                 background.drawLayer(batch, i);
                 entities.drawEnemiesAttachedToLayer(batch, i);
             }
             background.endLayeredDraw(batch);
+            PerfProbe.end(PerfProbe.Section.BACKGROUND_DRAW);
             // draw() itself isn't called on this branch, so the feedback overlay (which draw() would
             // otherwise apply on top of the layer stack) needs its own explicit call here.
+            PerfProbe.begin(PerfProbe.Section.FEEDBACK_DRAW);
             background.drawPlayerFeedbackOverlay(batch);
+            PerfProbe.end(PerfProbe.Section.FEEDBACK_DRAW);
+            PerfProbe.begin(PerfProbe.Section.ENTITY_DRAW);
             entities.draw(batch, layerCount);
+            PerfProbe.end(PerfProbe.Section.ENTITY_DRAW);
         } else {
+            PerfProbe.begin(PerfProbe.Section.BACKGROUND_DRAW);
             background.draw(batch);
+            PerfProbe.end(PerfProbe.Section.BACKGROUND_DRAW);
+            PerfProbe.begin(PerfProbe.Section.ENTITY_DRAW);
             entities.draw(batch, 0);
+            PerfProbe.end(PerfProbe.Section.ENTITY_DRAW);
         }
         interstitialPlayer.draw(batch, worldWidth, worldHeight);
     }

@@ -39,6 +39,8 @@ public class QuarterCircleFiring implements FiringPattern {
     // successive volleys to force the player to relocate to whichever side is clear next, rather
     // than always converging back on wherever they're already standing.
     private final float fixedAimAngleDeg;
+    // Reused for the aim and each bullet's direction instead of a new Vector2 per shot - same maths, no garbage.
+    private final Vector2 scratchDir = new Vector2();
 
     public QuarterCircleFiring(float fireRate) {
         this(fireRate, 0.25f, DEFAULT_SPEED, null);
@@ -122,14 +124,14 @@ public class QuarterCircleFiring implements FiringPattern {
         } else {
             float playerX = playerHitbox.x + targetOffsetX;
             float playerY = playerHitbox.y + targetOffsetY;
-            aimAngle = new Vector2(playerX - centerX, playerY - centerY).angleDeg();
+            aimAngle = scratchDir.set(playerX - centerX, playerY - centerY).angleDeg();
         }
         float startAngle = numBullets > 1 ? aimAngle - spreadDegrees / 2 : aimAngle;
         float step = numBullets > 1 ? spreadDegrees / (numBullets - 1) : 0f;
 
         for (int i = 0; i < numBullets; i++) {
             float angle = startAngle + i * step;
-            Vector2 dir = new Vector2(1, 0).setAngleDeg(angle);
+            Vector2 dir = scratchDir.set(1, 0).setAngleDeg(angle);
             AimedEnemyBullet b = ObjectPools.aimedBulletPool.obtain();
             b.init(animation, centerX, centerY, centerX + dir.x, centerY + dir.y, bulletSize, bulletSpeed, bulletDamage, self, speedProfile, hitboxSpec);
             enemyBullets.add(b);

@@ -46,6 +46,29 @@ public class UIManager implements Disposable {
     private final GlyphLayout gameOverLayout;
     private final GlyphLayout textCueLayout;
     private final GlyphLayout measureLayout;
+
+    // HUD text that changes far less often than every frame, rebuilt only when its value does - see
+    // CachedText. String.format parses its format string and allocates on every call, which added up at
+    // several calls a frame.
+    private final CachedText scoreText = new CachedText();
+    private final CachedText highScoreText = new CachedText();
+    private final CachedText grazeText = new CachedText();
+    private final CachedText shieldCooldownText = new CachedText();
+    private final CachedText chainMultText = new CachedText();
+
+    /** One piece of HUD text plus the value it was built from. */
+    private static final class CachedText {
+        private long key = Long.MIN_VALUE;
+        private String text;
+
+        String get(long value, java.util.function.LongFunction<String> build) {
+            if (value != key || text == null) {
+                key = value;
+                text = build.apply(value);
+            }
+            return text;
+        }
+    }
     private final Texture whitePixel;
     private final Texture heartIcon;
     // GameOverSign.png (4 columns x 3 rows, 12 frames) - see drawGameOver(), which plays it once
@@ -120,14 +143,14 @@ public class UIManager implements Disposable {
         y -= 0.35f;
         drawSectionLabel(batch, "SCORE_REGISTER", x, y);
         y -= 0.6f;
-        drawScaledText(batch, String.format("%010d", scoreManager.getScore()), x, y, 1.7f, HUD_GREEN);
+        drawScaledText(batch, scoreText.get(scoreManager.getScore(), v -> String.format("%010d", v)), x, y, 1.7f, HUD_GREEN);
 
         y -= 0.45f;
         font.setColor(HUD_LABEL);
         font.draw(batch, "HI_SCORE:", x, y);
         font.setColor(Color.WHITE);
         y -= 0.42f;
-        drawScaledText(batch, String.format("%010d", scoreManager.getHighScore()), x, y, 1.25f, HUD_AMBER);
+        drawScaledText(batch, highScoreText.get(scoreManager.getHighScore(), v -> String.format("%010d", v)), x, y, 1.25f, HUD_AMBER);
 
         y -= 0.35f;
         drawDivider(batch, x, y, innerWidth);
@@ -149,7 +172,7 @@ public class UIManager implements Disposable {
         y -= 0.28f;
         drawMeterBar(batch, x, y, innerWidth, 0.06f, scoreManager.getChainTimerFraction(), HUD_GREEN);
         y -= 0.32f;
-        drawTextRightAligned(batch, "x" + chainMult + " MULT", rightEdge, y, HUD_GREEN);
+        drawTextRightAligned(batch, chainMultText.get(chainMult, v -> "x" + v + " MULT"), rightEdge, y, HUD_GREEN);
 
         y -= 0.4f;
         boolean critical = player.getNumLives() <= 1;
@@ -210,7 +233,7 @@ public class UIManager implements Disposable {
         float grazeFraction = Math.min(player.getGrazePoints() / 100f, 1f);
         circleMeterEffect.render(batch, whitePixel, grazeFraction, HUD_GAUGE_BG, HUD_GREEN,
             0.34f, 0.5f, gaugeCenterX - gaugeSize / 2f, gaugeCenterY - gaugeSize / 2f, gaugeSize);
-        drawScaledCentered(batch, String.format("%03d", (int) player.getGrazePoints()), gaugeCenterX, gaugeCenterY + 0.15f, 1.5f, HUD_GREEN);
+        drawScaledCentered(batch, grazeText.get((int) player.getGrazePoints(), v -> String.format("%03d", v)), gaugeCenterX, gaugeCenterY + 0.15f, 1.5f, HUD_GREEN);
         drawCentered(batch, "GRAZE_PTS", gaugeCenterX, gaugeCenterY - 0.35f, HUD_LABEL);
 
         y = gaugeCenterY - gaugeSize / 2f - 0.3f;
@@ -284,7 +307,7 @@ public class UIManager implements Disposable {
                 shieldText = "SHIELD: ACTIVE";
                 shieldColor = Color.CYAN;
             } else if (player.getShieldCooldownTimer() > 0) {
-                shieldText = String.format("SHIELD_CD: %.1fs", player.getShieldCooldownTimer());
+                shieldText = shieldCooldownText.get(Math.round(player.getShieldCooldownTimer() * 10f), v -> String.format("SHIELD_CD: %.1fs", v / 10f));
                 shieldColor = HUD_LABEL;
             } else {
                 shieldText = "SHIELD: READY";

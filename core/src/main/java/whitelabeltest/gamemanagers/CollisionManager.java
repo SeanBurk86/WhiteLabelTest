@@ -32,6 +32,9 @@ public class CollisionManager {
     // Scratch buffer for the scaled/offset hitbox rect built in overlaps(Circle, EnemyBullet) -
     // reused every call instead of allocating a Rectangle per bullet-vs-player check.
     private final Rectangle scratchHitbox = new Rectangle();
+    // Scratch for a rotated bullet's scaled/offset hitbox handed to overlapsRotated() - its own buffer, so it can't
+    // alias whichever rectangle (scratchHitbox, an enemy's scratchEnemyBox) is on the other side of the test.
+    private final Rectangle scratchRotatedBox = new Rectangle();
 
     public CollisionManager() {
         this.collisionHighlight = new Rectangle();
@@ -185,8 +188,8 @@ public class CollisionManager {
             PointGem gem = gems.get(i);
             if (Intersector.overlaps(player.getGrazeHitbox(), gem.getRectangle())) {
                 // A bigger gem (dropped with the player close to the enemy) is worth proportionally more.
-                scoreManager.addBonus(Math.round(assets.getGameBalance().gemPoints * gem.getValueScale()));
-                scoreManager.registerGemCollected();
+                scoreManager.addBonus(Math.round(assets.getGameBalance().gemPoints * gem.getValueScale()) * gem.getRepresents());
+                scoreManager.registerGemCollected(gem.getRepresents());
                 audio.playPointGem();
                 gems.removeIndex(i);
                 ObjectPools.freePointGem(gem);
@@ -470,7 +473,7 @@ public class CollisionManager {
 
         float pivotX = bullet.getRotationPivotX() + worldOffsetX;
         float pivotY = bullet.getRotationPivotY() + worldOffsetY;
-        return overlapsRotated(aabb, new Rectangle(effX, effY, effWidth, effHeight), pivotX, pivotY, rotation);
+        return overlapsRotated(aabb, scratchRotatedBox.set(effX, effY, effWidth, effHeight), pivotX, pivotY, rotation);
     }
 
     private static boolean overlapsRotated(Rectangle aabb, Rectangle local, float pivotX, float pivotY, float rotationDeg) {
@@ -696,7 +699,7 @@ public class CollisionManager {
         if (enemyRot == 0f) {
             float pivotX = bullet.getRotationPivotX() + worldOffsetX;
             float pivotY = bullet.getRotationPivotY() + worldOffsetY;
-            return overlapsRotated(enemyRect, new Rectangle(effX, effY, effWidth, effHeight), pivotX, pivotY, rotation);
+            return overlapsRotated(enemyRect, scratchRotatedBox.set(effX, effY, effWidth, effHeight), pivotX, pivotY, rotation);
         }
         if (rotation == 0f) {
             scratchHitbox.set(effX, effY, effWidth, effHeight);

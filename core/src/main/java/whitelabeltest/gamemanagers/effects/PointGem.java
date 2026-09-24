@@ -47,6 +47,9 @@ public class PointGem implements Pool.Poolable {
     private boolean stationary;
     // Size and point-value multiplier - see init()'s valueScale.
     private float valueScale = 1f;
+    // How many gems this one stands for - more than 1 only when an enemy's gem share was capped (see
+    // GameBalance.maxGemsPerEnemy); it's worth that many gems' points and counts as that many collected.
+    private int represents = 1;
 
     public void init(Animation<TextureRegion> animation, float x, float y, float worldWidth, float worldHeight) {
         init(animation, x, y, worldWidth, worldHeight, false);
@@ -59,6 +62,12 @@ public class PointGem implements Pool.Poolable {
     /** @param valueScale multiplies both the gem's size and the points it's worth when collected - see
      *  GameBalance.gemScaleForDistance() and CollisionManager.checkPlayerGemCollisions(). 1 is the base gem. */
     public void init(Animation<TextureRegion> animation, float x, float y, float worldWidth, float worldHeight, boolean stationary, float valueScale) {
+        init(animation, x, y, worldWidth, worldHeight, stationary, valueScale, 1);
+    }
+
+    /** @param represents how many gems this one stands for - see the field. */
+    public void init(Animation<TextureRegion> animation, float x, float y, float worldWidth, float worldHeight, boolean stationary, float valueScale, int represents) {
+        this.represents = Math.max(1, represents);
         this.animation = animation;
         this.stateTime = 0f;
         this.worldWidth = worldWidth;
@@ -139,6 +148,11 @@ public class PointGem implements Pool.Poolable {
     }
 
     /** The multiplier this gem's size and point value were scaled by when it spawned. */
+    /** How many gems this one stands for - see the field. */
+    public int getRepresents() {
+        return represents;
+    }
+
     public float getValueScale() {
         return valueScale;
     }
@@ -152,5 +166,6 @@ public class PointGem implements Pool.Poolable {
         stateTime = 0f;
         stationary = false;
         valueScale = 1f;
+        represents = 1;
     }
 }

@@ -22,6 +22,10 @@ public class GameBalance {
     public float defaultChainWindow;
     public int gemPoints;
     public int gemsPerEnemyHealth;
+    // Most gems one enemy actually spawns. A big enemy's full share (health / gemsPerEnemyHealth - 1,200 for a
+    // 12,000-health boss) would otherwise all be simulated and drawn at once; past this cap each gem stands for
+    // several instead (see PointGem.getRepresents()), so the points and the gems-collected count are unchanged.
+    public int maxGemsPerEnemy = 60;
     // Gems dropped by a dying enemy scale with how close the player was to it when it died - both their
     // size and their point value (see gemScaleForDistance()): gemMaxScale with the player right up against
     // the enemy, easing linearly down to gemMinScale at gemFullDistance world units away or more.

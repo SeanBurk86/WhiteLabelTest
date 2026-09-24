@@ -39,8 +39,8 @@ public final class WaypointSpline {
 
         Vector2 p0 = points[i0];
         Vector2 p1 = points[i1];
-        Vector2 m0 = tangentAt(points, i0, tensions[i0], closePath);
-        Vector2 m1 = tangentAt(points, i1, tensions[i1], closePath);
+        float m0x = tangentX(points, i0, tensions[i0], closePath), m0y = tangentY(points, i0, tensions[i0], closePath);
+        float m1x = tangentX(points, i1, tensions[i1], closePath), m1y = tangentY(points, i1, tensions[i1], closePath);
 
         float t2 = localT * localT;
         float t3 = t2 * localT;
@@ -49,8 +49,8 @@ public final class WaypointSpline {
         float h01 = -2 * t3 + 3 * t2;
         float h11 = t3 - t2;
 
-        out.x = h00 * p0.x + h10 * m0.x + h01 * p1.x + h11 * m1.x;
-        out.y = h00 * p0.y + h10 * m0.y + h01 * p1.y + h11 * m1.y;
+        out.x = h00 * p0.x + h10 * m0x + h01 * p1.x + h11 * m1x;
+        out.y = h00 * p0.y + h10 * m0y + h01 * p1.y + h11 * m1y;
         return out;
     }
 
@@ -70,8 +70,8 @@ public final class WaypointSpline {
 
         Vector2 p0 = points[i0];
         Vector2 p1 = points[i1];
-        Vector2 m0 = tangentAt(points, i0, tensions[i0], closePath);
-        Vector2 m1 = tangentAt(points, i1, tensions[i1], closePath);
+        float m0x = tangentX(points, i0, tensions[i0], closePath), m0y = tangentY(points, i0, tensions[i0], closePath);
+        float m1x = tangentX(points, i1, tensions[i1], closePath), m1y = tangentY(points, i1, tensions[i1], closePath);
 
         float t2 = localT * localT;
         float dh00 = 6 * t2 - 6 * localT;
@@ -79,19 +79,28 @@ public final class WaypointSpline {
         float dh01 = -6 * t2 + 6 * localT;
         float dh11 = 3 * t2 - 2 * localT;
 
-        out.x = dh00 * p0.x + dh10 * m0.x + dh01 * p1.x + dh11 * m1.x;
-        out.y = dh00 * p0.y + dh10 * m0.y + dh01 * p1.y + dh11 * m1.y;
+        out.x = dh00 * p0.x + dh10 * m0x + dh01 * p1.x + dh11 * m1x;
+        out.y = dh00 * p0.y + dh10 * m0y + dh01 * p1.y + dh11 * m1y;
         return out;
     }
 
-    /** Cardinal-spline tangent at control point i - duplicates the nearest endpoint for the
-     *  neighbor that doesn't exist on an open (non-closed) path, so the first/last point still gets
-     *  a sensible (one-sided) tangent instead of needing special-cased zero-tangent endpoints. */
-    private static Vector2 tangentAt(Vector2[] points, int i, float tension, boolean closePath) {
+    /** Cardinal-spline tangent at control point i, x then y component - duplicates the nearest endpoint
+     *  for the neighbor that doesn't exist on an open (non-closed) path, so the first/last point still gets
+     *  a sensible (one-sided) tangent instead of needing special-cased zero-tangent endpoints. Returned as
+     *  plain floats rather than a Vector2: evaluate()/tangentAt() run several times per moving enemy per
+     *  frame (see WaypointPathMovement.update()'s sub-steps), and a new Vector2 per call was a steady
+     *  source of garbage-collection hitches. */
+    private static float tangentX(Vector2[] points, int i, float tension, boolean closePath) {
         int n = points.length;
         Vector2 prev = points[closePath ? ((i - 1 + n) % n) : Math.max(i - 1, 0)];
         Vector2 next = points[closePath ? ((i + 1) % n) : Math.min(i + 1, n - 1)];
-        float scale = (1f - tension) * 0.5f;
-        return new Vector2((next.x - prev.x) * scale, (next.y - prev.y) * scale);
+        return (next.x - prev.x) * (1f - tension) * 0.5f;
+    }
+
+    private static float tangentY(Vector2[] points, int i, float tension, boolean closePath) {
+        int n = points.length;
+        Vector2 prev = points[closePath ? ((i - 1 + n) % n) : Math.max(i - 1, 0)];
+        Vector2 next = points[closePath ? ((i + 1) % n) : Math.min(i + 1, n - 1)];
+        return (next.y - prev.y) * (1f - tension) * 0.5f;
     }
 }

@@ -10,6 +10,10 @@ public class Lwjgl3Launcher {
     public static void main(String[] args) {
         if (StartupHelper.startNewJvmIfRequired()) return; // This handles macOS support and helps on Windows.
         createApplication();
+        // The Lwjgl3Application constructor only returns once the game has exited and disposed. gdx-video's
+        // FFMpegInternalThread is a non-daemon thread that outlives its VideoPlayer, so without this the JVM
+        // lingered after the window closed - a windowless process still holding ~650MB and native handles.
+        System.exit(0);
     }
 
     /** Reads the quickPlay.* system properties the JavaFX editor's "Quick Play" button sets when it
@@ -75,9 +79,14 @@ public class Lwjgl3Launcher {
         //// Vsync limits the frames per second to what your hardware can display, and helps eliminate
         //// screen tearing. This setting doesn't always work on Linux, so the line after is a safeguard.
         configuration.useVsync(true);
-        //// Limits FPS to the refresh rate of the currently active monitor, plus 1 to try to match fractional
-        //// refresh rates. The Vsync setting above should limit the actual FPS to match the monitor.
-        configuration.setForegroundFPS(Lwjgl3ApplicationConfiguration.getDisplayMode().refreshRate + 1);
+        // FPS cap as a safeguard only, for when vsync doesn't take (see the note above) - vsync must be what
+        // paces frames. The template's "refresh + 1" cap can land BELOW the real refresh: GLFW reports a
+        // fractional mode as its integer part (a ~60.08Hz panel as 59, so a cap of 60), and a cap below the
+        // real refresh makes the limiter pace the loop; its sleep then drifts across the vblank deadline once
+        // per 1/(refresh - cap) seconds (~12s here), missing vsync for ~half a second each time (a sustained
+        // run of 33ms frames). Twice the refresh never binds while vsync works.
+        // -Dperf.fpsCap=<n> overrides it for performance A/B runs (see lwjgl3/build.gradle's -PperfFpsCap).
+        configuration.setForegroundFPS(Integer.getInteger("perf.fpsCap", Lwjgl3ApplicationConfiguration.getDisplayMode().refreshRate * 2));
         //// If you remove the above line and set Vsync to false, you can get unlimited FPS, which can be
         //// useful for testing performance, but can also be very stressful to some hardware.
         //// You may also need to configure GPU drivers to fully disable Vsync; this can cause screen tearing.

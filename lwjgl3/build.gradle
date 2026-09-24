@@ -75,6 +75,21 @@ run {
   if (project.hasProperty('quickPlaySlotALevel')) jvmArgs += "-DquickPlay.slotALevel=${project.property('quickPlaySlotALevel')}"
   if (project.hasProperty('quickPlaySlotBLevel')) jvmArgs += "-DquickPlay.slotBLevel=${project.property('quickPlaySlotBLevel')}"
   if (project.hasProperty('quickPlayInput')) jvmArgs += "-DquickPlay.input=${project.property('quickPlayInput')}"
+  // Performance investigation - see whitelabeltest.perf.PerfProbe / Main.startAutoReplay():
+  //   -PperfLog=<csv>              log per-frame timings, draw calls, entity counts and GC to that file
+  //   -PautoReplay=<replay json>   play that recorded run straight away, hands-free, then quit
+  //   -PautoReplaySeconds=<n>      ...quitting after n seconds of play instead
+  //   -PjfrFile=<jfr>              also record a Java Flight Recorder profile (CPU, allocation, GC, locks)
+  if (project.hasProperty('perfLog')) jvmArgs += "-Dperf.log=${project.property('perfLog')}"
+  if (project.hasProperty('autoReplay')) jvmArgs += "-DautoReplay=${project.property('autoReplay')}"
+  if (project.hasProperty('autoReplaySeconds')) jvmArgs += "-DautoReplay.seconds=${project.property('autoReplaySeconds')}"
+  if (project.hasProperty('jfrFile')) jvmArgs += "-XX:StartFlightRecording=filename=${project.property('jfrFile')},settings=profile,dumponexit=true"
+  if (project.hasProperty('perfInvincible')) jvmArgs += "-Dperf.invincible"
+  // A/B switches: turn stage 1's GPU effects / boss video off to measure what they cost.
+  if (project.hasProperty('perfNoFeedback')) jvmArgs += "-Dperf.noFeedback"
+  if (project.hasProperty('perfNoHueCycle')) jvmArgs += "-Dperf.noHueCycle"
+  if (project.hasProperty('perfNoBossVideo')) jvmArgs += "-Dperf.noBossVideo"
+  if (project.hasProperty('perfFpsCap')) jvmArgs += "-Dperf.fpsCap=${project.property('perfFpsCap')}"
 }
 
 jar {

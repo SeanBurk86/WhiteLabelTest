@@ -93,7 +93,12 @@ public class ScoreManager {
     }
 
     public void registerGemCollected() {
-        gemsCollected++;
+        registerGemCollected(1);
+    }
+
+    /** @param count how many gems were just collected - see PointGem.getRepresents(). */
+    public void registerGemCollected(int count) {
+        gemsCollected += count;
     }
 
     public void reset() {

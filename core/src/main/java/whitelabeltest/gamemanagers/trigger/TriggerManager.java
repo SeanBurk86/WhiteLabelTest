@@ -904,6 +904,16 @@ public class TriggerManager {
         return track;
     }
 
+    /** Every sound this stage's triggers can play (Trigger.sound) - GameController preloads them at stage
+     *  load so the first one to fire doesn't stall that frame loading it. */
+    public Array<String> getCueSoundPaths() {
+        Array<String> paths = new Array<>();
+        for (Trigger trigger : triggers) {
+            if (trigger.sound != null && !paths.contains(trigger.sound, false)) paths.add(trigger.sound);
+        }
+        return paths;
+    }
+
     public float getBossVideoDistance() {
         for (Trigger trigger : triggers) {
             if (trigger.triggerBossVideo) return trigger.distance;

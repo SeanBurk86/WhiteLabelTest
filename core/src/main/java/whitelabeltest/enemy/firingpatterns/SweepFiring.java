@@ -26,6 +26,8 @@ public class SweepFiring implements FiringPattern {
     private final float sweepDuration;
     private final float startAngle;
     private final float endAngle;
+    // Reused for each shot's direction instead of a new Vector2 per bullet - same maths, no garbage.
+    private final Vector2 scratchDir = new Vector2();
 
     private float bulletTimer;
     private float sweepT;         // 0 = left edge, 1 = right edge
@@ -113,7 +115,7 @@ public class SweepFiring implements FiringPattern {
         bulletTimer = 0;
 
         float angle = startAngle + sweepT * (endAngle - startAngle);
-        Vector2 dir = new Vector2(1, 0).setAngleDeg(angle);
+        Vector2 dir = scratchDir.set(1, 0).setAngleDeg(angle);
         float centerX = sprite.getX() + sprite.getWidth() / 2 + offsetX;
         float centerY = sprite.getY() + sprite.getHeight() / 2 + offsetY;
         Animation<TextureRegion> animation = spriteOverride != null ? spriteOverride : bulletAnimation;
