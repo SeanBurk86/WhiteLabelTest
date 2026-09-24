@@ -44,6 +44,11 @@ public class AudioManager implements Disposable {
     // BasicWeapon's Hyper Attack (see Player.updateHaloMovement): plays once, the moment the halo
     // finishes its glide back and reattaches to the ship.
     private final Sound haloLatchSound;
+    // Played when graze points earn a bomb, and again when the bomb cooldown ends - see
+    // playGrazeBombEarned()/playBombReady().
+    private final Sound grazeLevelUpSound;
+    // Played when the orbit weapon's reflect shield finishes recharging - see playShieldsReady().
+    private final Sound shieldsReadySound;
     // ThunderboltWeapon's Hyper Attack (see Player.updateThunderboltCharge/CollisionManager.
     // checkThunderboltDetonation): one distinct sound per charge tier, played in a fixed order as
     // the bomb climbs through them - not a random pick from a pool like the per-weapon-level
@@ -56,6 +61,7 @@ public class AudioManager implements Disposable {
     private final Music victoryFanfare;
     private final Music victoryLoop;
     private Music stageMusic;
+    private String stageMusicPath;
     private final ObjectMap<Integer, Array<Sound>> pointGemSounds;
     private final ObjectMap<Integer, Array<Sound>> explosionSounds;
     private final ObjectMap<Integer, Array<Sound>> basicWeaponSounds;
@@ -85,6 +91,8 @@ public class AudioManager implements Disposable {
         haloBashSound = Gdx.audio.newSound(Gdx.files.internal("audio/sfx/halo_bash.mp3"));
         haloReturnSound = Gdx.audio.newSound(Gdx.files.internal("audio/sfx/halo_return.mp3"));
         haloLatchSound = Gdx.audio.newSound(Gdx.files.internal("audio/sfx/halo_latch.mp3"));
+        grazeLevelUpSound = Gdx.audio.newSound(Gdx.files.internal("audio/sfx/grazelevelup.mp3"));
+        shieldsReadySound = Gdx.audio.newSound(Gdx.files.internal("audio/sfx/shieldsready.mp3"));
         thunderboltHyperLevelSounds = new Sound[] {
             Gdx.audio.newSound(Gdx.files.internal("audio/sfx/thunderbolthyperlevel.wav")),
             Gdx.audio.newSound(Gdx.files.internal("audio/sfx/thunderbolthyperlevel-001.wav")),
@@ -145,10 +153,27 @@ public class AudioManager implements Disposable {
      *  once per stage load (see GameController.loadStage()), always before playStageMusic()/
      *  setMuted() are next used, so those methods can keep assuming stageMusic is non-null. */
     public void loadStageMusic(String path) {
+        fadingOutStageMusic = false;
         if (stageMusic != null) stageMusic.dispose();
         stageMusic = Gdx.audio.newMusic(Gdx.files.internal(path));
         stageMusic.setLooping(true);
+        stageMusicPath = path;
     }
+
+    /** Swaps the stage's music to the track at `path` mid-stage and starts it playing (looping) - a
+     *  Trigger.music action, e.g. a boss theme. Cancels any fade-out still running on the old track.
+     *  Already on that track and playing = no-op, so re-syncing after a seek (see
+     *  GameController.syncStageMusic()) never restarts a track that's already right. */
+    public void switchStageMusic(String path) {
+        if (path == null) return;
+        if (path.equals(stageMusicPath) && stageMusic.isPlaying() && !fadingOutStageMusic) return;
+        if (stageMusic != null) stageMusic.stop();
+        loadStageMusic(path);
+        playStageMusic();
+    }
+
+    /** The asset path of the currently loaded stage track - see switchStageMusic(). */
+    public String getStageMusicPath() { return stageMusicPath; }
 
     public void setMuted(boolean muted) {
         this.muted = muted;
@@ -251,6 +276,21 @@ public class AudioManager implements Disposable {
         if (!muted) haloLatchSound.play(settings.getEffectiveSfxVolume());
     }
 
+    /** Graze points just earned the player another bomb - see Player.resolveGrazePoints(). */
+    public void playGrazeBombEarned() {
+        if (!muted) grazeLevelUpSound.play(settings.getEffectiveSfxVolume());
+    }
+
+    /** The bomb cooldown just ran out with a bomb in stock - see GameController.update(). */
+    public void playBombReady() {
+        if (!muted) grazeLevelUpSound.play(settings.getEffectiveSfxVolume());
+    }
+
+    /** The orbit weapon's reflect shield just finished recharging - see Player.advanceWeaponTimers(). */
+    public void playShieldsReady() {
+        if (!muted) shieldsReadySound.play(settings.getEffectiveSfxVolume());
+    }
+
     public void playVictory() {
         if (!muted) {
             victoryFanfare.setVolume(settings.getEffectiveSfxVolume());
@@ -351,6 +391,8 @@ public class AudioManager implements Disposable {
         haloBashSound.dispose();
         haloReturnSound.dispose();
         haloLatchSound.dispose();
+        grazeLevelUpSound.dispose();
+        shieldsReadySound.dispose();
         for (Sound s : thunderboltHyperLevelSounds) s.dispose();
         thunderboltHyperExplosionSound.dispose();
         thunderboltNullSound.dispose();

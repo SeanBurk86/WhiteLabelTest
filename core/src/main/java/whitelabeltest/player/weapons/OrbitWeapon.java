@@ -39,6 +39,8 @@ public class OrbitWeapon extends BaseWeapon {
     private boolean shieldActive;
     private float shieldTimer;
     private float shieldCooldownTimer;
+    // Set the frame the shield's cooldown runs out - see consumeShieldReady().
+    private boolean shieldJustReady;
 
     public void init(WeaponDefinition def, Texture texture, Player player, float initialAngle) {
         init(def, texture, player, initialAngle, null);
@@ -183,7 +185,16 @@ public class OrbitWeapon extends BaseWeapon {
             }
         } else if (shieldCooldownTimer > 0f) {
             shieldCooldownTimer -= delta;
+            if (shieldCooldownTimer <= 0f) shieldJustReady = true;
         }
+    }
+
+    /** True once, the first time it's asked after the shield finishes recharging - Player plays the
+     *  "shields ready" sound off it (see Player.advanceWeaponTimers()). */
+    public boolean consumeShieldReady() {
+        boolean ready = shieldJustReady;
+        shieldJustReady = false;
+        return ready;
     }
 
     public boolean isShieldActive() { return shieldActive; }
@@ -198,6 +209,7 @@ public class OrbitWeapon extends BaseWeapon {
         shieldActive = false;
         shieldTimer = 0f;
         shieldCooldownTimer = 0f;
+        shieldJustReady = false;
     }
 
     @Override

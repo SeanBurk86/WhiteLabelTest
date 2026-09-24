@@ -104,6 +104,9 @@ public class FiringPatternDef implements Json.Serializable {
     // BurstAimed's seconds-between-shots-within-a-burst - see BurstAimedFiring's burstInterval
     // constructor param. -1 (the default) falls back to BurstAimedFiring's own 0.15s default.
     public float burstInterval = -1f;
+    // SpawnEnemy's movement for every enemy it spawns - a movement-pattern id (null = spawns don't move),
+    // the only way to give a spawned enemy any motion since movement isn't part of an EnemyDefinition.
+    public String spawnMovementPattern;
     // Shape's bullet picture - see ShapeFiring/ShapeBullet. shapePoints is a flat x0,y0,x1,y1...
     // list of dot positions (world units at scale 1, drawn as the shape looks travelling straight
     // down); numBullets is the number of shapes per volley (fanned over spreadDegrees) and fireAngle
@@ -128,6 +131,7 @@ public class FiringPatternDef implements Json.Serializable {
         json.writeValue("fireRate", fireRate);
         json.writeValue("duration", duration);
         if (spawnType != null) json.writeValue("spawnType", spawnType);
+        if (spawnMovementPattern != null) json.writeValue("spawnMovementPattern", spawnMovementPattern);
         if (bulletId != null) json.writeValue("bulletId", bulletId);
         if (bulletSize > 0) json.writeValue("bulletSize", bulletSize);
         if (bulletSpeed > 0) json.writeValue("bulletSpeed", bulletSpeed);
@@ -190,6 +194,7 @@ public class FiringPatternDef implements Json.Serializable {
         fireRate = data.getFloat("fireRate", 0);
         duration = data.getFloat("duration", 3.0f);
         spawnType = data.getString("spawnType", null);
+        spawnMovementPattern = data.getString("spawnMovementPattern", null);
         bulletId = data.getString("bulletId", null);
         bulletSize = data.getFloat("bulletSize", -1f);
         bulletSpeed = data.getFloat("bulletSpeed", -1f);

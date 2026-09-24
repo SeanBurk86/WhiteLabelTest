@@ -175,6 +175,14 @@ public class GenericEnemy extends BaseEnemy {
         beginEntrance();
     }
 
+    /** Moves this enemy so its sprite is centred on (x, y) - for a spawn placed by an emission point
+     *  rather than a corner (see SpawnEnemyFiring). Call right after initWithDefinition(), before the
+     *  first update(), so its movement pattern starts from here. */
+    public void centerOn(float x, float y) {
+        sprite.setCenter(x, y);
+        rectangle.setPosition(sprite.getX(), sprite.getY());
+    }
+
     @Override
     public void init(Texture texture, float worldWidth, float worldHeight, float startX, float startY) {
         initWithDefinition(null, texture, null, null, null, worldWidth, worldHeight, startX, startY);

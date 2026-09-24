@@ -320,7 +320,7 @@ public class Player {
         updateHaloFiring(delta, canShoot, bullets, assets, audio);
         updateHitbox();
         updateGrazeHitbox();
-        resolveGrazePoints();
+        resolveGrazePoints(audio);
         resolveInvincibility(delta);
     }
 
@@ -597,7 +597,7 @@ public class Player {
     }
 
     private void handleShooting(float delta, boolean isShooting, AssetManager assets, AudioManager audio, Array<Weapon> bullets, Array<Enemy> enemies) {
-        advanceWeaponTimers(delta);
+        advanceWeaponTimers(delta, audio);
 
         Weapon currentWeapon = getCurrentWeapon();
         // No weapon at all briefly after a death wipe - see resetWeaponsOnDeath().
@@ -620,9 +620,11 @@ public class Player {
     // Both equipped weapons' cooldowns tick every frame, whether or not their slot is active, so
     // a weapon is ready to fire based on real elapsed time since it last fired - not reset by
     // switching to it, and not fast-forwardable by rapidly toggling slots back and forth.
-    private void advanceWeaponTimers(float delta) {
+    private void advanceWeaponTimers(float delta, AudioManager audio) {
         if (weaponSlots[0] != null) weaponSlots[0].addShootTimer(delta);
         if (weaponSlots[1] != null && weaponSlots[1] != weaponSlots[0]) weaponSlots[1].addShootTimer(delta);
+        // The orbit weapon's reflect shield just finished recharging (only ticks while it's equipped).
+        if (orbitWeapon.consumeShieldReady() && audio != null) audio.playShieldsReady();
     }
 
     private Texture resolveActiveTexture(AssetManager assets) {
@@ -671,10 +673,12 @@ public class Player {
         }
     }
 
-    private void resolveGrazePoints() {
+    private void resolveGrazePoints(AudioManager audio) {
         if (grazePoints > 100) {
             grazePoints %= 100;
+            int before = numBombs;
             numBombs = Math.min(numBombs + 1, maxBombs);
+            if (numBombs > before && audio != null) audio.playGrazeBombEarned();
         }
     }
 

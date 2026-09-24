@@ -230,6 +230,12 @@ public class Trigger {
     // True: fires AudioManager.fadeOutStageMusic() once - migrated off SpawnScheduler.ScheduleFile's
     // old musicFadeOutTime, same reasoning as triggerBossVideo above.
     public boolean fadeOutMusic = false;
+    // Non-null: switches the stage's music to this track (asset path relative to assets/, looping)
+    // from this point on - e.g. a boss theme cutting in ahead of the boss, usually just after a
+    // fadeOutMusic trigger has faded the stage track out. See AudioManager.switchStageMusic(), and
+    // TriggerManager.musicAt() for how a seek/checkpoint past this trigger still ends up on the
+    // right track.
+    public String music;
 
     // Runtime-only: true once this trigger is FULLY resolved (see TriggerManager.tryResolve()) -
     // its action has run AND, if requireConfirm is set, the player has confirmed - at which point

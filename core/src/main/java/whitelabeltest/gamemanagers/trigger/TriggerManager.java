@@ -520,6 +520,8 @@ public class TriggerManager {
             if (background != null) background.triggerBossVideo();
         } else if (trigger.fadeOutMusic) {
             audio.fadeOutStageMusic();
+        } else if (trigger.music != null) {
+            audio.switchStageMusic(trigger.music);
         } else if (trigger.silence) {
             EnemySpawnOps.silenceMatching(entityManager, trigger.type);
         } else if (trigger.despawn) {
@@ -846,7 +848,7 @@ public class TriggerManager {
      *  getEnemySpawnCount(). */
     private static boolean isEnemySpawn(Trigger trigger) {
         return trigger.sound == null && trigger.spriteTexture == null && trigger.setSpeed == null
-            && trigger.text == null && !trigger.triggerBossVideo && !trigger.fadeOutMusic
+            && trigger.text == null && !trigger.triggerBossVideo && !trigger.fadeOutMusic && trigger.music == null
             && !trigger.silence && !trigger.despawn && !trigger.waypointGem && trigger.swapWeaponId == null
             && !trigger.gate && !trigger.scheduleEnd;
     }
@@ -886,6 +888,22 @@ public class TriggerManager {
      *  things escalate" value as a ready-made period rather than needing its own separately
      *  authored one - the same accidental-but-kept coupling SpawnScheduler.getBackgroundVideoTime()
      *  served before this trigger kind existed. */
+    /** The track the latest Trigger.music at or before `distance` switches to, or null if none has been
+     *  reached yet (the stage's own music is still the right one). seekTo() skips triggers rather than
+     *  replaying them, so GameController asks this after a seek/checkpoint to put the right track back
+     *  on - see GameController.syncStageMusic(). */
+    public String musicAt(float distance) {
+        String track = null;
+        float trackDistance = -Float.MAX_VALUE;
+        for (Trigger trigger : triggers) {
+            if (trigger.music != null && trigger.distance <= distance && trigger.distance >= trackDistance) {
+                track = trigger.music;
+                trackDistance = trigger.distance;
+            }
+        }
+        return track;
+    }
+
     public float getBossVideoDistance() {
         for (Trigger trigger : triggers) {
             if (trigger.triggerBossVideo) return trigger.distance;

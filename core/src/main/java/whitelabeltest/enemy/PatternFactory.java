@@ -160,7 +160,7 @@ public class PatternFactory {
                 return new CombinedFiringPattern(fps);
             }
             case "SpawnEnemy":
-                return new SpawnEnemyFiring(def.spawnType, def.fireRate, def.offsetX, def.offsetY);
+                return new SpawnEnemyFiring(def.spawnType, def.fireRate, def.offsetX, def.offsetY, def.spawnMovementPattern);
             case "Aimed": {
                 BulletDef bulletDef = PatternRegistry.getBullet(def.bulletId);
                 Animation<TextureRegion> spriteOverride = buildBulletAnimation(enemyDef, def, bulletDef);

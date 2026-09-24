@@ -70,6 +70,7 @@ public class PropertiesPanel extends ScrollPane {
         ACTION_KINDS.put("text", "Text Cue");
         ACTION_KINDS.put("bossVideo", "Trigger Boss Video");
         ACTION_KINDS.put("fadeMusic", "Fade Out Music");
+        ACTION_KINDS.put("music", "Switch Music");
         ACTION_KINDS.put("despawn", "Despawn Enemies");
         ACTION_KINDS.put("silence", "Silence Enemies");
         ACTION_KINDS.put("waypointGem", "Waypoint Gem");
@@ -163,6 +164,7 @@ public class PropertiesPanel extends ScrollPane {
         if (trigger.text != null) return "text";
         if (trigger.triggerBossVideo) return "bossVideo";
         if (trigger.fadeOutMusic) return "fadeMusic";
+        if (trigger.music != null) return "music";
         if (trigger.silence) return "silence";
         if (trigger.despawn) return "despawn";
         if (trigger.waypointGem) return "waypointGem";
@@ -190,6 +192,7 @@ public class PropertiesPanel extends ScrollPane {
         trigger.text = null;
         trigger.triggerBossVideo = false;
         trigger.fadeOutMusic = false;
+        trigger.music = null;
         trigger.silence = false;
         trigger.despawn = false;
         trigger.waypointGem = false;
@@ -215,6 +218,7 @@ public class PropertiesPanel extends ScrollPane {
             }
             case "bossVideo" -> trigger.triggerBossVideo = true;
             case "fadeMusic" -> trigger.fadeOutMusic = true;
+            case "music" -> trigger.music = "audio/music/CHANGE_ME.mp3";
             case "despawn" -> { trigger.despawn = true; trigger.type = firstEnemyIdOrNull(); }
             case "silence" -> { trigger.silence = true; trigger.type = firstEnemyIdOrNull(); }
             case "waypointGem" -> trigger.waypointGem = true;
@@ -238,6 +242,10 @@ public class PropertiesPanel extends ScrollPane {
                 "Fires the stage's boss-intro video (see ScrollingBackground.triggerBossVideo()) once."));
             case "fadeMusic" -> root.getChildren().add(sectionLabel(
                 "Fades out the stage's music (see AudioManager.fadeOutStageMusic()) once."));
+            case "music" -> {
+                root.getChildren().add(textRow("Music path", trigger.music, v -> { trigger.music = v.isBlank() ? null : v.trim(); onEdited(); }));
+                root.getChildren().add(sectionLabel("Switches the stage music to this track (looping) from here on - usually placed just after a Fade Out Music."));
+            }
             case "despawn", "silence" -> root.getChildren().add(
                 comboRow("Enemy type", enemyIdOptions(), trigger.type, v -> { trigger.type = v; onEdited(); }));
             case "waypointGem" -> buildWaypointGemFields();

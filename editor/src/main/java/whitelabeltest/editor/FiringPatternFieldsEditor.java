@@ -97,6 +97,8 @@ final class FiringPatternFieldsEditor {
         box.getChildren().add(new Label("Duration is a Sequence step's own hold time, or Laser's beam duration."));
         box.getChildren().add(new Separator());
         box.getChildren().add(FormControls.textRow("Spawn type (SpawnEnemy)", def.spawnType, v -> { def.spawnType = v.isBlank() ? null : v; onDirty.run(); }));
+        box.getChildren().add(comboRow("Spawn movement (SpawnEnemy)", withBlank(PatternIds.movementPatternIds()), def.spawnMovementPattern != null ? def.spawnMovementPattern : "",
+            v -> { def.spawnMovementPattern = v.isEmpty() ? null : v; onDirty.run(); }));
         box.getChildren().add(comboRow("Bullet id", withBlank(PatternIds.bulletIds()), def.bulletId != null ? def.bulletId : "",
             v -> { def.bulletId = v.isEmpty() ? null : v; onDirty.run(); }));
         box.getChildren().add(numberRow("Phase offset (BurstAimed)", def.phaseOffset, v -> { def.phaseOffset = v; onDirty.run(); }));

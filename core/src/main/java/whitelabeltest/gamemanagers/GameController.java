@@ -126,6 +126,9 @@ public class GameController implements Disposable {
     private boolean quitToMenuRequested;
     private boolean bossVideoTriggered;
     private boolean musicFadeTriggered;
+    // The current stage's own track (StageDefinition.music) - what syncStageMusic() falls back to before
+    // any Trigger.music has been reached.
+    private String stageMusicPath;
     private static final float LEVEL_COMPLETE_DELAY = 3f;
     private float levelCompleteDelayTimer = -1f;
     private boolean debugMode;
@@ -239,6 +242,7 @@ public class GameController implements Disposable {
             if (!Float.isNaN(frame.seekToTime)) {
                 if (spawnScheduler != null) spawnScheduler.seekTo(frame.seekToTime, audio);
                 if (triggerManager != null) triggerManager.seekTo(frame.seekToTime);
+                syncStageMusic();
                 entities.clearWorld();
                 background.seekTo(frame.seekToTime);
                 return; // instantaneous - consumes no simulated time, resume on the next update() call
@@ -261,6 +265,8 @@ public class GameController implements Disposable {
         levelStartTimer += delta;
         if (bombCooldownTimer > 0) {
             bombCooldownTimer -= delta;
+            // The bomb is usable again the moment its cooldown runs out, as long as there's one in stock.
+            if (bombCooldownTimer <= 0 && entities.getPlayer().getNumBombs() > 0 && !gameOver) audio.playBombReady();
         }
         input.update(frame);
         updateFpsMonitor(delta);
@@ -566,6 +572,7 @@ public class GameController implements Disposable {
     private void seekToTime(float targetTime) {
         if (spawnScheduler != null) spawnScheduler.seekTo(targetTime, audio);
         if (triggerManager != null) triggerManager.seekTo(targetTime);
+        syncStageMusic();
         entities.clearWorld();
         background.seekTo(targetTime);
         debugMenuOpen = false;
@@ -573,6 +580,16 @@ public class GameController implements Disposable {
         // recorder.record() captures - without this, a replay of this run would have no idea the
         // jump happened and would desync from whatever the recorded player was actually reacting to.
         if (recorder != null) recorder.recordSeek(targetTime);
+    }
+
+    /** Puts the track that should be playing at the camera's current distance back on after a seek/
+     *  checkpoint restart - TriggerManager.seekTo() skips triggers rather than replaying them, so a jump
+     *  past (or back before) a Trigger.music switch would otherwise leave the wrong track playing. No-op
+     *  when that track is already the one playing - see AudioManager.switchStageMusic(). */
+    private void syncStageMusic() {
+        if (triggerManager == null || stageMusicPath == null) return;
+        String track = triggerManager.musicAt(triggerManager.getCamera().getPosition());
+        audio.switchStageMusic(track != null ? track : stageMusicPath);
     }
 
     private void applyLevelCompleteBonus() {
@@ -728,6 +745,7 @@ public class GameController implements Disposable {
         float bossVideoDistance = triggerManager != null ? triggerManager.getBossVideoDistance() : -1f;
         background.setHueCyclePeriod(bossVideoDistance >= 0f ? bossVideoDistance : (spawnScheduler != null ? spawnScheduler.getBackgroundVideoTime() : -1f));
         audio.loadStageMusic(stageDef.music);
+        stageMusicPath = stageDef.music;
         totalEnemiesAcrossRun += (spawnScheduler != null ? spawnScheduler.getSchedule().size : 0) + (triggerManager != null ? triggerManager.getEnemySpawnCount() : 0);
         combinedTextCues.clear();
         bossVideoTriggered = false;
@@ -953,6 +971,7 @@ public class GameController implements Disposable {
         }
         if (spawnScheduler != null) spawnScheduler.seekTo(checkpointStart, audio);
         if (triggerManager != null) triggerManager.seekTo(checkpointStart);
+        syncStageMusic();
         entities.clearWorld();
     }
 
