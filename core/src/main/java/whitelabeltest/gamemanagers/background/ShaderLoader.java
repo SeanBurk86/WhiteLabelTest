@@ -16,6 +16,15 @@ public final class ShaderLoader {
         return compileSource(label, read(vertexFileName), read(fragmentFileName));
     }
 
+    /** Same as compile(), with `#define <name>` lines placed ahead of the fragment source - how a shader
+     *  picks a variant such as LOW_QUALITY (see GraphicsSettings). Fine at the very top because none of
+     *  these shaders declare a #version. */
+    public static ShaderProgram compile(String label, String vertexFileName, String fragmentFileName, String... defines) {
+        StringBuilder fragment = new StringBuilder();
+        for (String define : defines) fragment.append("#define ").append(define).append('\n');
+        return compileSource(label, read(vertexFileName), fragment.append(read(fragmentFileName)).toString());
+    }
+
     static ShaderProgram compileSource(String label, String vertexSource, String fragmentSource) {
         ShaderProgram.pedantic = false;
         ShaderProgram program = new ShaderProgram(vertexSource, fragmentSource);

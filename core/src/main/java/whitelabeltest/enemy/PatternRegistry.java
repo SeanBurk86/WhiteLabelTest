@@ -21,8 +21,7 @@ public final class PatternRegistry {
         // One MovementPatternDef per file under data/movement_patterns/ (filename == id) -
         // same split, and same reasoning, as firing_patterns/ below.
         movementPatterns.clear();
-        FileHandle movementDir = Gdx.files.local("data/movement_patterns");
-        for (FileHandle f : movementDir.list("json")) {
+        for (FileHandle f : listJson("data/movement_patterns")) {
             MovementPatternDef def = json.fromJson(MovementPatternDef.class, f);
             movementPatterns.put(def.id, def);
         }
@@ -41,14 +40,36 @@ public final class PatternRegistry {
         // "BossAgniFiring.json") rather than one giant array in a single file - these can run
         // 100+ lines deep per pattern (Sequence/Combined trees), so splitting them out makes each
         // one findable and editable on its own instead of scrolling a ~2800-line file. See
-        // PatternPreviewer.saveAll() for the write side. Uses Gdx.files.local (not internal) for
-        // the directory listing - same reasoning as PatternPreviewer.collectPngFiles().
+        // PatternPreviewer.saveAll() for the write side. See listJson() for how the files are found.
         firingPatterns.clear();
-        FileHandle firingDir = Gdx.files.local("data/firing_patterns");
-        for (FileHandle f : firingDir.list("json")) {
+        for (FileHandle f : listJson("data/firing_patterns")) {
             FiringPatternDef def = json.fromJson(FiringPatternDef.class, f);
             firingPatterns.put(def.id, def);
         }
+    }
+
+    /** Every .json file directly inside the asset folder dir. Run from the project (working directory =
+     *  assets/, as `gradlew run` and the editor's Quick Play do) that's a live listing of the folder, so
+     *  files the pattern previewer/editor just saved are picked up. A packaged build has no such folder -
+     *  its assets are inside the jar, where a directory can't be listed (Gdx.files.local found nothing and
+     *  every enemy lost its movement and firing patterns) - so there the list comes from assets.txt, the
+     *  full asset listing build.gradle's generateAssetList task writes and packages on every build. */
+    private static Array<FileHandle> listJson(String dir) {
+        Array<FileHandle> files = new Array<>();
+        FileHandle localDir = Gdx.files.local(dir);
+        if (localDir.isDirectory()) {
+            files.addAll(localDir.list("json"));
+            return files;
+        }
+        String prefix = dir + "/";
+        for (String line : Gdx.files.internal("assets.txt").readString("UTF-8").split("\\r?\\n")) {
+            String path = line.trim().replace('\\', '/');
+            if (path.startsWith(prefix) && path.endsWith(".json") && path.indexOf('/', prefix.length()) < 0) {
+                files.add(Gdx.files.internal(path));
+            }
+        }
+        if (files.isEmpty()) Gdx.app.error("PatternRegistry", "no pattern files found for " + dir);
+        return files;
     }
 
     public static MovementPatternDef getMovement(String id) {

@@ -31,6 +31,7 @@ import com.badlogic.gdx.utils.Array;
 import com.badlogic.gdx.utils.Disposable;
 import com.badlogic.gdx.utils.viewport.ExtendViewport;
 import whitelabeltest.gamemanagers.audio.AudioSettings;
+import whitelabeltest.gamemanagers.background.GraphicsSettings;
 import whitelabeltest.gamemanagers.input.KeyBindings;
 import whitelabeltest.gamemanagers.input.KeyBindings.Action;
 import whitelabeltest.gamemanagers.input.KeyBindings.GamepadButton;
@@ -41,7 +42,7 @@ import java.util.function.Consumer;
 import java.util.function.Supplier;
 
 /** Options is a small menu tree: a top-level page with entries that open the Key Bindings and
- *  Audio pages, each of which returns to the top level on Back rather than leaving Options
+ *  Audio pages (plus the Background Shaders quality toggle), each of which returns to the top level on Back rather than leaving Options
  *  outright. All three pages share one row/column focus-navigation system (keyboard click,
  *  mouse click and gamepad D-Pad+A all resolve to the same per-cell Runnable - see
  *  {@link #rowActivators}) so moveRow/moveCol/activateFocused/handleControllerNavigation don't
@@ -252,7 +253,23 @@ public class OptionsScreen implements Disposable {
         menuRows.add(new TextButton[]{audioButton, null});
         menuActivators.add(new Runnable[]{openAudio, null});
 
+        // Cycles High -> Medium -> Low in place (no sub-page). Read when a stage's background is built, so it applies from
+        // the next stage - see GraphicsSettings.
+        TextButton shaderQualityButton = new TextButton(shaderQualityText(), skin);
+        Runnable toggleShaderQuality = () -> {
+            GraphicsSettings.setShaderQuality(GraphicsSettings.getShaderQuality().next());
+            shaderQualityButton.setText(shaderQualityText());
+        };
+        onClick(shaderQualityButton, toggleShaderQuality);
+        table.add(shaderQualityButton).width(5f * UI_SCALE).height(0.4f * UI_SCALE).pad(0.08f * UI_SCALE).row();
+        menuRows.add(new TextButton[]{shaderQualityButton, null});
+        menuActivators.add(new Runnable[]{toggleShaderQuality, null});
+
         return table;
+    }
+
+    private static String shaderQualityText() {
+        return "Background Shaders: " + GraphicsSettings.getShaderQuality().label;
     }
 
     private void buildKeyBindingsTable() {

@@ -7,10 +7,16 @@ import com.badlogic.gdx.graphics.glutils.ShaderProgram;
 
 public class TutorialBoxTunnelShader implements BackgroundShader {
     private final ShaderProgram shader;
+    private final GraphicsSettings.ShaderQuality quality;
     private float time;
 
     public TutorialBoxTunnelShader() {
-        shader = ShaderLoader.compile("TutorialBoxTunnelShader", "background.vert", "tunnel.frag");
+        // See GraphicsSettings.ShaderQuality - lower levels march fewer, longer steps (the define), and
+        // ReducedResolutionRenderer renders them smaller and, at LOW, less often.
+        quality = GraphicsSettings.getShaderQuality();
+        shader = quality.define != null
+            ? ShaderLoader.compile("TutorialBoxTunnelShader", "background.vert", "tunnel.frag", quality.define)
+            : ShaderLoader.compile("TutorialBoxTunnelShader", "background.vert", "tunnel.frag");
     }
 
     @Override
@@ -38,6 +44,11 @@ public class TutorialBoxTunnelShader implements BackgroundShader {
 
         batch.setShader(previousShader);
         batch.setPackedColor(previousPackedColor);
+    }
+
+    @Override
+    public GraphicsSettings.ShaderQuality quality() {
+        return quality;
     }
 
     @Override

@@ -17,4 +17,10 @@ public interface BackgroundShader extends Disposable {
     void resetTime();
 
     void render(SpriteBatch batch, Texture quadTexture, float worldWidth, float worldHeight);
+
+    /** The quality level this shader was built at - ReducedResolutionRenderer picks its resolution and
+     *  redraw rate from it. HIGH for shaders that don't offer cheaper variants. */
+    default GraphicsSettings.ShaderQuality quality() {
+        return GraphicsSettings.ShaderQuality.HIGH;
+    }
 }

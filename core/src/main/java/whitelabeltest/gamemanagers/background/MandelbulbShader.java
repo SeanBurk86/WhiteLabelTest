@@ -29,6 +29,7 @@ public class MandelbulbShader implements BackgroundShader {
     private static final float INSIDE_PARAM_RATE = 0.25f;
 
     private final ShaderProgram shader;
+    private final GraphicsSettings.ShaderQuality quality;
     private float time;
     // The clocks below are integrated (not derived from `time`) because their rates change with the dive
     // - deriving them would make the value jump whenever the rate does.
@@ -42,7 +43,12 @@ public class MandelbulbShader implements BackgroundShader {
     private float diveDistance = -1f;
 
     public MandelbulbShader() {
-        shader = ShaderLoader.compile("MandelbulbShader", "background.vert", "mandelbulb.frag");
+        // See GraphicsSettings.ShaderQuality - lower levels march fewer, longer steps (the define), and
+        // ReducedResolutionRenderer renders them smaller and, at LOW, less often.
+        quality = GraphicsSettings.getShaderQuality();
+        shader = quality.define != null
+            ? ShaderLoader.compile("MandelbulbShader", "background.vert", "mandelbulb.frag", quality.define)
+            : ShaderLoader.compile("MandelbulbShader", "background.vert", "mandelbulb.frag");
     }
 
     /** The camera's current distance into the stage - see the class doc. */
@@ -113,6 +119,11 @@ public class MandelbulbShader implements BackgroundShader {
 
         batch.setShader(previousShader);
         batch.setPackedColor(previousPackedColor);
+    }
+
+    @Override
+    public GraphicsSettings.ShaderQuality quality() {
+        return quality;
     }
 
     @Override
