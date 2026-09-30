@@ -12,6 +12,10 @@ public class ReplayData {
     public int finalScore;
     public int stagesReached;
     public boolean wasGameOver;
+    // Identify the code and data the run was played on; a validating server must simulate with
+    // the same ones (see BuildFingerprint). Null in replays recorded before these existed.
+    public String gameBuild;
+    public String dataHash;
     public Array<ReplayFrame> frames = new Array<>();
 
     public ReplayData() {}

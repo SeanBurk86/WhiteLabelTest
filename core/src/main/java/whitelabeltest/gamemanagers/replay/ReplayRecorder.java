@@ -4,6 +4,7 @@ import whitelabeltest.gamemanagers.input.InputManager;
 import com.badlogic.gdx.Gdx;
 import com.badlogic.gdx.utils.Json;
 import com.badlogic.gdx.utils.SerializationException;
+import whitelabeltest.online.BuildFingerprint;
 import whitelabeltest.player.WeaponLoadout;
 
 /** Records one run's frames and saves them to ~/WhiteLabelTest/replays/ (external storage, a stable
@@ -20,6 +21,8 @@ public class ReplayRecorder {
         data.stageSequenceId = stageSequenceId;
         data.weaponLoadout = loadout.name();
         data.recordedAtEpochMillis = System.currentTimeMillis();
+        data.gameBuild = BuildFingerprint.GAME_BUILD;
+        data.dataHash = BuildFingerprint.dataHash();
     }
 
     public void record(float delta, InputManager input) {
@@ -48,8 +51,16 @@ public class ReplayRecorder {
         data.wasGameOver = wasGameOver;
     }
 
+    public boolean isNonTrivial() {
+        return data.frames.size >= MIN_FRAMES_TO_SAVE;
+    }
+
+    public ReplayData getData() {
+        return data;
+    }
+
     public void saveIfNonTrivial() {
-        if (data.frames.size < MIN_FRAMES_TO_SAVE) return;
+        if (!isNonTrivial()) return;
         String path = REPLAY_DIR + "replay_" + data.recordedAtEpochMillis + ".json";
         try {
             Json json = new Json();
