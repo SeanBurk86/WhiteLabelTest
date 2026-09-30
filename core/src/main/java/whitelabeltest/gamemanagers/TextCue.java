@@ -44,5 +44,11 @@ public class TextCue {
     // SpawnScheduler.seekTo()'s simplified reconstruction under that mode.
     public boolean dismissed = false;
 
+    // True: this one cue stays on screen past its own duration (and shows the "press to continue"
+    // hint) until `dismissed` is set - the per-cue equivalent of the schedule-wide
+    // textCuesRequireConfirm flag, set by TriggerManager.fireTextCue() from Trigger.requireConfirm
+    // since trigger-driven stages (e.g. the tutorial) never turn that schedule-wide flag on.
+    public boolean requireConfirm = false;
+
     public TextCue() {}
 }

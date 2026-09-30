@@ -989,19 +989,16 @@ public class GameController implements Disposable {
         entities.destroyAllPlayerBullets();
         // Whichever source's window actually contains the current position wins - same priority
         // isInPracticeSection() above already checks (spawnScheduler first, then triggerManager).
-        float checkpointStart;
         if (spawnScheduler != null) {
-            checkpointStart = spawnScheduler.isInPracticeSection(spawnScheduler.getTotalTime())
+            float checkpointStart = spawnScheduler.isInPracticeSection(spawnScheduler.getTotalTime())
                 ? spawnScheduler.getPracticeCheckpointStart(spawnScheduler.getTotalTime())
                 : spawnScheduler.getTotalTime();
+            spawnScheduler.seekTo(checkpointStart, audio);
+            if (triggerManager != null) triggerManager.seekTo(checkpointStart);
         } else if (triggerManager != null) {
-            float position = triggerManager.getCamera().getPosition();
-            checkpointStart = triggerManager.isInPracticeSection(position) ? triggerManager.getPracticeCheckpointStart(position) : position;
-        } else {
-            checkpointStart = 0f;
+            // Also swaps in the checkpoint's retry-only dialogue - see Trigger.firstAttemptOnly/retryOnly.
+            triggerManager.seekToPracticeRetry(triggerManager.getCamera().getPosition());
         }
-        if (spawnScheduler != null) spawnScheduler.seekTo(checkpointStart, audio);
-        if (triggerManager != null) triggerManager.seekTo(checkpointStart);
         syncStageMusic();
         entities.clearWorld();
     }

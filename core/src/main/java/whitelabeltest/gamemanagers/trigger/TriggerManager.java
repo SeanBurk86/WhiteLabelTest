@@ -109,6 +109,10 @@ public class TriggerManager {
     // SpawnScheduler running, so UIManager.drawTextCues() keeps working unmodified either way.
     private float realTime = 0f;
     private Array<DistanceWindow> practiceCheckpoints = new Array<>();
+    // The practice checkpoint the player has been rewound into after a failed attempt (see
+    // seekToPracticeRetry()), or null on a first attempt - decides which of Trigger.firstAttemptOnly/
+    // retryOnly plays inside that window (see isSkippedThisAttempt()).
+    private DistanceWindow retryCheckpoint;
     private Array<DistanceWindow> invincibilityWindows = new Array<>();
     private Array<DistanceWindow> weaponsDisabledWindows = new Array<>();
     private Array<DistanceWindow> hyperAttackDisabledWindows = new Array<>();
@@ -302,6 +306,12 @@ public class TriggerManager {
             float armDistance = Math.max(0f, trigger.distance - trigger.spawnLead);
             if (!trigger.armed) {
                 if (armDistance < minY || armDistance >= maxY) continue;
+                if (isSkippedThisAttempt(trigger)) {
+                    trigger.armed = true;
+                    trigger.actionFired = true;
+                    trigger.fired = true;
+                    continue;
+                }
                 trigger.armed = true;
                 armConditions(trigger, scoreManager, player);
             }
@@ -411,7 +421,9 @@ public class TriggerManager {
             if (!cue.typingSoundActive) continue;
             float cueElapsedTime = realTime - cue.triggeredAtRealTime;
             float revealDuration = cue.charsPerSecond > 0f ? cue.text.length() / cue.charsPerSecond : 0f;
-            if (cueElapsedTime >= revealDuration || cueElapsedTime >= cue.duration) {
+            // A confirm-gated cue stays up past its duration (see TextCue.requireConfirm), so its
+            // reveal - and typing sound - keeps going until the text is fully shown.
+            if (cueElapsedTime >= revealDuration || (!cue.requireConfirm && cueElapsedTime >= cue.duration)) {
                 audio.stopTextCueLoop();
                 cue.typingSoundActive = false;
             }
@@ -807,6 +819,7 @@ public class TriggerManager {
         cue.text = trigger.text;
         cue.effect = trigger.textEffect;
         cue.duration = trigger.textDuration;
+        cue.requireConfirm = trigger.requireConfirm;
         cue.x = trigger.textX;
         cue.y = trigger.textY;
         cue.centered = trigger.textCentered;
@@ -946,6 +959,27 @@ public class TriggerManager {
         return checkpoint != null ? checkpoint.start : distance;
     }
 
+    /** See Trigger.firstAttemptOnly/retryOnly - true if trigger should be skipped rather than played
+     *  on the current pass through its own practice checkpoint. */
+    private boolean isSkippedThisAttempt(Trigger trigger) {
+        if (!trigger.firstAttemptOnly && !trigger.retryOnly) return false;
+        boolean retrying = retryCheckpoint != null
+            && trigger.distance >= retryCheckpoint.start && trigger.distance < retryCheckpoint.end;
+        return trigger.retryOnly ? !retrying : retrying;
+    }
+
+    /** seekTo() back to the start of the practice checkpoint containing `distance` after a failed
+     *  attempt - same rewind GameController.restartPracticeSection() always did, plus marking that
+     *  checkpoint as being retried so its Trigger.firstAttemptOnly/retryOnly variants swap (see
+     *  isSkippedThisAttempt()). Returns the distance rewound to. */
+    public float seekToPracticeRetry(float distance) {
+        DistanceWindow checkpoint = findCheckpoint(distance);
+        float target = checkpoint != null ? checkpoint.start : distance;
+        seekTo(target);
+        retryCheckpoint = checkpoint;
+        return target;
+    }
+
     private DistanceWindow findCheckpoint(float distance) {
         for (DistanceWindow checkpoint : practiceCheckpoints) {
             if (distance >= checkpoint.start && distance < checkpoint.end) return checkpoint;
@@ -989,6 +1023,7 @@ public class TriggerManager {
         realTime = 0f;
         liveTextCues.clear();
         activeGate = null;
+        retryCheckpoint = null;
         gemsAtLastWaypointSpawn = -1;
         enemiesDestroyedAtLastSpawn = -1;
         for (Trigger trigger : triggers) {
@@ -1013,6 +1048,7 @@ public class TriggerManager {
         camera.seekTo(targetDistance);
         liveTextCues.clear();
         activeGate = null;
+        retryCheckpoint = null; // a plain (debug) seek is a fresh pass - see seekToPracticeRetry()
         spawnGroupExpected.clear();
         gemsAtLastWaypointSpawn = -1;
         enemiesDestroyedAtLastSpawn = -1;

@@ -73,6 +73,15 @@ public class Trigger {
     // tutorial) - see TriggerManager.isScheduleEndTriggered()/Main.java's own level-complete check.
     public boolean scheduleEnd = false;
 
+    // Practice-checkpoint retry variants (see TriggerFile.practiceCheckpoints/TriggerManager.
+    // seekToPracticeRetry()): once a hit rewinds the player to a checkpoint's start, every trigger
+    // inside that checkpoint's window with firstAttemptOnly is skipped instead of replayed, and every
+    // one with retryOnly plays in its place - e.g. swapping a drill's intro dialogue for a shorter
+    // "let's try that again" hint. A retryOnly trigger is skipped on the first pass through, and both
+    // flags are meaningless on a trigger outside any practice checkpoint.
+    public boolean firstAttemptOnly = false;
+    public boolean retryOnly = false;
+
     // --- Enemy spawn/despawn/silence/waypoint-gem/weapon-swap - identical meaning to the same-named
     // fields on SpawnScheduler.SpawnEvent; see that class's docs for each. Also doubles as the sprite
     // cue's draw position (x/y) when spriteTexture is set below, same "reuse the generic x/y" economy

@@ -1319,8 +1319,9 @@ public class UIManager implements Disposable {
             if (cue.dismissed || cue.triggeredAtRealTime < 0f) continue;
             float cueElapsedTime = realTime - cue.triggeredAtRealTime;
             if (cueElapsedTime < 0f) continue;
-            if (!requireConfirm && cueElapsedTime >= cue.duration) continue;
-            drawTextCue(batch, cue, cueElapsedTime, requireConfirm, confirmKeyLabel);
+            boolean cueRequiresConfirm = requireConfirm || cue.requireConfirm;
+            if (!cueRequiresConfirm && cueElapsedTime >= cue.duration) continue;
+            drawTextCue(batch, cue, cueElapsedTime, cueRequiresConfirm, confirmKeyLabel);
         }
         font.setColor(Color.WHITE);
     }

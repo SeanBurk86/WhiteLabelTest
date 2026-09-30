@@ -112,6 +112,25 @@ public class PropertiesPanel extends ScrollPane {
 
         root.getChildren().add(sectionLabel("Trigger Event"));
         root.getChildren().add(numberRow("Distance", trigger.distance, v -> { trigger.distance = v; onEdited(); }));
+        // See Trigger.gate/requireConfirm's own docs.
+        root.getChildren().add(FormControls.checkBox("Gate (freezes the camera until resolved)", trigger.gate,
+            v -> { trigger.gate = v; onEdited(); }));
+        root.getChildren().add(FormControls.checkBox("Require confirm (waits for a FIRE press)", trigger.requireConfirm,
+            v -> { trigger.requireConfirm = v; onEdited(); }));
+        // See Trigger.firstAttemptOnly/retryOnly - mutually exclusive, so checking one clears the
+        // other (showTrigger() rebuilds the form so the cleared box visibly unchecks too).
+        root.getChildren().add(FormControls.checkBox("First attempt only (skipped on a practice retry)", trigger.firstAttemptOnly, v -> {
+            trigger.firstAttemptOnly = v;
+            if (v) trigger.retryOnly = false;
+            onEdited();
+            showTrigger(trigger);
+        }));
+        root.getChildren().add(FormControls.checkBox("Retry only (plays after failing a practice section)", trigger.retryOnly, v -> {
+            trigger.retryOnly = v;
+            if (v) trigger.firstAttemptOnly = false;
+            onEdited();
+            showTrigger(trigger);
+        }));
 
         root.getChildren().add(new Separator());
         buildConditionsSection();
