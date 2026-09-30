@@ -3,6 +3,7 @@ package whitelabeltest.gamemanagers.audio;
 import com.badlogic.gdx.Gdx;
 import com.badlogic.gdx.audio.Music;
 import com.badlogic.gdx.audio.Sound;
+import com.badlogic.gdx.math.RandomXS128;
 import com.badlogic.gdx.utils.Array;
 import com.badlogic.gdx.utils.Disposable;
 import com.badlogic.gdx.utils.Json;
@@ -70,6 +71,13 @@ public class AudioManager implements Disposable {
     // Audio clock and when each throttled sound last played.
     private float clock;
     private float lastPointGem = -1f, lastExplosion = -1f, lastOrbitGong = -1f, lastHaloBash = -1f;
+    // Picks sound-bank variants. Separate from MathUtils.random (the gameplay RNG), so muting or
+    // skipping sounds can't change the game's random sequence and break replays.
+    private final RandomXS128 soundRandom = new RandomXS128();
+
+    private Sound pick(Array<Sound> bank) {
+        return bank.get(soundRandom.nextInt(bank.size));
+    }
 
     public AudioManager(AudioSettings settings) {
         this.settings = settings;
@@ -299,38 +307,38 @@ public class AudioManager implements Disposable {
         if (clock - lastPointGem < POINT_GEM_SOUND_INTERVAL && lastPointGem >= 0f) return;
         lastPointGem = clock;
         PerfProbe.soundStarted();
-        if (!muted && pointGemSounds != null) pointGemSounds.get(1).random().play(settings.getEffectiveSfxVolume());
+        if (!muted && pointGemSounds != null) pick(pointGemSounds.get(1)).play(settings.getEffectiveSfxVolume());
     }
 
     public void playExplosion() {
         if (clock - lastExplosion < EXPLOSION_SOUND_INTERVAL && lastExplosion >= 0f) return;
         lastExplosion = clock;
         PerfProbe.soundStarted();
-        if (!muted && explosionSounds != null) explosionSounds.get(1).random().play(settings.getEffectiveSfxVolume());
+        if (!muted && explosionSounds != null) pick(explosionSounds.get(1)).play(settings.getEffectiveSfxVolume());
     }
 
     public void playOrbitGong() {
         if (clock - lastOrbitGong < ORBIT_GONG_SOUND_INTERVAL && lastOrbitGong >= 0f) return;
         lastOrbitGong = clock;
         PerfProbe.soundStarted();
-        if (!muted && orbitGongSounds != null) orbitGongSounds.get(1).random().play(settings.getEffectiveSfxVolume());
+        if (!muted && orbitGongSounds != null) pick(orbitGongSounds.get(1)).play(settings.getEffectiveSfxVolume());
     }
 
     public void playBasicWeaponSound(int level) {
-        if (!muted && basicWeaponSounds != null && basicWeaponSounds.containsKey(level)) basicWeaponSounds.get(level).random().play(settings.getEffectiveSfxVolume());
+        if (!muted && basicWeaponSounds != null && basicWeaponSounds.containsKey(level)) pick(basicWeaponSounds.get(level)).play(settings.getEffectiveSfxVolume());
     }
 
     public void playWaveBlastWeaponSound(int level) {
-        if (!muted && waveBlastWeaponSounds != null && waveBlastWeaponSounds.containsKey(level)) waveBlastWeaponSounds.get(level).random().play(settings.getEffectiveSfxVolume());
+        if (!muted && waveBlastWeaponSounds != null && waveBlastWeaponSounds.containsKey(level)) pick(waveBlastWeaponSounds.get(level)).play(settings.getEffectiveSfxVolume());
     }
 
     public void playOrbitWhip() {
         PerfProbe.soundStarted();
-        if (!muted && orbitWhipSounds != null) orbitWhipSounds.get(1).random().play(settings.getEffectiveSfxVolume());
+        if (!muted && orbitWhipSounds != null) pick(orbitWhipSounds.get(1)).play(settings.getEffectiveSfxVolume());
     }
 
     public void playThunderboltWeaponSound(int level) {
-        if (!muted && thunderboltWeaponSounds != null && thunderboltWeaponSounds.containsKey(level)) thunderboltWeaponSounds.get(level).random().play(settings.getEffectiveSfxVolume());
+        if (!muted && thunderboltWeaponSounds != null && thunderboltWeaponSounds.containsKey(level)) pick(thunderboltWeaponSounds.get(level)).play(settings.getEffectiveSfxVolume());
     }
 
     public void playThunderboltNullSound() {

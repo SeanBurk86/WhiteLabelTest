@@ -13,5 +13,6 @@ public class ReplayPlayer {
     public ReplayFrame next() { return data.frames.get(cursor++); }
     public long getSeed() { return data.rngSeed; }
     public ReplayData getData() { return data; }
+    public int getFramesPlayed() { return cursor; }
     public float getProgress() { return data.frames.size == 0 ? 1f : cursor / (float) data.frames.size; }
 }

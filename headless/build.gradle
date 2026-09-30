@@ -1,0 +1,20 @@
+plugins {
+  id "application"
+}
+
+eclipse.project.name = appName + '-headless'
+
+application.mainClass = 'whitelabeltest.headless.ReplayValidatorMain'
+
+dependencies {
+  api project(':core')
+  api "com.badlogicgames.gdx:gdx-backend-headless:$gdxVersion"
+  // Native code for Pixmap decoding (textures are loaded for their dimensions).
+  implementation "com.badlogicgames.gdx:gdx-platform:$gdxVersion:natives-desktop"
+}
+
+// gradlew headless:run --args="<replay.json> [more.json ...]"
+// Asset paths are relative to assets/, like the game.
+run {
+  workingDir = rootProject.file('assets').path
+}

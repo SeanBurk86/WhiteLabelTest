@@ -28,6 +28,7 @@ import whitelabeltest.gamemanagers.input.InputType;
 import whitelabeltest.gamemanagers.input.KeyBindings;
 import whitelabeltest.gamemanagers.replay.ReplayData;
 import whitelabeltest.gamemanagers.UIManager;
+import whitelabeltest.online.OnlineServices;
 import whitelabeltest.player.WeaponLoadout;
 import whitelabeltest.player.powerups.Powerup;
 import whitelabeltest.player.weapons.ThunderboltWeapon;
@@ -37,7 +38,7 @@ import whitelabeltest.perf.PerfProbe;
 /** Application root: a small state machine over the menu screens and the game (GameController),
  *  plus the letterboxed draw and the debug hitbox overlay. */
 public class Main extends ApplicationAdapter {
-    private enum AppState { START, WEAPON_SELECT, OPTIONS, REPLAY_SELECT, PLAYING }
+    private enum AppState { USERNAME, START, WEAPON_SELECT, OPTIONS, REPLAY_SELECT, LEADERBOARD, PLAYING }
 
     /** The editor's Quick Play settings (read from system properties by Lwjgl3Launcher); null for
      *  a normal launch. */
@@ -76,6 +77,9 @@ public class Main extends ApplicationAdapter {
     private InputType pendingInputType;
     private OptionsScreen optionsScreen;
     private ReplaySelectScreen replaySelectScreen;
+    private UsernameScreen usernameScreen;
+    private LeaderboardScreen leaderboardScreen;
+    private OnlineServices online;
     // Watching a replay picked from the menu: when it ends or is cancelled, return to the start screen.
     private boolean replayFromMenu;
     private KeyBindings keyBindings;
@@ -129,9 +133,16 @@ public class Main extends ApplicationAdapter {
         keyBindings = new KeyBindings();
         audioSettings = new AudioSettings();
         PerfProbe.init();
+        online = new OnlineServices();
         if (startAutoReplay()) return;
         if (quickPlay != null) {
             transitionToQuickPlay();
+            return;
+        }
+        online.start();
+        // A leaderboard name is required before anything else.
+        if (online.account.needsUsername()) {
+            transitionToUsername();
         } else {
             startScreen = new StartScreen(PLAY_AREA_WIDTH, PLAY_AREA_HEIGHT, audioSettings);
         }
@@ -147,7 +158,23 @@ public class Main extends ApplicationAdapter {
 
     private void renderFrame() {
         float delta = Gdx.graphics.getDeltaTime();
-        if (state == AppState.START) {
+        if (state == AppState.USERNAME) {
+            boolean done = usernameScreen.update(delta);
+            drawScreen(usernameScreen::draw);
+            if (done) {
+                usernameScreen.dispose();
+                usernameScreen = null;
+                startScreen = new StartScreen(PLAY_AREA_WIDTH, PLAY_AREA_HEIGHT, audioSettings);
+                state = AppState.START;
+            }
+        } else if (state == AppState.START) {
+            // A name picked offline can be rejected once the server is reached; pick again.
+            if (online.account.needsUsername()) {
+                startScreen.dispose();
+                startScreen = null;
+                transitionToUsername();
+                return;
+            }
             InputType detected = startScreen.update(delta);
             drawStartScreen();
             if (detected != null) {
@@ -160,6 +187,19 @@ public class Main extends ApplicationAdapter {
                 transitionToOptions();
             } else if (startScreen.consumeReplaysRequested()) {
                 transitionToReplaySelect();
+            } else if (startScreen.consumeLeaderboardRequested()) {
+                // startScreen stays alive (music keeps playing), as for Options and Replays.
+                leaderboardScreen = new LeaderboardScreen(PLAY_AREA_WIDTH, PLAY_AREA_HEIGHT, online);
+                state = AppState.LEADERBOARD;
+            }
+        } else if (state == AppState.LEADERBOARD) {
+            if (startScreen != null) startScreen.applyMusicVolume();
+            boolean back = leaderboardScreen.update(delta);
+            drawScreen(leaderboardScreen::draw);
+            if (back) {
+                leaderboardScreen.dispose();
+                leaderboardScreen = null;
+                state = AppState.START;
             }
         } else if (state == AppState.WEAPON_SELECT) {
             WeaponLoadout chosen = weaponSelectScreen.update(delta);
@@ -222,6 +262,7 @@ public class Main extends ApplicationAdapter {
         weaponSelectScreen.dispose();
         weaponSelectScreen = null;
         game = new GameController(PLAY_AREA_WIDTH, PLAY_AREA_HEIGHT, keyBindings, audioSettings, loadout);
+        game.setRunFinishedListener(online.submitter::onRunFinished);
         game.setActiveInput(inputType);
         ui = new UIManager(inputType);
         state = AppState.PLAYING;
@@ -339,6 +380,20 @@ public class Main extends ApplicationAdapter {
         }
         startScreen = new StartScreen(PLAY_AREA_WIDTH, PLAY_AREA_HEIGHT, audioSettings);
         state = AppState.START;
+    }
+
+    private void transitionToUsername() {
+        usernameScreen = new UsernameScreen(PLAY_AREA_WIDTH, PLAY_AREA_HEIGHT, audioSettings, online);
+        state = AppState.USERNAME;
+    }
+
+    private void drawScreen(java.util.function.Consumer<SpriteBatch> drawer) {
+        ScreenUtils.clear(Color.BLACK);
+        viewport.apply();
+        spriteBatch.setProjectionMatrix(viewport.getCamera().combined);
+        spriteBatch.begin();
+        drawer.accept(spriteBatch);
+        spriteBatch.end();
     }
 
     private void drawStartScreen() {
@@ -571,6 +626,8 @@ public class Main extends ApplicationAdapter {
         if (weaponSelectScreen != null) weaponSelectScreen.dispose();
         if (optionsScreen != null) optionsScreen.dispose();
         if (replaySelectScreen != null) replaySelectScreen.dispose();
+        if (usernameScreen != null) usernameScreen.dispose();
+        if (leaderboardScreen != null) leaderboardScreen.dispose();
         if (startScreenConfirmSound != null) startScreenConfirmSound.dispose();
         if (weaponSelectConfirmSound != null) weaponSelectConfirmSound.dispose();
         if (replaySelectConfirmSound != null) replaySelectConfirmSound.dispose();

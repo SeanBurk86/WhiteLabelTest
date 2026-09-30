@@ -1,0 +1,21 @@
+plugins {
+  id "application"
+}
+
+eclipse.project.name = appName + '-leaderboard-mock'
+
+application.mainClass = 'whitelabeltest.leaderboardmock.MockLeaderboardServer'
+
+dependencies {
+  // UsernameGenerator and ReplayData from core; HeadlessReplayValidator to re-simulate replays.
+  implementation project(':headless')
+}
+
+// gradlew leaderboard-mock:run [-Pport=8787]
+// Runs in assets/ (the replay simulation loads game data from there); the player store lives in
+// this module's folder.
+run {
+  workingDir = rootProject.file('assets').path
+  systemProperty 'mock.store', project.file('mock-leaderboard.json').path
+  if (project.hasProperty('port')) args += project.property('port')
+}

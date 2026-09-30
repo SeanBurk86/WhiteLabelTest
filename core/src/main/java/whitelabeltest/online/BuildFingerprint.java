@@ -9,7 +9,7 @@ import java.security.MessageDigest;
 /** Identifies the code and data a run was played on, so a validating server can re-simulate a
  *  replay with the same build. Bump GAME_BUILD whenever a code change could alter a replay. */
 public final class BuildFingerprint {
-    public static final String GAME_BUILD = "1.0.0";
+    public static final String GAME_BUILD = "1.1.0";
 
     private static String cachedDataHash;
 

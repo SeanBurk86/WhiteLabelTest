@@ -21,6 +21,7 @@ import whitelabeltest.gamemanagers.replay.ReplayBrowser;
 import whitelabeltest.gamemanagers.replay.ReplayData;
 import whitelabeltest.gamemanagers.replay.ReplayPlayer;
 import whitelabeltest.gamemanagers.replay.ReplayRecorder;
+import whitelabeltest.gamemanagers.replay.ReplayResult;
 import whitelabeltest.gamemanagers.background.ScrollingBackground;
 import whitelabeltest.gamemanagers.background.Stage2KaleidoscopeShader;
 import whitelabeltest.enemy.EnemyDefinitionLoader;
@@ -98,6 +99,19 @@ public class GameController implements Disposable {
     private final ReplayBrowser replayBrowser = new ReplayBrowser();
     private ReplayRecorder recorder;
     private ReplayPlayer replayPlayer;
+    // Receives each finished run's replay for the leaderboard. A run stops being eligible once
+    // debug mode is used, since debug changes (weapon levels, lives) aren't recorded.
+    private java.util.function.Consumer<ReplayData> runFinishedListener;
+    private boolean runEligibleForLeaderboard;
+
+    // Headless mode simulates a replay with no rendering (see simulateReplay()). Shaders, videos
+    // and debug tools are skipped; draw() must not be called.
+    private final boolean headless;
+    // Headless: set once the initial reset for the replay is done, so the next reset() (the
+    // replayed run ending on a confirm press) is recognised as the end of the run.
+    private boolean headlessRunStarted;
+    private ReplayResult headlessResult;
+    private boolean headlessSawSeek;
 
     // Pre-stage video.
     private final InterstitialPlayer interstitialPlayer = new InterstitialPlayer();
@@ -175,6 +189,12 @@ public class GameController implements Disposable {
 
     /** @param stageSequenceId the stage_sequences.json entry this run plays. */
     public GameController(float worldWidth, float worldHeight, KeyBindings keyBindings, AudioSettings audioSettings, WeaponLoadout loadout, String stageSequenceId) {
+        this(worldWidth, worldHeight, keyBindings, audioSettings, loadout, stageSequenceId, false);
+    }
+
+    private GameController(float worldWidth, float worldHeight, KeyBindings keyBindings, AudioSettings audioSettings,
+                           WeaponLoadout loadout, String stageSequenceId, boolean headless) {
+        this.headless = headless;
         this.worldWidth = worldWidth;
         this.worldHeight = worldHeight;
         this.loadout = loadout;
@@ -190,8 +210,8 @@ public class GameController implements Disposable {
         this.scoreManager = new ScoreManager(assets.getGameBalance().defaultChainWindow);
         this.debugSaveStateManager = new DebugSaveStateManager();
 
-        if (System.getProperty("debug") != null ||
-            java.lang.management.ManagementFactory.getRuntimeMXBean().getInputArguments().toString().contains("-agentlib:jdwp")) {
+        if (!headless && (System.getProperty("debug") != null ||
+            java.lang.management.ManagementFactory.getRuntimeMXBean().getInputArguments().toString().contains("-agentlib:jdwp"))) {
             this.debugToolsAvailable = true;
             this.debugMode = true;
         }
@@ -200,16 +220,19 @@ public class GameController implements Disposable {
     }
 
     public void update(float delta) {
+        if (headlessResult != null) return; // the headless replay has finished
         ReplayFrame frame = null;
         // Like recording, playback skips frames while the debug menu or an interstitial is up, so
         // neither consumes replay frames.
         if (replayPlayer != null && !debugMenuOpen && !interstitialPlayer.isActive()) {
             if (!replayPlayer.hasNext()) {
-                stopReplay();
+                if (headless) endHeadlessRun();
+                else stopReplay();
                 return;
             }
             frame = replayPlayer.next();
             if (!Float.isNaN(frame.seekToTime)) {
+                headlessSawSeek = true;
                 if (spawnScheduler != null) spawnScheduler.seekTo(frame.seekToTime, audio);
                 if (triggerManager != null) triggerManager.seekTo(frame.seekToTime);
                 syncStageMusic();
@@ -242,6 +265,7 @@ public class GameController implements Disposable {
         if (debugToolsAvailable && input.isDebugToggleJustPressed()) {
             debugMode = !debugMode;
         }
+        if (debugMode) runEligibleForLeaderboard = false;
 
         if (debugMode && input.isDebugMuteJustPressed()) {
             boolean nowMuted = !audio.isMuted();
@@ -671,7 +695,7 @@ public class GameController implements Disposable {
         StageDefinition stageDef = assets.getStageDefinition(stageSequence.get(index));
         currentStageDef = stageDef;
         if (background != null) background.dispose();
-        background = new ScrollingBackground(worldWidth, worldHeight, audioSettings, assets, stageDef.backgroundLayers, stageDef.bossVideo, stageDef.backgroundVideo, stageDef.shaderBackground, stageDef.hueCycleBackground, stageDef.playerFeedbackBackground);
+        background = new ScrollingBackground(worldWidth, worldHeight, audioSettings, assets, stageDef.backgroundLayers, stageDef.bossVideo, stageDef.backgroundVideo, stageDef.shaderBackground, stageDef.hueCycleBackground, stageDef.playerFeedbackBackground, headless);
         background.setMuted(audio.isMuted());
         // A trigger file replaces the schedule entirely, so the editor and the game always agree.
         if (stageDef.triggerFile != null) {
@@ -726,6 +750,12 @@ public class GameController implements Disposable {
             return;
         }
         String chosen = videos.get(MathUtils.random(videos.size - 1));
+        // Headless: the pick above still consumes its random value, but nothing plays. Replays
+        // don't consume frames during interstitials, so skipping them changes nothing else.
+        if (headless) {
+            audio.playStageMusic();
+            return;
+        }
         interstitialPlayer.play(chosen, audio.isMuted() ? 0f : audioSettings.getEffectiveMusicVolume());
     }
 
@@ -1006,16 +1036,34 @@ public class GameController implements Disposable {
         interstitialPlayer.draw(batch, worldWidth, worldHeight);
     }
 
-    public void reset() {
-        if (recorder != null) {
-            recorder.setSummary(scoreManager.getScore(), stageIndex + 1, gameOver);
-            recorder.saveIfNonTrivial();
+    public void setRunFinishedListener(java.util.function.Consumer<ReplayData> listener) {
+        this.runFinishedListener = listener;
+    }
+
+    /** Ends the current recording: saves it and hands it to the leaderboard if eligible. */
+    private void finishRecording() {
+        if (recorder == null) return;
+        recorder.setSummary(scoreManager.getScore(), stageIndex + 1, gameOver);
+        recorder.saveIfNonTrivial();
+        if (runEligibleForLeaderboard && runFinishedListener != null && recorder.isNonTrivial()) {
+            runFinishedListener.accept(recorder.getData());
         }
+    }
+
+    public void reset() {
+        // Headless: a reset after the run started is the replayed run ending (a confirm press after
+        // the last stage), which is exactly where the live game took its recording summary.
+        if (headless && headlessRunStarted) {
+            endHeadlessRun();
+            return;
+        }
+        finishRecording();
         long seed = replayPlayer != null ? replayPlayer.getSeed() : System.nanoTime();
         MathUtils.random.setSeed(seed);
         // Tutorial runs aren't recorded.
         boolean recordingEnabled = replayPlayer == null && !stageSequenceId.equals(TUTORIAL_STAGE_SEQUENCE_ID);
         recorder = recordingEnabled ? new ReplayRecorder(stageSequenceId, loadout, seed) : null;
+        runEligibleForLeaderboard = recorder != null && !debugMode && !PerfProbe.INVINCIBLE;
 
         scoreManager.reset();
         gameOver = false;
@@ -1060,15 +1108,59 @@ public class GameController implements Disposable {
         java.util.Arrays.fill(fpsHistory, 0);
         fpsHistoryTimer = 0f;
         startInterstitial();
+        if (headless && replayPlayer != null) headlessRunStarted = true;
+    }
+
+    private void endHeadlessRun() {
+        ReplayResult result = new ReplayResult();
+        result.score = scoreManager.getScore();
+        result.stagesReached = stageIndex + 1;
+        result.gameOver = gameOver;
+        result.framesPlayed = replayPlayer != null ? replayPlayer.getFramesPlayed() : 0;
+        result.totalFrames = replayPlayer != null ? replayPlayer.getData().frames.size : 0;
+        result.containsSeek = headlessSawSeek;
+        result.enemiesDestroyed = scoreManager.getEnemiesDestroyed();
+        result.gemsCollected = scoreManager.getGemsCollected();
+        result.maxChain = scoreManager.getMaxChainCount();
+        result.livesLeft = entities.getPlayer().getNumLives();
+        headlessResult = result;
+    }
+
+    /** Re-runs a recorded run with no rendering and returns how it ended, for validating a
+     *  submitted score: the result should match the replay's recorded summary.
+     *
+     *  Requires a running libGDX Application whose Gdx.gl accepts calls (textures are still
+     *  loaded, because sprite and hitbox sizes come from their dimensions) and whose working
+     *  directory is assets/. The headless module sets this up. Runs synchronously on the calling
+     *  thread, which must be the application's thread. */
+    public static ReplayResult simulateReplay(ReplayData replay, float worldWidth, float worldHeight) {
+        return simulateReplay(replay, worldWidth, worldHeight, null);
+    }
+
+    /** @param afterEachFrame optional hook run after every update, e.g. to call draw() and check
+     *  that drawing doesn't change the outcome */
+    public static ReplayResult simulateReplay(ReplayData replay, float worldWidth, float worldHeight,
+                                              java.util.function.Consumer<GameController> afterEachFrame) {
+        GameController game = new GameController(worldWidth, worldHeight, new KeyBindings(), new AudioSettings(),
+            WeaponLoadout.BASIC_THUNDERBOLT, DEFAULT_STAGE_SEQUENCE_ID, true);
+        try {
+            game.startReplay(replay);
+            if (game.replayPlayer == null) throw new IllegalArgumentException("Replay could not be started (unknown weapon loadout?)");
+            // Each update consumes one frame; the delta passed in is ignored during playback.
+            while (game.headlessResult == null) {
+                game.update(0f);
+                if (afterEachFrame != null && game.headlessResult == null) afterEachFrame.accept(game);
+            }
+            return game.headlessResult;
+        } finally {
+            game.dispose();
+        }
     }
 
     @Override
     public void dispose() {
-        if (recorder != null) {
-            recorder.setSummary(scoreManager.getScore(), stageIndex + 1, gameOver);
-            recorder.saveIfNonTrivial();
-            recorder = null;
-        }
+        finishRecording();
+        recorder = null;
         assets.dispose();
         audio.dispose();
         background.dispose();

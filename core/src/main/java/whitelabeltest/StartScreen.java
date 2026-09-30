@@ -43,12 +43,13 @@ public class StartScreen implements Disposable {
 
     // Replaces the "press any button" sign after the first press. OPTIONS/REPLAYS leave this
     // screen in the MENU phase so it's still showing when the player comes back.
-    private static final String[] MENU_ITEMS = { "ARCADE MODE", "TUTORIAL", "REPLAYS", "OPTIONS", "EXIT" };
+    private static final String[] MENU_ITEMS = { "ARCADE MODE", "TUTORIAL", "LEADERBOARD", "REPLAYS", "OPTIONS", "EXIT" };
     private static final int MENU_ARCADE_MODE = 0;
     private static final int MENU_TUTORIAL = 1;
-    private static final int MENU_REPLAYS = 2;
-    private static final int MENU_OPTIONS = 3;
-    private static final int MENU_EXIT = 4;
+    private static final int MENU_LEADERBOARD = 2;
+    private static final int MENU_REPLAYS = 3;
+    private static final int MENU_OPTIONS = 4;
+    private static final int MENU_EXIT = 5;
 
     /** One looping sprite-sheet sign in the title stack. Height follows from width and the frame's
      *  aspect ratio. */
@@ -113,6 +114,7 @@ public class StartScreen implements Disposable {
     private int menuIndex;
     private boolean optionsRequested;
     private boolean replaysRequested;
+    private boolean leaderboardRequested;
     // Tells Main whether the run being started is the tutorial or arcade mode.
     private boolean tutorialSelected;
     private boolean prevMenuDpadUpDown, prevMenuDpadDownDown, prevMenuConfirmDown;
@@ -232,6 +234,9 @@ public class StartScreen implements Disposable {
             confirmSound = Gdx.audio.newSound(Gdx.files.internal(ARCADE_CONFIRM_SOUND));
             confirmSound.play(audioSettings.getEffectiveSfxVolume());
             phase = Phase.FADING;
+        } else if (menuIndex == MENU_LEADERBOARD) {
+            optionsConfirmSound.play(audioSettings.getEffectiveSfxVolume());
+            leaderboardRequested = true;
         } else if (menuIndex == MENU_REPLAYS) {
             optionsConfirmSound.play(audioSettings.getEffectiveSfxVolume());
             replaysRequested = true;
@@ -261,6 +266,13 @@ public class StartScreen implements Disposable {
     public boolean consumeReplaysRequested() {
         boolean requested = replaysRequested;
         replaysRequested = false;
+        return requested;
+    }
+
+    /** One-shot flag read by Main. */
+    public boolean consumeLeaderboardRequested() {
+        boolean requested = leaderboardRequested;
+        leaderboardRequested = false;
         return requested;
     }
 
@@ -295,7 +307,8 @@ public class StartScreen implements Disposable {
 
     private void drawMenu(SpriteBatch batch, float centerX) {
         float startY = worldHeight * 0.46f;
-        float rowSpacing = worldHeight * 0.09f;
+        // Keeps the last row where it sat with five items, clear of the studio credit.
+        float rowSpacing = worldHeight * 0.36f / (MENU_ITEMS.length - 1);
         for (int i = 0; i < MENU_ITEMS.length; i++) {
             boolean selected = i == menuIndex;
             float y = startY - i * rowSpacing;

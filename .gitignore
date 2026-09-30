@@ -164,3 +164,5 @@ Thumbs.db
 ## You should delete or comment out the next line if you have configuration in a different resource-config.json .
 **/resource-config.json
 /.claude/
+/leaderboard-mock/build/
+/leaderboard-mock/mock-leaderboard.json

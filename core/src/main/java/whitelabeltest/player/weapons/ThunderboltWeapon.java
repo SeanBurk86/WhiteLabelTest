@@ -6,7 +6,9 @@ import com.badlogic.gdx.graphics.Texture;
 import com.badlogic.gdx.graphics.g2d.Sprite;
 import com.badlogic.gdx.graphics.g2d.SpriteBatch;
 import com.badlogic.gdx.math.MathUtils;
+import com.badlogic.gdx.math.RandomXS128;
 import com.badlogic.gdx.math.Rectangle;
+
 import com.badlogic.gdx.math.Vector2;
 import com.badlogic.gdx.utils.Array;
 import com.badlogic.gdx.utils.FloatArray;
@@ -50,6 +52,10 @@ public class ThunderboltWeapon extends BaseWeapon {
     private static final int LAYER_COUNT = 4;
     private static final int OUTLINE_LAYER_OFFSET = SPRITES_PER_LAYER * 3;
     private static final int SPRITES_PER_SEGMENT = SPRITES_PER_LAYER * LAYER_COUNT;
+
+    // Bolt shapes are seeded from the clock, so their segment count varies run to run. Anything
+    // random per segment must use this, not MathUtils.random, or replays desync.
+    private static final RandomXS128 VISUAL_RANDOM = new RandomXS128();
 
     // Public so EntityManager can open one GL_MAX section for all active strikes.
     public static final int GL_MAX = 0x8008;
@@ -138,7 +144,7 @@ public class ThunderboltWeapon extends BaseWeapon {
         setOrAdd(segY2, i, y2);
         setOrAdd(segWidth, i, width);
         setOrAdd(segAlpha, i, alpha);
-        setOrAdd(segPhase, i, MathUtils.random(0f, 1000f));
+        setOrAdd(segPhase, i, VISUAL_RANDOM.nextFloat() * 1000f);
 
         int base = i * SPRITES_PER_SEGMENT;
         prepareLayer(base);

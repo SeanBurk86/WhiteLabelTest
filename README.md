@@ -31,6 +31,7 @@ covers the big picture, the data formats and the rules that span several classes
 18. [Audio](#audio)
 19. [Input](#input)
 20. [Replays](#replays)
+    - [Online leaderboard](#online-leaderboard)
 21. [Debug tools](#debug-tools)
 22. [Performance tooling](#performance-tooling)
 23. [The stage editor](#the-stage-editor)
@@ -47,11 +48,16 @@ covers the big picture, the data formats and the rules that span several classes
 | `core`   | The whole game: `whitelabeltest.*` (menus, managers, enemies, player, weapons). |
 | `lwjgl3` | Desktop launcher (`Lwjgl3Launcher`): full screen, vsync, 64 OpenAL sources, Quick Play config. |
 | `editor` | JavaFX stage editor (`EditorApp`). It depends on `core` and reuses its data classes and pattern math. |
+| `headless` | Re-simulates replays with no window or GPU (`HeadlessReplayValidator`), for score validation and determinism self-tests. |
+| `leaderboard-mock` | Local leaderboard server that validates scores by re-simulating replays (see [Online leaderboard](#online-leaderboard)). |
 
 ```
 gradlew lwjgl3:run              # play
 gradlew lwjgl3:run -Pdebug      # play with debug mode enabled (F12 toggles it)
 gradlew editor:run              # stage editor
+gradlew leaderboard-mock:run    # mock leaderboard server on :8787 (-Pport=... to change)
+gradlew headless:run --args="<replay.json> ..."              # re-simulate replays, compare scores
+gradlew headless:run --args="--self-test <replay.json> ..."  # check the simulation is deterministic
 gradlew lwjgl3:jar              # runnable jar in lwjgl3/build/libs
 ```
 
@@ -862,11 +868,54 @@ MEDIUM and LOW also compile the shaders with `QUALITY_MEDIUM` / `QUALITY_LOW`.
   `confirm` (RESTART) and `seekToTime` (NaN when there's no seek).
 - **Determinism:**
   - `MathUtils.random` is seeded at every reset, and a replay reuses the recorded seed;
+  - it may only be used during `update()`, in an order that depends only on game state.
+    Cosmetic randomness (sound variants, bolt shimmer) uses its own generator. Check changes with
+    the headless self-test (see [Online leaderboard](#online-leaderboard));
   - the debug menu and interstitial videos don't consume frames;
   - stage select and every random pick use only recorded input or the seeded RNG;
   - debug seeks are recorded.
 - Tutorial runs aren't recorded.
 - `ReplayBrowser` pages replays newest first. Both ReplaySelectScreen and the debug menu use it.
+- Each replay also records `gameBuild` and `dataHash` (`online/BuildFingerprint`), the code
+  version and a hash of `data/*.json`. A replay only reproduces on the same code and data. Bump
+  `BuildFingerprint.GAME_BUILD` whenever a code change could change how a replay plays out.
+
+### Online leaderboard
+
+Package `online`. The full API and the server's responsibilities are in
+[`docs/leaderboard-api.md`](docs/leaderboard-api.md).
+
+- **Usernames:** `UsernameGenerator` joins one of 32 first words to one of 32 second words
+  (`SwiftFalcon`). Players can only pick generated names, so no offensive text can reach the board.
+  The server checks names against the same lists.
+- **First launch:** `Main` shows `UsernameScreen` before the start screen whenever
+  `PlayerAccount` has no name.
+  - It offers six names plus "generate new names", and registers the pick
+    (`POST /v1/players`).
+  - A taken name offers fresh choices.
+  - If the server can't be reached, the name is kept locally and `OnlineServices` registers it on a
+    later launch. If it's been taken by then, the username screen comes back.
+- **Account:** `PlayerAccount` (Preferences `whitelabeltest-account`) holds the username, player id,
+  token, and best accepted score.
+- **Submitting:** when a run's recording ends, `GameController` hands the replay to
+  `ScoreSubmitter` if the run is eligible.
+  - Recordings end on a restart, a quit to the menu, a completed run, or closing the game.
+  - Eligible means recorded (not the tutorial, a replay or Quick Play) and debug mode never on.
+  - If the run beats the player's best, it's saved to `~/WhiteLabelTest/pending_score.json` and
+    posted (`POST /v1/scores`) with the gzipped replay.
+  - Network failures keep the file for retry: on startup, after each run, and when the leaderboard
+    opens. A rejected token triggers re-registration.
+- **Validation:** the server re-simulates the replay on the matching build and accepts the score
+  only if it reproduces. `GameController.simulateReplay()` runs a replay in **headless mode**:
+  - no shaders, videos, debug tools or `draw()`;
+  - textures still load for their sizes, onto a no-op GL.
+
+  The `headless` module wraps this as `HeadlessReplayValidator`, which `leaderboard-mock` uses. A
+  4.5-minute run takes about 3–4 s. See the validation section of the API doc for details and the
+  determinism rules.
+- **LEADERBOARD** on the start menu (`LeaderboardScreen`) shows the top 10 and your own rank.
+- **Server URL:** `assets/leaderboard.json` (`baseUrl`), or `-Dleaderboard.url=...`.
+  `LeaderboardClient` uses `Gdx.net`, and callbacks arrive on the render thread.
 
 ---
 
@@ -992,6 +1041,7 @@ All under `assets/data/`:
 | `debug_savestates.json` | Debug bookmarks. |
 
 `assets/assets.txt` lists the asset files for packaged builds, where directories can't be listed.
+`assets/leaderboard.json` sets the leaderboard server URL.
 
 ---
 

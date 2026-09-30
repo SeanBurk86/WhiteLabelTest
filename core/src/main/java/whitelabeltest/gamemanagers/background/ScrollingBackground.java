@@ -82,14 +82,22 @@ public class ScrollingBackground {
     private VideoPlayer backgroundVideoPlayer;
     private boolean backgroundVideoStarted;
 
+    /** @param headless keep only the scrolling layer state: no shaders, framebuffers or videos, which
+     *  are purely visual and need a GL context (see GameController's headless mode). */
     public ScrollingBackground(float worldWidth, float worldHeight, AudioSettings audioSettings, AssetManager assets,
                                 Array<StageDefinition.BackgroundLayerDef> layerDefs, String bossVideoFile, String backgroundVideoFile,
-                                String shaderBackgroundId, boolean hueCycleBackground, boolean playerFeedbackBackground) {
+                                String shaderBackgroundId, boolean hueCycleBackground, boolean playerFeedbackBackground,
+                                boolean headless) {
         this.worldWidth = worldWidth;
         this.worldHeight = worldHeight;
         this.audioSettings = audioSettings;
-        this.bossVideoFile = bossVideoFile;
-        this.backgroundVideoFile = backgroundVideoFile;
+        this.bossVideoFile = headless ? null : bossVideoFile;
+        this.backgroundVideoFile = headless ? null : backgroundVideoFile;
+        if (headless) {
+            shaderBackgroundId = null;
+            hueCycleBackground = false;
+            playerFeedbackBackground = false;
+        }
         for (StageDefinition.BackgroundLayerDef layerDef : layerDefs) {
             Texture[] textures;
             if (layerDef.textureSequence != null && layerDef.textureSequence.size > 0) {
