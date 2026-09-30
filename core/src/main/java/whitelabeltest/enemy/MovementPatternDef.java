@@ -4,6 +4,8 @@ import com.badlogic.gdx.utils.Array;
 import com.badlogic.gdx.utils.Json;
 import com.badlogic.gdx.utils.JsonValue;
 
+/** A movement pattern from data/movement_patterns/<id>.json, or a nested leg/sub-pattern. Custom
+ *  serialization writes only non-default fields. See the README's "Movement patterns" table. */
 public class MovementPatternDef implements Json.Serializable {
     public String id;
     public String type = "Straight";
@@ -18,34 +20,27 @@ public class MovementPatternDef implements Json.Serializable {
     public float offsetX = 0f;
     public float offsetY = 0f;
 
-    // --- WaypointPath fields (see WaypointPathMovement/PatternFactory's "WaypointPath" case) ---
+    // --- WaypointPath fields ---
 
-    // Per-waypoint (set on a "MoveToPoint" leg inside a "WaypointPath"): Cardinal-spline tension
-    // at this control point - 0 = full smooth curve, 1 = straight corner (tangent magnitude scales
-    // by (1 - tension); see WaypointSpline).
+    // Per waypoint (a leg inside a "WaypointPath"): Cardinal-spline tension, 0 = smooth, 1 = sharp corner.
     public float tension = 0.5f;
-    // Per-waypoint: seconds to pause here once reached, before continuing to the next point.
+    // Per waypoint: seconds to pause once reached.
     public float waitSeconds = 0f;
-    // Per-waypoint: "path" (face travel direction, the default/only behavior every other movement
-    // type already has), "player" (turn toward the player at aimSpeed deg/sec), or "fixed" (hold
-    // fixedAngle deg) - see WaypointPathMovement.
+    // Per waypoint: "path" (face travel direction), "player" (turn toward the player at aimSpeed
+    // deg/sec) or "fixed" (hold fixedAngle degrees).
     public String orientation = "path";
     public float aimSpeed = 180f;
     public float fixedAngle = 0f;
-    // Per-waypoint: a one-shot sound cue fired the moment this point is reached - null (the
-    // default) fires nothing. See AudioManager.playCueSound(path, volume, pitch).
+    // Per waypoint: sound played when reached (null = none); pitch is jittered by +/- variation.
     public String soundName;
     public float soundVolume = 0.7f;
     public float soundPitch = 1f;
     public float soundPitchVariation = 0f;
-    // Per-waypoint: swaps the spawning enemy's active firing pattern the moment this point is
-    // reached, to whichever firing-pattern id EnemyDefinition.weaponSets maps `weaponSet` to - see
-    // BaseEnemy's WaypointCue handling. changeWeaponSet gates this the same way Trigger.sound/etc.
-    // gate their own optional actions, rather than treating a blank weaponSet as "do nothing".
+    // Per waypoint: when reached, switch the enemy's firing pattern to EnemyDefinition.weaponSets[weaponSet].
     public boolean changeWeaponSet = false;
     public String weaponSet;
 
-    // Path-level (set on the top "WaypointPath" def itself, ignored on an individual leg):
+    // Path-level (on the "WaypointPath" def itself):
     public boolean closePath = false;
     public float globalSpeed = 1f;
     public boolean flipX = false;

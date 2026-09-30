@@ -5,15 +5,12 @@ import com.badlogic.gdx.graphics.g2d.BitmapFont;
 import com.badlogic.gdx.graphics.g2d.SpriteBatch;
 import com.badlogic.gdx.math.MathUtils;
 
-/** "Hacking movie" digital-rain effect: columns of falling, flickering letters/digits with a
- *  bright head and a fading trail - drawn as real glyphs via the HUD's own BitmapFont (not solid
- *  blocks). Each column's fall speed/trail length/phase, and each cell's displayed character,
- *  come from a small hash noise (same style as ChainFireEffect's shader noise, ported to Java) so
- *  the whole grid is a pure function of elapsed time - no per-cell state to track or reset. */
+/** Digital-rain columns of flickering glyphs with a bright head and fading trail. Everything comes
+ *  from hash noise of the elapsed time, so there's no per-cell state. */
 public class DataStreamEffect {
     private static final char[] CHARSET = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789".toCharArray();
     private static final float FLICKER_RATE = 8f; // character swaps per second, per cell
-    // VT323's baked cap-height at UIManager's base font scale (0.009375f) - see glyphScale below.
+    // Glyph height at the HUD font's base scale.
     private static final float BASE_GLYPH_HEIGHT = 0.3f;
 
     private float time;
@@ -23,8 +20,7 @@ public class DataStreamEffect {
         time += delta;
     }
 
-    /** Draws a columns x rows grid of falling letters/digits over [x, x+width] x [y, y+height]
-     *  (y is the rect's bottom edge, matching SpriteBatch's own draw() convention). */
+    /** Draws a columns x rows grid over the rect (y = bottom edge). */
     public void render(SpriteBatch batch, BitmapFont font, float x, float y, float width, float height,
                         int columns, int rows, Color color, Color headColor, float alpha) {
         float cellWidth = width / columns;
@@ -67,11 +63,8 @@ public class DataStreamEffect {
         font.getData().setScale(originalScaleX, originalScaleY);
     }
 
-    // Same cheap sin-hash trick as ChainFireEffect's GLSL hash(vec2), just evaluated on the CPU.
-    // Uses Math.floor (not MathUtils.floor) deliberately: MathUtils.floor's fast int-cast trick
-    // only holds for inputs roughly within +/-16384, and s here regularly reaches +/-43758 (the
-    // sin(...) * 43758.5453123f magic constant), which broke it into returning values outside
-    // [0, 1) - including negative ones that overflowed the CHARSET index below.
+    // Sin hash in [0, 1). Math.floor, not MathUtils.floor: the latter is only valid within about
+    // +/-16384, and s reaches +/-43758.
     private static float hash(float x, float y) {
         float s = (float) Math.sin(x * 127.1f + y * 311.7f) * 43758.5453123f;
         return (float) (s - Math.floor(s));

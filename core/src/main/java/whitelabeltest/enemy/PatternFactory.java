@@ -19,26 +19,21 @@ import whitelabeltest.enemy.movementpatterns.ZigZagMovement;
 import whitelabeltest.gamemanagers.effects.AnimationCache;
 import whitelabeltest.gamemanagers.spawning.EnemySpawnRegistry;
 
+/** Builds live MovementPatterns and FiringPatterns from their definitions, resolving every unset
+ *  field against the referenced BulletDef and then the type's default. */
 public class PatternFactory {
     public static MovementPattern createMovement(MovementPatternDef def, float worldHeight, float spawnCenterX) {
         return createMovement(def, worldHeight, spawnCenterX, Float.NaN, Float.NaN);
     }
 
-    /** @param formationOffsetX, formationOffsetY where this specific spawn sits in its formation -
-     *  NaN means "no override", so a Squadron pattern falls back to its own offsetX/offsetY (the
-     *  old way of baking one offset into the pattern, still supported for a formation that only
-     *  ever spawns one member at that slot). Passing a real value here is what lets a single
-     *  shared Squadron pattern be reused by every member of a squad, each supplying its own slot's
-     *  offset at spawn time instead of needing its own copy of the pattern (see
-     *  GenericEnemy.initWithDefinition and SpawnScheduler.SpawnEvent.offsetX/offsetY). */
+    /** @param formationOffsetX,formationOffsetY this spawn's slot in a squad, so one shared Squadron
+     *  pattern serves every member; NaN falls back to the pattern's own offsetX/offsetY. */
     public static MovementPattern createMovement(MovementPatternDef def, float worldHeight, float spawnCenterX, float formationOffsetX, float formationOffsetY) {
         return createMovement(def, Float.NaN, worldHeight, spawnCenterX, formationOffsetX, formationOffsetY);
     }
 
-    /** @param worldWidth only consulted by "WaypointPath"'s flipX (mirrors a reusable path across
-     *  the play area's centerline - see WaypointPathMovement) - NaN is fine for every other type,
-     *  same "unused unless this specific type needs it" convention worldHeight already has for most
-     *  types here. */
+    /** @param worldWidth only used by WaypointPath's flipX (mirrors across the centerline); NaN is fine
+     *  otherwise. */
     public static MovementPattern createMovement(MovementPatternDef def, float worldWidth, float worldHeight, float spawnCenterX, float formationOffsetX, float formationOffsetY) {
         if (def == null || "None".equals(def.type)) return new NoMovement();
 
@@ -121,9 +116,7 @@ public class PatternFactory {
             case "Sweep": return new SweepFiring(fireRate, resolve(bulletSize, 0.25f), resolve(bulletSpeed, 5f), spriteOverride, offsetX, offsetY, bulletDamage, speedProfile, hitboxSpec);
             case "SineWave": return new SineWaveFiring(fireRate, resolve(bulletSize, 0.2f), resolve(bulletSpeed, 5f), spriteOverride, offsetX, offsetY, bulletDamage, speedProfile, hitboxSpec);
             case "Feather": return new FeatherFiring(fireRate, resolve(bulletSize, 0.2f), resolve(bulletSpeed, 1.5f), spriteOverride, offsetX, offsetY, bulletDamage, speedProfile, hitboxSpec);
-            // Orbiting's "speed" bootstraps a constant center-drift vector, not a travel speed
-            // that ramps over time the way the other bullet types here do - acceleration doesn't
-            // apply to it.
+            // Orbiting's speed is a constant center drift, so acceleration doesn't apply.
             case "Orbiting": return new OrbitingFiring(fireRate, resolve(bulletSize, 0.5f), resolve(bulletSpeed, 4f), spriteOverride, offsetX, offsetY, bulletDamage);
             default: return new NoFiring();
         }
@@ -133,9 +126,7 @@ public class PatternFactory {
         return createFiring(enemyDef, def, Float.NaN, Float.NaN);
     }
 
-    /** @param worldWidth, worldHeight only consulted by "Wall" (see WallFiring) and "RadialNearMiss"
-     *  (see RadialNearMissFiring) respectively - every other pattern fires relative to the enemy's
-     *  own position and doesn't need either. NaN is fine for those. */
+    /** @param worldWidth,worldHeight only used by Wall, PolkaDot and RadialNearMiss; NaN is fine otherwise. */
     public static FiringPattern createFiring(EnemyDefinition enemyDef, FiringPatternDef def, float worldWidth, float worldHeight) {
         if (def == null) return new NoFiring();
 
@@ -167,9 +158,6 @@ public class PatternFactory {
                 return new AimedFiring(def.fireRate, resolve(bulletSize(def, bulletDef), 0.25f), resolve(bulletSpeed(def, bulletDef), 5f), spriteOverride, def.offsetX, def.offsetY, bulletDamage(def, bulletDef), def.targetOffsetX, def.targetOffsetY,
                     speedProfile(def, bulletDef), hitboxSpec(def, bulletDef));
             }
-            // Pulled out of the generic small-helper dispatch (see the other createFiring overload
-            // above) so def.phaseOffset can reach BurstAimedFiring - see its javadoc for why two
-            // side-by-side BurstAimed emitters use this to land in opposite phase.
             case "BurstAimed": {
                 BulletDef bulletDef = PatternRegistry.getBullet(def.bulletId);
                 Animation<TextureRegion> spriteOverride = buildBulletAnimation(enemyDef, def, bulletDef);
@@ -223,9 +211,7 @@ public class PatternFactory {
                 return new FeatherFiring(def.fireRate, resolve(bulletSize(def, bulletDef), 0.2f), resolve(bulletSpeed(def, bulletDef), 1.5f), spriteOverride, def.offsetX, def.offsetY, bulletDamage(def, bulletDef),
                     speedProfile(def, bulletDef), hitboxSpec(def, bulletDef), amplitude, frequency);
             }
-            // Orbiting's "speed" bootstraps a constant center-drift vector, not a travel speed
-            // that ramps over time the way the other bullet types here do - acceleration doesn't
-            // apply to it.
+            // Orbiting's speed is a constant center drift, so acceleration doesn't apply.
             case "Orbiting": {
                 BulletDef bulletDef = PatternRegistry.getBullet(def.bulletId);
                 Animation<TextureRegion> spriteOverride = buildBulletAnimation(enemyDef, def, bulletDef);
@@ -280,8 +266,9 @@ public class PatternFactory {
         }
     }
 
-    /** A pattern's own bulletSize/bulletSpeed always win; otherwise fall back to the referenced
-     *  bullet definition's values, if any. */
+    // Field resolution: the pattern's own value, else the BulletDef's, else the default.
+
+    /** -1 if neither sets it (the caller then applies the type's default). */
     private static float bulletSize(FiringPatternDef def, BulletDef bulletDef) {
         return def.bulletSize > 0 ? def.bulletSize : (bulletDef != null ? bulletDef.bulletSize : -1f);
     }
@@ -294,25 +281,22 @@ public class PatternFactory {
         return def.bulletAcceleration != 0f ? def.bulletAcceleration : (bulletDef != null ? bulletDef.bulletAcceleration : 0f);
     }
 
-    /** Floor currentSpeed can't ramp below - 0 (the default, whether unset here or on the
-     *  referenced BulletDef) means "can decelerate to a stop but not reverse past 0". */
+    /** Minimum ramp speed; defaults to 0 (can stop but not reverse). */
     private static float bulletMinSpeed(FiringPatternDef def, BulletDef bulletDef) {
         if (def.bulletMinSpeed > 0) return def.bulletMinSpeed;
         if (bulletDef != null && bulletDef.bulletMinSpeed > 0) return bulletDef.bulletMinSpeed;
         return 0f;
     }
 
-    /** Ceiling currentSpeed can't ramp above - unbounded (the default) unless explicitly set. */
+    /** Maximum ramp speed; defaults to unbounded. */
     private static float bulletMaxSpeed(FiringPatternDef def, BulletDef bulletDef) {
         if (def.bulletMaxSpeed > 0) return def.bulletMaxSpeed;
         if (bulletDef != null && bulletDef.bulletMaxSpeed > 0) return bulletDef.bulletMaxSpeed;
         return Float.MAX_VALUE;
     }
 
-    /** Builds the shared speed-ramp spec bullets from this pattern will ramp along. A pattern's
-     *  own bulletSpeedPhases list always wins wholesale over its referenced BulletDef's (the two
-     *  are never merged); when neither sets a phase list, falls back to the classic single
-     *  bulletAcceleration ramp (see bulletAcceleration/bulletMinSpeed/bulletMaxSpeed above). */
+    /** The pattern's phase list, else the BulletDef's (never merged), else a single constant
+     *  acceleration. */
     private static SpeedProfile speedProfile(FiringPatternDef def, BulletDef bulletDef) {
         float minSpeed = bulletMinSpeed(def, bulletDef);
         float maxSpeed = bulletMaxSpeed(def, bulletDef);
@@ -338,9 +322,7 @@ public class PatternFactory {
         return new SpeedProfile(accelerations, durations, loop, minSpeed, maxSpeed);
     }
 
-    /** A pattern's own hitboxShape always wins; otherwise fall back to the referenced bullet
-     *  definition's, if any. Null (neither sets one) lets each bullet type keep its own default
-     *  shape - see HitboxSpec.shape. */
+    /** null if neither sets one (the bullet class's default shape applies). */
     private static HitboxSpec.Shape hitboxShape(FiringPatternDef def, BulletDef bulletDef) {
         String shape = def.hitboxShape != null ? def.hitboxShape : (bulletDef != null ? bulletDef.hitboxShape : null);
         if (shape == null) return null;
@@ -361,10 +343,7 @@ public class PatternFactory {
         return def.hitboxOffsetY != 0f ? def.hitboxOffsetY : (bulletDef != null ? bulletDef.hitboxOffsetY : 0f);
     }
 
-    /** Builds the shared hitbox spec bullets from this pattern will use for collision, resolving
-     *  shape/scale/offsetX/offsetY independently against the referenced BulletDef's (same
-     *  per-field fallback as bulletSize/bulletSpeed above, unlike bulletSpeedPhases' wholesale
-     *  override). */
+    /** The hitbox spec, each field resolved independently. */
     private static HitboxSpec hitboxSpec(FiringPatternDef def, BulletDef bulletDef) {
         HitboxSpec.Shape shape = hitboxShape(def, bulletDef);
         float scale = hitboxScale(def, bulletDef);
@@ -374,19 +353,14 @@ public class PatternFactory {
         return new HitboxSpec(shape, scale, offsetX, offsetY);
     }
 
-    /** A pattern's own bulletDamage always wins; otherwise fall back to the referenced bullet
-     *  definition's damage, defaulting to 1 if neither sets one. This is also the value a
-     *  reflected bullet (see CollisionManager.checkShieldReflections) hits its target for. */
+    /** Defaults to 1. Also what a reflected bullet hits for. */
     private static int bulletDamage(FiringPatternDef def, BulletDef bulletDef) {
         if (def.bulletDamage > 0) return def.bulletDamage;
         return bulletDef != null ? bulletDef.damage : BulletDef.DEFAULT_DAMAGE;
     }
 
-    /** Builds this pattern's own bullet animation — reusing the enemy's default bulletTexture
-     *  when neither the pattern nor its referenced bullet definition sets one, but otherwise
-     *  entirely self-contained: sheet layout and animation speed are resolved purely from this
-     *  pattern (falling back to its bulletDef, if any), never from the enemy definition, so two
-     *  patterns sharing a texture can still animate independently. */
+    /** The pattern's bullet animation. Texture: pattern, then BulletDef, then the enemy's
+     *  bulletTexture. Sheet layout and timing come only from the pattern/BulletDef. */
     private static Animation<TextureRegion> buildBulletAnimation(EnemyDefinition enemyDef, FiringPatternDef def, BulletDef bulletDef) {
         String texturePath = def.bulletTexture != null ? def.bulletTexture
             : (bulletDef != null && bulletDef.bulletTexture != null ? bulletDef.bulletTexture

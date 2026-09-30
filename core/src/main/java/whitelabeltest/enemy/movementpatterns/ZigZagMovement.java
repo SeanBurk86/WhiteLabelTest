@@ -6,14 +6,14 @@ import com.badlogic.gdx.math.Circle;
 import com.badlogic.gdx.math.Rectangle;
 import com.badlogic.gdx.math.Vector2;
 
+/** Moves along angleDeg while swinging side to side between the screen edges. */
 public class ZigZagMovement implements MovementPattern {
     private final float speedX;
     private final float speedY;
     private final float angleDeg;
     private boolean movingRight;
 
-    // Tracks the sideways oscillation on its own axis, independent of the sprite's actual
-    // (rotated) screen position, so the bounce works the same regardless of angleDeg.
+    // Sideways offset tracked on its own axis, so the swing works at any angleDeg.
     private float perpOffset;
 
     private final Vector2 tempDelta = new Vector2();

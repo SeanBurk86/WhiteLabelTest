@@ -8,12 +8,8 @@ import com.badlogic.gdx.video.VideoPlayerCreator;
 
 import java.io.FileNotFoundException;
 
-/** Full-screen, non-looping video shown once before a stage's gameplay begins - see
- *  GameController.startInterstitial()/update(). Deliberately excluded from ReplayRecorder's frame
- *  stream: which clip plays stays deterministic across a replay's record/playback (it's one more
- *  draw from the same seeded MathUtils.random stream everything else uses - see ReplayData), but
- *  skipping is always driven by live input, even while watching a replay, so cutting a video short
- *  never touches the recorded/replayed simulation - see GameController.update(). */
+/** Full-screen video played once before a stage. The clip choice comes from the seeded random stream
+ *  (deterministic in replays), but skipping uses live input and is kept out of the replay entirely. */
 public class InterstitialPlayer {
     private VideoPlayer videoPlayer;
     private boolean active;
@@ -21,9 +17,7 @@ public class InterstitialPlayer {
 
     public boolean isActive() { return active; }
 
-    /** Starts videoFile playing full-screen, once. No-ops (stays inactive) if the file can't be
-     *  opened, so a bad/missing entry in interstitials.json degrades to "no video" instead of
-     *  soft-locking the stage. */
+    /** Plays videoFile once. Stays inactive if it can't be opened, so a bad entry just skips it. */
     public void play(String videoFile, float volume) {
         videoPlayer = VideoPlayerCreator.createVideoPlayer();
         videoPlayer.setLooping(false);
@@ -48,14 +42,12 @@ public class InterstitialPlayer {
         if (completed) stop();
     }
 
-    /** Cuts the video short - see GameController.update()'s confirm/shoot check. No-op if nothing's
-     *  playing. */
+    /** Cuts the video short. */
     public void skip() {
         if (active) stop();
     }
 
-    /** Releases the native video player if one is still mid-playback - see
-     *  GameController.dispose(). No-op otherwise. */
+    /** Releases the native video player if still playing. */
     public void dispose() {
         if (active) stop();
     }
@@ -70,8 +62,7 @@ public class InterstitialPlayer {
         if (!active) return;
         Texture frame = videoPlayer.getTexture();
         if (frame == null) return;
-        // Same padded-decode-buffer caveat as ScrollingBackground's boss video - only the real
-        // video region maps onto the full screen quad.
+        // The decode buffer may be padded; map only the real video region to the screen.
         batch.draw(frame, 0, 0, worldWidth, worldHeight,
             0, 0, videoPlayer.getVideoWidth(), videoPlayer.getVideoHeight(), false, false);
     }

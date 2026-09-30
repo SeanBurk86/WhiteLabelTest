@@ -20,33 +20,13 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
-/** A live-ticking preview of one FiringPatternDef's shot pattern - Play/Pause/Reset-controlled,
- *  driven by a JavaFX AnimationTimer, painted with plain Canvas shapes.
+/** Live preview of one FiringPatternDef (Play/Pause/Reset, AnimationTimer, plain Canvas drawing).
  *
- * This does NOT run the real game's own FiringPattern/EnemyBullet classes (PatternFactory.
- * createFiring() and friends) - that machinery turns out to be a dead end outside the real game:
- * every concrete bullet's init() eventually calls `new Sprite(textureRegion)`, whose constructor
- * (Sprite.<init> -> TextureRegion.setRegion(TextureRegion) -> setRegion(u,v,u2,v2)) unconditionally
- * dereferences that region's backing Texture to recompute its own width/height - there's no
- * "texture-less" region that survives this (found by actually running it: "Cannot invoke
- * Texture.getWidth() because this.texture is null" - even after routing around TWO earlier NPEs/
- * ClassCastExceptions the same way). And a REAL Texture can't be built here either: Texture's
- * constructors bottom out in GLTexture(int) allocating a handle via Gdx.gl.glGenTexture() -
- * Gdx.gl is only ever set by a running LibGDX backend (LWJGL3, headless, ...), none of which this
- * plain JavaFX process ever starts (see MovementPatternLibrary's own doc on the same GL-context
- * gap for movement, and PlayerPreviewView, which only ever gets away with a bare Sprite/Rectangle
- * because it NEVER constructs one from a TextureRegion). Embedding a real (even headless) LibGDX
- * backend just for a preview bullet's placeholder texture was judged not worth the fragility.
- *
- * Instead, this reimplements each pattern type's own spawn/motion shape directly against plain
- * doubles and a local PreviewBullet list - the same fireRate/spread/aim/sweep/orbit/wall formulas
- * PatternFactory.createFiring()'s dispatch already encodes (see each spawnXxx() method's own doc
- * for which real class it mirrors), just without needing a real Sprite/Texture/Animation to do it.
- * This is an approximation of the real bullets' exact physics (respects fireRate/spread/bulletSpeed/
- * bulletSize/bulletAcceleration/min-max speed; doesn't reproduce every last hitbox/collision nuance
- * a real EnemyBullet has, since none of that is visible in a preview anyway) - good enough to
- * sanity-check a pattern's shape and timing while authoring it; the in-game debug menu's own
- * PatternPreviewer remains the byte-for-byte-accurate way to see the real bullets fly. */
+ *  The real FiringPattern/EnemyBullet classes can't run here: bullets build Sprites, which need a
+ *  Texture, which needs a GL context this JavaFX process doesn't have. So this re-implements each
+ *  pattern type's spawn timing and bullet motion with plain floats (each spawnXxx() names the real
+ *  class it mirrors), drawing the real bullet art via JavaFX Images. It's an approximation; the
+ *  in-game debug PatternPreviewer shows the exact behaviour. */
 final class FiringPatternPreviewCanvas extends Canvas {
     private static final double WORLD_WIDTH = 9.0;
     private static final double WORLD_HEIGHT = 12.0;
@@ -57,20 +37,10 @@ final class FiringPatternPreviewCanvas extends Canvas {
     private static final float ENEMY_Y = (float) WORLD_HEIGHT - 1.6f;
     private static final float MAX_STEP = 0.05f; // clamps a debugger-pause/tab-switch stall to a sane single step
 
-    // One per real bullet class's own motion: STRAIGHT (AimedEnemyBullet/DrifterBullet), SINE
-    // (SineBullet), FEATHER (FeatherBullet), ORBIT (OrbitingBullet), EXPLODING (ExplodingAimedBullet),
-    // SHAPE (ShapeBullet), LASER (LaserBullet).
+    // One per bullet motion: STRAIGHT (Aimed/Drifter), SINE, FEATHER, ORBIT, EXPLODING, SHAPE, LASER.
     private enum Kind { STRAIGHT, SINE, FEATHER, ORBIT, EXPLODING, SHAPE, LASER }
 
-    /** The decoded sprite sheet a leaf pattern's bullets actually use in-game, resolved once per
-     *  rebuild() (see resolveBulletSprite()) rather than per-shot - mirrors PatternFactory.
-     *  buildBulletAnimation()'s own pattern-then-bulletDef texture/layout fallback (there's no
-     *  enemy-level fallback here though, since this preview has no enemy context - a pattern with
-     *  no texture anywhere in its own chain just falls back to the plain-dot drawing redraw() has
-     *  always used). Loaded via EnemySpriteImages.loadImage(), the same plain-JavaFX Image decoder
-     *  TriggerNode/PlayerPreviewView already use - unlike a real LibGDX Sprite/Texture (see this
-     *  class's own top-of-file doc on why THAT approach is a dead end here), a JavaFX Image needs no
-     *  GL context at all, so the real bullet art can be shown without needing a running backend. */
+    /** A leaf pattern's bullet sprite sheet as a JavaFX Image, resolved once per rebuild(). */
     private static final class BulletSprite {
         final Image sheet;
         final double frameW, frameH; // one frame's own pixel size within the sheet
@@ -97,15 +67,9 @@ final class FiringPatternPreviewCanvas extends Canvas {
         float speed;
         float size;
         float age;
-        // Null falls back to the plain colored dot redraw() has always drawn - see BulletSprite's
-        // own doc for when that happens.
+        // Null = draw a plain dot.
         BulletSprite sprite;
-        // Mirrors SpeedRamp/SpeedProfile's own phase-cycling ramp exactly (see applyRamp()'s own
-        // doc) - either a single {bulletAcceleration} phase held forever, or the pattern's own
-        // authored bulletSpeedPhases sequence, whichever PatternFactory.speedProfile() would have
-        // picked. `rampable` is false for Orbiting's bullets specifically - the real engine never
-        // threads a SpeedProfile through OrbitingFiring at all (its own "speed" is a constant
-        // center-drift vector, not a ramping travel speed - see OrbitingFiring's own doc).
+        // SpeedRamp state. Orbiting bullets never ramp.
         boolean rampable = true;
         float[] accelerations = { 0f };
         float[] durations = { -1f };
@@ -113,32 +77,22 @@ final class FiringPatternPreviewCanvas extends Canvas {
         float minSpeed, maxSpeed = Float.MAX_VALUE;
         int phaseIndex;
         float phaseTimer;
-        // SINE/FEATHER/ORBIT/SHAPE: the spawn point the motion is evaluated from, plus how far the
-        // bullet has actually traveled so far - accumulated frame-by-frame (not a closed-form
-        // speed*age) so a ramping speed (see above) bends the path the same way it does in-game.
-        // amplitude/frequency are the sway (SINE/FEATHER, frequency in radians/sec like the real
-        // bullets) or the orbit radius/angular speed (ORBIT).
+        // SINE/FEATHER/ORBIT/SHAPE: origin and distance traveled (integrated, so ramps apply).
+        // amplitude/frequency: sway (rad/s) or orbit radius/angular speed.
         float originX, originY, amplitude, frequency, traveled;
-        // ORBIT: the orbit center's constant drift velocity and this bullet's starting orbit phase.
+        // ORBIT: center drift velocity and starting phase.
         float velocityX, velocityY, phase;
-        // SHAPE: this dot's oriented offset in its picture at scale 1, the picture's size when formed,
-        // and its forming time and spread speeds/acceleration - see ShapeBullet.
+        // SHAPE: see ShapeBullet.
         float offsetX, offsetY, formScale, formTime, spreadSpeed, spreadAcceleration, driftSpeed;
-        // EXPLODING: whether it has already re-aimed at the player - see ExplodingAimedBullet.
+        // EXPLODING: already re-aimed.
         boolean aimed;
-        // Direction the sprite is drawn facing (degrees, same convention as angleDeg) - see
-        // drawBulletSprite(). Travel direction for most bullets; set separately where the real
-        // bullet's sprite rotation isn't its heading (FEATHER's rocking, SHAPE's fixed upright dots).
+        // Sprite facing; usually the heading (not for FEATHER / SHAPE).
         float facingDeg;
-        // LASER-only: seconds remaining before this beam despawns, and its own rotation rate.
+        // LASER: time left, rotation rate, length.
         float remaining, angularSpeed, length;
     }
 
-    /** One pattern's own running state (fire timer, and for Sequence/Combined, its children's own
-     *  running state) - built fresh by rebuild() every time `def` changes, since a Sequence's
-     *  current stage/a leaf's shootTimer wouldn't mean anything against a differently-shaped tree.
-     *  `bursting`/`burstTimer`/`currentBurstShot` are BurstAimed-only - see stepBurstAimed()'s own
-     *  doc, which mirrors BurstAimedFiring's own identically-named fields exactly. */
+    /** Runtime state mirroring the pattern tree; rebuilt whenever the definition changes. */
     private static final class RunningPattern {
         FiringPatternDef def;
         float timer;
@@ -148,13 +102,12 @@ final class FiringPatternPreviewCanvas extends Canvas {
         boolean bursting;
         float burstTimer;
         int currentBurstShot;
-        // Sweep's ping-pong position (0 = start angle, 1 = end angle) and direction - see SweepFiring.
+        // Sweep ping-pong position (0 = start angle, 1 = end angle) and direction.
         float sweepT;
         float sweepDirection = 1f;
         // Wall/RadialNearMiss volleys fired, PolkaDot rows fired, SelfDestruct's one-shot latch.
         int volleysFired;
-        // This leaf's own resolved bullet art (null for Sequence/Combined, or a leaf with no
-        // texture anywhere in its chain) - see BulletSprite's own doc.
+        // Null for Sequence/Combined or when no texture resolves.
         BulletSprite sprite;
     }
 
@@ -184,19 +137,14 @@ final class FiringPatternPreviewCanvas extends Canvas {
         redraw();
     }
 
-    /** Loads a new/edited pattern and restarts the preview from a clean slate. Auto-plays,
-     *  matching the reference screenshots' own default (their pause icon is shown highlighted,
-     *  implying playback already running when the Weapon Editor opens). */
+    /** Loads a pattern, restarts and auto-plays. */
     void setPattern(FiringPatternDef def) {
         this.def = def;
         rebuild();
         play();
     }
 
-    /** Same reset-and-rebuild as setPattern(), for a field edit on the pattern ALREADY showing.
-     *  Deliberately does NOT force playback back on: a paused, mid-tweak session (nudging a value
-     *  while eyeballing one frame) shouldn't leap back into motion under the user on every
-     *  keystroke. */
+    /** Restarts after a field edit without un-pausing. */
     void onFieldChanged() {
         rebuild();
         redraw();
@@ -222,10 +170,7 @@ final class FiringPatternPreviewCanvas extends Canvas {
     private void rebuild() {
         bullets.clear();
         elapsed = 0f;
-        // Re-read fresh on every rebuild (every field edit, not just a pattern switch) rather than
-        // once per canvas lifetime - cheap (data/bullets.json is small) and keeps a bulletId's
-        // resolved art in sync with edits made to that referenced BulletDef elsewhere in the editor
-        // during this same session.
+        // Re-read every rebuild (cheap) to pick up bullet edits made elsewhere in the editor.
         bulletDefsById = loadBulletDefs();
         running = def != null ? buildRunning(def) : null;
         layout(0f);
@@ -244,12 +189,8 @@ final class FiringPatternPreviewCanvas extends Canvas {
         return r;
     }
 
-    /** Puts `r` (and, for Sequence/Combined, its whole subtree) back into the state the real
-     *  pattern's own constructor/reset() leaves it in - which matters because a Sequence resets each
-     *  stage as it leaves it (see SequencedFiringPattern.update()), and the types that "fire
-     *  immediately" (Sweep, SineWave, Feather, Orbiting, Shape) do so again every time their stage
-     *  comes back round, while the rest wait a full fireRate first. Getting this wrong is what made
-     *  a Sequence stage shorter than its own fireRate never fire at all in this preview. */
+    /** Resets a subtree like the real reset(): Sweep, SineWave, Feather, Orbiting and Shape fire
+     *  immediately; the rest wait one fireRate. Sequences reset each stage as they leave it. */
     private void resetRunning(RunningPattern r) {
         FiringPatternDef d = r.def;
         String type = d.type == null ? "None" : d.type;
@@ -272,7 +213,7 @@ final class FiringPatternPreviewCanvas extends Canvas {
 
     private static float shapeFireRate(FiringPatternDef d) { return d.fireRate > 0 ? d.fireRate : 1f; }
 
-    // --- Bullet sprite resolution - see BulletSprite's own doc -----------------------------------
+    // --- Bullet sprite resolution ---
 
     private Map<String, BulletDef> bulletDefsById = new HashMap<>();
 
@@ -295,11 +236,8 @@ final class FiringPatternPreviewCanvas extends Canvas {
         return bd != null && bd.bulletSpeed > 0 ? bd.bulletSpeed : fallback;
     }
 
-    /** Mirrors PatternFactory.buildBulletAnimation()'s texture/frame-layout fallback chain (pattern
-     *  field wins, then its referenced BulletDef's, then FiringPatternDef.DEFAULT_BULLET_*) minus
-     *  the enemy-level fallback, which this per-pattern preview has no enemy to resolve. Returns
-     *  null wherever that real code would - no texture anywhere in the chain, or the referenced file
-     *  doesn't exist on disk yet - so callers fall back to the plain colored dot. */
+    /** Pattern, then BulletDef, then defaults (no enemy fallback here). Null if there's no texture
+     *  or the file is missing. */
     private BulletSprite resolveBulletSprite(FiringPatternDef d) {
         BulletDef bulletDef = bulletDefOf(d);
         String texturePath = d.bulletTexture != null ? d.bulletTexture
@@ -325,12 +263,7 @@ final class FiringPatternPreviewCanvas extends Canvas {
         return new BulletSprite(sheet, frameW, frameH, cols, Math.max(frameCount, 1), frameDuration > 0 ? frameDuration : FiringPatternDef.DEFAULT_BULLET_FRAME_DURATION);
     }
 
-    /** Reads data/bullets.json exactly like PatternRegistry.load() does in the real game (same
-     *  "one flat array, each entry its own BulletDef" shape), just via a plain java.io read + Json.
-     *  fromJson(Class, Class, String) instead of Gdx.files.internal(...) - that overload needs a
-     *  running LibGDX backend to resolve a FileHandle from (see this class's own top-of-file doc),
-     *  which this plain JavaFX process never has; a raw file read and the (Class,Class,String)
-     *  overload sidestep that entirely, the same trick PatternIds' id-listing methods already use. */
+    /** Reads data/bullets.json with plain file I/O (no Gdx.files outside the game). */
     private static Map<String, BulletDef> loadBulletDefs() {
         Map<String, BulletDef> map = new HashMap<>();
         Path path = Path.of("data/bullets.json");
@@ -361,9 +294,7 @@ final class FiringPatternPreviewCanvas extends Canvas {
         }
     }
 
-    /** Positions the enemy (X, fixed) and player (O, sweeping) for this frame - split out from
-     *  step() so rebuild() can establish a correct AT-REST layout (delta 0, no elapsed time) the
-     *  instant a pattern loads, before Play is ever pressed. */
+    /** Places the enemy (fixed) and player (sweeping). Also called with delta 0 on load. */
     private void layout(float delta) {
         enemyX = (float) WORLD_WIDTH / 2f;
         enemyY = ENEMY_Y;
@@ -375,16 +306,15 @@ final class FiringPatternPreviewCanvas extends Canvas {
         playerY = PLAYER_Y;
     }
 
-    // --- Pattern tree stepping ---------------------------------------------------------------
+    // --- Pattern tree stepping ---
 
     private void stepPattern(RunningPattern r, float delta) {
         FiringPatternDef d = r.def;
         String type = d.type == null ? "None" : d.type;
         switch (type) {
             case "Sequence" -> {
-                // Same order as SequencedFiringPattern.update(): advance the stage clock, and on
-                // expiry reset the stage being left before moving on, then run whichever stage is
-                // now current.
+                // As SequencedFiringPattern: advance the clock, reset and leave an expired stage,
+                // run the current one.
                 if (r.children == null || r.children.isEmpty()) return;
                 RunningPattern active = r.children.get(r.stageIndex % r.children.size());
                 r.stageTime += delta;
@@ -405,8 +335,7 @@ final class FiringPatternPreviewCanvas extends Canvas {
         }
     }
 
-    /** One frame of a leaf pattern - each case mirrors that type's real FiringPattern.update()
-     *  timing (see PatternFactory.createFiring()'s dispatch for which class each type builds). */
+    /** One frame of a leaf pattern, mirroring each type's real update() timing. */
     private void stepLeaf(RunningPattern r, FiringPatternDef d, String type, float delta) {
         switch (type) {
             case "None", "SpawnEnemy" -> {} // no visible bullets to preview
@@ -464,8 +393,7 @@ final class FiringPatternPreviewCanvas extends Canvas {
                 if (fireReady(r, shapeFireRate(d), delta)) spawnShapeVolley(d, r.sprite);
             }
             case "SelfDestruct" -> {
-                // The real burst only goes off once the player is within 3 units of the enemy, which
-                // this preview's layout never allows - so show it once, a beat after the pattern starts.
+                // The real one needs the player within 3 units, which never happens here; fire once.
                 if (r.volleysFired > 0) return;
                 r.timer += delta;
                 if (r.timer < 0.5f) return;
@@ -482,8 +410,7 @@ final class FiringPatternPreviewCanvas extends Canvas {
         }
     }
 
-    /** The "shootTimer += delta; if (shootTimer < fireRate) return; shootTimer = 0" gate nearly
-     *  every real FiringPattern uses. */
+    /** The standard shootTimer/fireRate gate. */
     private static boolean fireReady(RunningPattern r, float fireRate, float delta) {
         r.timer += delta;
         if (r.timer < fireRate) return false;
@@ -491,15 +418,7 @@ final class FiringPatternPreviewCanvas extends Canvas {
         return true;
     }
 
-    // Mirrors BurstAimedFiring's own state machine exactly (see that class's own doc/fields:
-    // shootTimer -> r.timer, isBursting -> r.bursting, burstTimer/currentBurstShot identical) -
-    // unlike every other leaf type above, BurstAimed needed its OWN case rather than falling into
-    // spawnAimedFamily()'s generic "one shot every fireRate seconds" handling, since its entire
-    // authored purpose is firing BURST_COUNT aimed shots burstInterval seconds apart, then waiting
-    // fireRate seconds before the next burst - collapsing that to one shot per fireRate (this
-    // preview's previous behavior) silently dropped the burst - and with it def.burstInterval/
-    // def.phaseOffset, both authored/editable in FiringPatternFieldsEditor but never read anywhere
-    // in this file - entirely, making it look and behave just like a plain Aimed pattern.
+    // BurstAimedFiring's state machine: BURST_COUNT aimed shots burstInterval apart, then fireRate.
     private static final int BURST_AIMED_BURST_COUNT = 5;
     private static final float BURST_AIMED_DEFAULT_INTERVAL = 0.15f;
 
@@ -521,9 +440,7 @@ final class FiringPatternPreviewCanvas extends Canvas {
             r.burstTimer += delta;
             if (r.burstTimer >= burstInterval) {
                 r.burstTimer = 0f;
-                // BurstAimedFiring.fireAimedShot() aims straight at the player hitbox with no
-                // targetOffsetX/Y support at all (unlike AimedFiring) - aimAngle(d) would silently
-                // apply an offset the real pattern never reads, so this aims raw instead.
+                // BurstAimed ignores targetOffsetX/Y, so aim directly rather than via aimAngle().
                 float angle = (float) Math.toDegrees(Math.atan2(playerY - emitterY(d), playerX - emitterX(d)));
                 spawnStraight(d, angle, speedOf(d, 5f), sizeOf(d, 0.25f), r.sprite);
                 r.currentBurstShot++;
@@ -532,14 +449,10 @@ final class FiringPatternPreviewCanvas extends Canvas {
         }
     }
 
-    // --- Spawners - each mirrors one FiringPattern subclass's own shape/timing (see
-    // PatternFactory.createFiring()'s dispatch for the real formula each is modeled on) ----------
+    // --- Spawners (each mirrors one FiringPattern class) ---
 
-    /** Aimed/AimedAtPoint/QuarterCircle/SelfDestruct/ExplodingAimed all reduce to "one or more
-     *  straight shots on a fixed bearing, chosen once at spawn" for preview purposes -
-     *  QuarterCircleFiring's own spread fan (see PatternFactory's "QuarterCircle" case) is the
-     *  only one of these that's actually a multi-bullet volley. BurstAimed is handled separately -
-     *  see stepBurstAimed()'s own doc for why it needed its own case instead. */
+    /** Aimed / AimedAtPoint / QuarterCircle / SelfDestruct: straight shots on a bearing fixed at
+     *  spawn (QuarterCircle fires a fan). */
     private void spawnAimedFamily(FiringPatternDef d, String type, BulletSprite sprite) {
         float speed = speedOf(d, 5f);
         float size = sizeOf(d, 0.25f);
@@ -560,17 +473,14 @@ final class FiringPatternPreviewCanvas extends Canvas {
         spawnStraight(d, angle, speed, size, sprite);
     }
 
-    /** SweepFiring: one shot at the sweep's current angle (defaults 225 -> 315 over 2s, i.e. a
-     *  downward fan), `sweepT` being the running pattern's own ping-pong position. */
+    /** SweepFiring: one shot at the current sweep angle (default 225 -> 315 over 2s). */
     private void spawnSweepShot(FiringPatternDef d, BulletSprite sprite, float sweepT) {
         float start = !Float.isNaN(d.sweepStartAngle) ? d.sweepStartAngle : 225f;
         float end = !Float.isNaN(d.sweepEndAngle) ? d.sweepEndAngle : 315f;
         spawnStraight(d, start + sweepT * (end - start), speedOf(d, 5f), sizeOf(d, 0.25f), sprite);
     }
 
-    /** SineWaveFiring/FeatherFiring: one bullet falling straight down while swaying sideways -
-     *  never aimed. `frequency` is radians per second, same as the real SineBullet/FeatherBullet;
-     *  FEATHER additionally layers a faster secondary sway and a rocking rotation (see advance()). */
+    /** SineWaveFiring / FeatherFiring: one bullet falling and swaying (frequency in rad/s). */
     private void spawnSwayShot(FiringPatternDef d, BulletSprite sprite, Kind kind, float defaultAmplitude, float defaultFrequency, float defaultSpeed, float defaultSize) {
         PreviewBullet b = new PreviewBullet();
         b.kind = kind;
@@ -586,8 +496,7 @@ final class FiringPatternPreviewCanvas extends Canvas {
         bullets.add(b);
     }
 
-    /** OrbitingFiring: a pair of bullets half an orbit apart, circling a center that drifts straight
-     *  at the player (defaults: radius 0.4, 5 rad/sec) - the real bullets never ramp their speed. */
+    /** OrbitingFiring: two bullets half an orbit apart around a center drifting at the player. */
     private void spawnOrbitPair(FiringPatternDef d, BulletSprite sprite) {
         float radius = d.orbitRadius > 0 ? d.orbitRadius : 0.4f;
         float orbitSpeed = d.orbitSpeed > 0 ? d.orbitSpeed : 5f;
@@ -612,9 +521,7 @@ final class FiringPatternPreviewCanvas extends Canvas {
         }
     }
 
-    /** WallFiring/PolkaDotFiring: one straight-down bullet per lane `includeLane` keeps, laid out in
-     *  world X across the whole field from the enemy's own center height (neither real pattern
-     *  applies offsetY) - same laneCount formula as the real classes. */
+    /** WallFiring / PolkaDotFiring: one falling bullet per included lane across the field. */
     private void spawnLaneRow(FiringPatternDef d, BulletSprite sprite, java.util.function.IntPredicate includeLane) {
         float margin = d.wallMarginX > 0 ? d.wallMarginX : 0.25f;
         float spacing = d.wallSpacing > 0 ? d.wallSpacing : 0.4f;
@@ -680,9 +587,7 @@ final class FiringPatternPreviewCanvas extends Canvas {
         }
     }
 
-    /** ShapeFiring: shapeCount clusters fanned over spreadDegrees around the aim (fixed fireAngle,
-     *  else the player), each one bullet per shapePoints dot - flipped, then turned to face back at
-     *  the emitter exactly like the real pattern does before handing each dot to a ShapeBullet. */
+    /** ShapeFiring: shapeCount pictures fanned over spreadDegrees around the aim. */
     private void spawnShapeVolley(FiringPatternDef d, BulletSprite sprite) {
         float[] points = d.shapePoints != null && d.shapePoints.length >= 2 ? d.shapePoints : new float[]{0f, 0f};
         int count = Math.max(1, d.numBullets > 0 ? d.numBullets : 1);
@@ -754,13 +659,8 @@ final class FiringPatternPreviewCanvas extends Canvas {
         bullets.add(b);
     }
 
-    /** Builds `b`'s own ramp state from whichever speed-change spec PatternFactory.speedProfile()
-     *  would have picked for `d` - its authored bulletSpeedPhases sequence if it set one (wholesale,
-     *  never merged with the flat fields below - see FiringPatternDef.bulletSpeedPhases's own doc),
-     *  else its referenced BulletDef's phases, otherwise a single phase held forever from the flat
-     *  bulletAcceleration (pattern's own, else the BulletDef's). minSpeed/maxSpeed mirror
-     *  PatternFactory.bulletMinSpeed()/bulletMaxSpeed() (0 = "can decelerate to a stop but not
-     *  reverse", unbounded above unless set). */
+    /** As PatternFactory.speedProfile(): the pattern's phases, else the BulletDef's, else one phase
+     *  of bulletAcceleration. minSpeed defaults to 0; maxSpeed is unbounded unless set. */
     private void applySpeedProfile(PreviewBullet b, FiringPatternDef d) {
         BulletDef bd = bulletDefOf(d);
         b.minSpeed = d.bulletMinSpeed > 0 ? d.bulletMinSpeed : (bd != null && bd.bulletMinSpeed > 0 ? bd.bulletMinSpeed : 0f);
@@ -825,8 +725,7 @@ final class FiringPatternPreviewCanvas extends Canvas {
                 b.facingDeg = b.angleDeg;
             }
             case SINE -> {
-                // SineBullet: falls straight down, x = origin + amplitude * sin(frequency * t),
-                // sprite turned along its actual velocity.
+                // SineBullet: falls with x = origin + amplitude * sin(frequency * t).
                 b.speed = applyRamp(b, delta);
                 b.traveled += b.speed * delta;
                 float t = b.age;
@@ -836,8 +735,7 @@ final class FiringPatternPreviewCanvas extends Canvas {
                 b.facingDeg = (float) Math.toDegrees(Math.atan2(-b.speed, vx));
             }
             case FEATHER -> {
-                // FeatherBullet: the same fall plus a faster, smaller secondary sway, and the sprite
-                // rocks +-28 degrees instead of pointing along its velocity.
+                // FeatherBullet: adds a smaller, faster sway; the sprite rocks +-28 degrees.
                 b.speed = applyRamp(b, delta);
                 b.traveled += b.speed * delta;
                 float t = b.age;
@@ -860,8 +758,7 @@ final class FiringPatternPreviewCanvas extends Canvas {
                 b.facingDeg = (float) Math.toDegrees(Math.atan2(vy, vx));
             }
             case SHAPE -> {
-                // ShapeBullet: the whole picture travels together; each dot sits at its offset times
-                // the picture's current spread (see shapeSpread()).
+                // ShapeBullet: position = travel + offset * spread.
                 b.speed = applyRamp(b, delta);
                 b.traveled += b.speed * delta;
                 double rad = Math.toRadians(b.angleDeg);
@@ -875,19 +772,14 @@ final class FiringPatternPreviewCanvas extends Canvas {
         }
     }
 
-    /** A SHAPE bullet's current spread - the same formula as ShapeBullet.spread(): accelerating from
-     *  0 into formScale at formTime, then drifting on at the spread speed it had at that moment. */
+    /** ShapeBullet.spread(). */
     private static float shapeSpread(PreviewBullet b) {
         if (b.formTime <= 0f) return b.formScale;
         if (b.age < b.formTime) return b.spreadSpeed * b.age + 0.5f * b.spreadAcceleration * b.age * b.age;
         return b.formScale + b.driftSpeed * (b.age - b.formTime);
     }
 
-    /** Same phase-cycling ramp SpeedRamp.apply() drives in the real game (see that class's own
-     *  doc) - advances phaseTimer, walks through zero-duration phases and, on the last phase,
-     *  either wraps back to phase 0 (loop) or holds there, then applies that phase's own
-     *  acceleration for this frame, clamped to minSpeed/maxSpeed. A no-op (returns the current
-     *  speed unchanged) for a bullet marked !rampable - see PreviewBullet.rampable's own doc. */
+    /** SpeedRamp.apply(); returns the speed unchanged for non-rampable bullets. */
     private static float applyRamp(PreviewBullet b, float delta) {
         if (!b.rampable) return b.speed;
         float duration = b.durations[b.phaseIndex];
@@ -910,7 +802,7 @@ final class FiringPatternPreviewCanvas extends Canvas {
         return b.x < -2f || b.x > WORLD_WIDTH + 2f || b.y < -2f || b.y > WORLD_HEIGHT + 2f;
     }
 
-    // --- Drawing --------------------------------------------------------------------------------
+    // --- Drawing ---
 
     private void redraw() {
         GraphicsContext g = getGraphicsContext2D();
@@ -960,15 +852,8 @@ final class FiringPatternPreviewCanvas extends Canvas {
         }
     }
 
-    /** Draws `b`'s real sprite - cropped to its current animation frame and sized to its actual
-     *  bulletSize world-unit width (matching EnemyBullet.init()'s own "width = size, height = size *
-     *  frameAspect" sizing exactly, see e.g. SineBullet.init()) - instead of the plain colored dot,
-     *  rotated to face its travel bearing the same way the real bullet classes orient themselves
-     *  (velocity.angleDeg() - 90, see e.g. SineBullet.update()) modulo the world/canvas Y-flip every
-     *  other draw call here already accounts for (see worldToCanvasY) - derivable as
-     *  90 - b.angleDeg, but not pixel-verified against the real renderer since this preview draws
-     *  everything from scratch on a plain Canvas rather than reusing LibGDX's own Sprite pipeline
-     *  (see this class's own top-of-file doc on why). Good enough for a preview; not claimed exact. */
+    /** Draws the current frame at bulletSize wide (height from the frame aspect), rotated to its
+     *  facing (canvas Y is flipped). */
     private void drawBulletSprite(GraphicsContext g, PreviewBullet b, double bx, double by) {
         BulletSprite sprite = b.sprite;
         double width = Math.max(b.size * SCALE, 2);

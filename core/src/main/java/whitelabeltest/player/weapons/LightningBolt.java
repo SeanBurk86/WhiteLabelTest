@@ -51,11 +51,8 @@ final class LightningBolt {
 
     private LightningBolt() {}
 
-    // minAlong/maxAlong/minPerp/maxPerp clamp every displaced/fork point to a caller-given box (the
-    // weapon's hitbox, when start/end are given in its local along/perp frame) so the recursive
-    // displacement and forks can't wander past it. Clamping incrementally as each point is created
-    // - rather than only at the finished leaves - keeps neighboring points close together instead
-    // of producing one long straight segment where a stray point gets yanked back to the boundary.
+    // Every new point is clamped to the min/max box (the hitbox, in along/perp space) as it's
+    // created. Clamping only the final points would leave long straight segments at the edges.
     static Array<Segment> generate(float startX, float startY, float endX, float endY, long seed, float thickness,
                                     float minAlong, float maxAlong, float minPerp, float maxPerp) {
         Array<Working> current = new Array<>(true, 32);

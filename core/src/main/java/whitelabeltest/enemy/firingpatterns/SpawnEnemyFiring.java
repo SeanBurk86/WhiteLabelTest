@@ -17,8 +17,7 @@ public class SpawnEnemyFiring implements FiringPattern {
     private final float spawnInterval;
     private final float offsetX;
     private final float offsetY;
-    // The movement pattern each spawn is given (null = it doesn't move) - see
-    // FiringPatternDef.spawnMovementPattern.
+    // Movement pattern for each spawn (null = doesn't move).
     private final String movementPattern;
     private float spawnTimer;
 
@@ -49,8 +48,7 @@ public class SpawnEnemyFiring implements FiringPattern {
             float spawnX = sprite.getX() + sprite.getWidth() / 2f + offsetX;
             float spawnY = sprite.getY() + offsetY;
             GenericEnemy spawned = EnemySpawnRegistry.spawn(enemyType, spawnX, spawnY, movementPattern);
-            // spawn() places the new sprite's bottom-left corner at (x, y); centre it on the emission
-            // point instead, so a spawn comes out exactly where offsetX/offsetY say.
+            // spawn() places the bottom-left corner; center it on the emission point instead.
             if (spawned != null) spawned.centerOn(spawnX, spawnY);
         }
     }

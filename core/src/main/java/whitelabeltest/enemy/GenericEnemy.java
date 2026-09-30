@@ -15,6 +15,8 @@ import whitelabeltest.enemy.firingpatterns.FiringPattern;
 import whitelabeltest.enemy.firingpatterns.SelfDestructFiring;
 import whitelabeltest.enemy.movementpatterns.MovementPattern;
 
+/** The data-driven enemy: every enemy is a GenericEnemy built from an EnemyDefinition plus the
+ *  spawn's own movement/firing pattern ids. */
 public class GenericEnemy extends BaseEnemy {
 
     private EnemyDefinition def;
@@ -26,8 +28,7 @@ public class GenericEnemy extends BaseEnemy {
     private Texture bulletTexture;
     private Texture spawnTexture;
     private Texture deathTexture;
-    // Kept from initWithDefinition() so a health-phase movement swap (see resolveMovementPattern())
-    // builds its pattern with the same formation slot this spawn originally used.
+    // Kept so a health-phase movement swap uses the same formation slot.
     private float formationOffsetX = Float.NaN;
     private float formationOffsetY = Float.NaN;
 
@@ -37,9 +38,8 @@ public class GenericEnemy extends BaseEnemy {
         initWithDefinition(def, texture, bulletTexture, spawnTexture, deathTexture, worldWidth, worldHeight, startX, startY, Float.NaN, Float.NaN, null);
     }
 
-    /** @param formationOffsetX, formationOffsetY this spawn's slot in a squad formation, passed
-     *  straight through to PatternFactory.createMovement - see its javadoc. NaN (the other
-     *  overload above) means "not part of a formation spawned this way". */
+    /** @param formationOffsetX,formationOffsetY squad formation slot (NaN = none); see
+     *  PatternFactory.createMovement. */
     public void initWithDefinition(EnemyDefinition def, Texture texture, Texture bulletTexture,
                                     Texture spawnTexture, Texture deathTexture,
                                     float worldWidth, float worldHeight, float startX, float startY,
@@ -47,10 +47,7 @@ public class GenericEnemy extends BaseEnemy {
         initWithDefinition(def, texture, bulletTexture, spawnTexture, deathTexture, worldWidth, worldHeight, startX, startY, formationOffsetX, formationOffsetY, null);
     }
 
-    /** @param movementPatternId this spawn's own movement pattern id - see Trigger.movementPattern's
-     *  own doc. Movement isn't part of EnemyDefinition at all (unlike firingPatternId below, which
-     *  DOES fall back to def.firingPattern - firing stayed type-level), so null here simply means
-     *  this particular spawn doesn't move, same as any other unset trigger field. */
+    /** @param movementPatternId the spawn's movement pattern; null = doesn't move (no type-level default). */
     public void initWithDefinition(EnemyDefinition def, Texture texture, Texture bulletTexture,
                                     Texture spawnTexture, Texture deathTexture,
                                     float worldWidth, float worldHeight, float startX, float startY,
@@ -58,10 +55,7 @@ public class GenericEnemy extends BaseEnemy {
         initWithDefinition(def, texture, bulletTexture, spawnTexture, deathTexture, worldWidth, worldHeight, startX, startY, formationOffsetX, formationOffsetY, movementPatternId, null);
     }
 
-    /** @param firingPatternId overrides def.firingPattern when non-null - same reasoning as
-     *  movementPatternId above, lets several spawn events share one enemy definition while each
-     *  firing something different (e.g. WallFiring's per-wave gapCenterX) instead of needing a
-     *  near-duplicate enemy definition that differs only in firingPattern. */
+    /** @param firingPatternId overrides def.firingPattern when non-null. */
     public void initWithDefinition(EnemyDefinition def, Texture texture, Texture bulletTexture,
                                     Texture spawnTexture, Texture deathTexture,
                                     float worldWidth, float worldHeight, float startX, float startY,
@@ -69,11 +63,8 @@ public class GenericEnemy extends BaseEnemy {
         initWithDefinition(def, texture, bulletTexture, spawnTexture, deathTexture, worldWidth, worldHeight, startX, startY, formationOffsetX, formationOffsetY, movementPatternId, firingPatternId, null, 0f);
     }
 
-    /** @param entranceTrigger non-null (only ever from EnemySpawnOps.spawnEnemy(), i.e.
-     *  TriggerManager.fire()) builds and applies EnemyEntranceMovement.build() as this spawn's
-     *  movement, replacing whatever movementPatternId would otherwise have resolved to - see that
-     *  method's own doc. Built HERE rather than by the caller because it needs the real spawn
-     *  sprite's true size (set below, before this runs), which isn't known any earlier than this. */
+    /** @param entranceTrigger if set, applies EnemyEntranceMovement (built here because it needs the
+     *  real sprite size). */
     public void initWithDefinition(EnemyDefinition def, Texture texture, Texture bulletTexture,
                                     Texture spawnTexture, Texture deathTexture,
                                     float worldWidth, float worldHeight, float startX, float startY,
@@ -125,23 +116,11 @@ public class GenericEnemy extends BaseEnemy {
         this.healthRegenPerSecond = def.healthRegenPerSecond;
         this.animationTime = 0;
 
-        // No def-level fallback (see EnemyDefinition.java's own doc) - PatternRegistry.getMovement(null)
-        // and PatternFactory.createMovement(null, ...) are both already null-safe, resolving to
-        // NoMovement, so a spawn with no movementPatternId of its own simply doesn't move. Built
-        // BEFORE startY below (this method's original order had it after) because the 4-arg
-        // EnemyEntranceMovement.spawnY() overload needs to inspect THIS already-resolved pattern - see
-        // that overload's own doc - not just trigger.y; movement itself never depends on the sprite's Y
-        // (only X, already set above), so nothing here loses anything by building it first.
+        // A null id resolves to NoMovement. Built before Y is set because the entrance spawn height
+        // inspects this pattern; movement only depends on X.
         this.movement = PatternFactory.createMovement(PatternRegistry.getMovement(movementPatternId), worldWidth, worldHeight, sprite.getX() + sprite.getWidth() / 2f, formationOffsetX, formationOffsetY);
 
-        // See EnemyEntranceMovement.spawnY()'s own doc - overrides the caller-supplied startY with
-        // the real off-screen spawn point ONLY now, because that computation needs this sprite's
-        // actual height (just set above via sprite.setSize()) to stay safely under isOffScreen()'s
-        // own removal tolerance - computing it any earlier (back when the caller only knew
-        // trigger.enterFromAbove, not yet this sprite's true size) is what silently deleted these
-        // spawns before they could visibly enter at all. Passing this.movement lets it also clear a
-        // WaypointPathMovement's own first-leg target, not just trigger.y - see that overload's own
-        // doc on why a plain trigger.y-only spawn point isn't always high enough.
+        // Entrance spawns start off-screen, computed now that the real sprite height is known.
         if (entranceTrigger != null && entranceTrigger.enterFromAbove && !Float.isNaN(entranceTrigger.y)) {
             startY = EnemyEntranceMovement.spawnY(entranceTrigger, worldHeight, sprite.getHeight(), this.movement);
         }
@@ -175,9 +154,7 @@ public class GenericEnemy extends BaseEnemy {
         beginEntrance();
     }
 
-    /** Moves this enemy so its sprite is centred on (x, y) - for a spawn placed by an emission point
-     *  rather than a corner (see SpawnEnemyFiring). Call right after initWithDefinition(), before the
-     *  first update(), so its movement pattern starts from here. */
+    /** Centers the sprite on (x, y) (for SpawnEnemyFiring). Call before the first update(). */
     public void centerOn(float x, float y) {
         sprite.setCenter(x, y);
         rectangle.setPosition(sprite.getX(), sprite.getY());
@@ -188,17 +165,9 @@ public class GenericEnemy extends BaseEnemy {
         initWithDefinition(null, texture, null, null, null, worldWidth, worldHeight, startX, startY);
     }
 
-    /** The bounds check below (generous tolerance - spriteWidth/Height*2 past each edge, not the
-     *  literal [0,worldWidth]x[0,worldHeight] play area) only actually REMOVES this enemy once
-     *  hasBeenOnScreen is already true - i.e. once it's been WITHIN those bounds at least one frame
-     *  since it last spawned (see BaseEnemy.beginEntrance(), which resets the flag). Before that,
-     *  being outside the bounds never removes it, no matter how far outside or for how long -
-     *  covering a spawn placed anywhere off-axis (a wave member spread wide in X, an anchor trigger
-     *  authored off to one side, not just the vertical entrance the old margin math was originally
-     *  sized for) that's meant to fly ONTO screen via its own movement/waypoint path rather than
-     *  spawning already inside the tolerance. Once it's genuinely been seen, the ordinary rule
-     *  applies again: wandering back out (by design, or by running off the bottom/top/either side)
-     *  removes it exactly as before. */
+    /** Ready for removal when its death animation ends, it self-destructed, its movement finished,
+     *  or it left the bounds (two sprite sizes past each edge). Leaving the bounds only counts after
+     *  it has been inside them once, so off-screen spawns can fly in. */
     @Override
     public boolean isOffScreen() {
         if (lifecycleState == LifecycleState.DYING) return isDeathAnimationFinished();
@@ -222,19 +191,14 @@ public class GenericEnemy extends BaseEnemy {
         return e;
     }
 
-    /** See BaseEnemy.resolveWeaponSet()'s own doc - looks `weaponSetName` up in this enemy's own
-     *  def.weaponSets to find which firing-pattern id to switch to, then builds it the same way
-     *  initWithDefinition() builds `firing` in the first place. Null (no swap) if this definition
-     *  has no weaponSets at all, doesn't define that name, or the name doesn't resolve to a real
-     *  firing pattern on disk. */
+    /** Looks the name up in def.weaponSets; null (no swap) if missing or unknown. */
     @Override
     protected FiringPattern resolveWeaponSet(String weaponSetName) {
         if (def == null || def.weaponSets == null || weaponSetName == null) return null;
         return resolveFiringPattern(def.weaponSets.get(weaponSetName));
     }
 
-    /** Builds `firingPatternId` the same way initWithDefinition() builds `firing` in the first
-     *  place. Null (no swap) for a null id or one that isn't a real pattern on disk. */
+    /** Builds a firing pattern by id; null (no swap) if unknown. */
     @Override
     protected FiringPattern resolveFiringPattern(String firingPatternId) {
         if (def == null || firingPatternId == null) return null;
@@ -243,8 +207,7 @@ public class GenericEnemy extends BaseEnemy {
         return PatternFactory.createFiring(def, patternDef, worldWidth, worldHeight);
     }
 
-    /** Builds the named entry of this enemy's own def.animations - see EnemyAnimationDef. Null (no
-     *  swap) if the definition has no such animation or its texture isn't loaded. */
+    /** Builds a def.animations entry; null (no swap) if missing or its texture isn't loaded. */
     @Override
     protected Animation<TextureRegion> resolveAnimation(String animationName) {
         if (def == null || def.animations == null) return null;
@@ -256,9 +219,7 @@ public class GenericEnemy extends BaseEnemy {
             animDef.frameDuration, animDef.loop ? Animation.PlayMode.LOOP : Animation.PlayMode.NORMAL);
     }
 
-    /** Builds `movementPatternId` starting from wherever this enemy is right now - a WaypointPath's
-     *  own initFrom() reads the sprite's position the first time it updates, so the new path just
-     *  curves from here to its first waypoint. Null (no swap) for an id that isn't a real pattern. */
+    /** Builds a movement pattern starting from the current position; null (no swap) if unknown. */
     @Override
     protected MovementPattern resolveMovementPattern(String movementPatternId) {
         MovementPatternDef patternDef = PatternRegistry.getMovement(movementPatternId);

@@ -9,6 +9,7 @@ import com.badlogic.gdx.math.Rectangle;
 import com.badlogic.gdx.math.Vector2;
 import whitelabeltest.enemy.Enemy;
 
+/** Circles a center point that itself drifts at a constant velocity. */
 public class OrbitingBullet implements EnemyBullet {
     private Sprite sprite;
     private final Rectangle rectangle;
@@ -66,7 +67,7 @@ public class OrbitingBullet implements EnemyBullet {
         float cy = spawnCenterY + centerVy * time;
         sprite.setCenter(cx + orbitRadius * MathUtils.cos(angle), cy + orbitRadius * MathUtils.sin(angle));
 
-        // Instantaneous velocity = center velocity + tangential orbit velocity
+        // Velocity = center drift + tangential orbit velocity (for facing).
         float vx = centerVx - orbitRadius * orbitSpeed * MathUtils.sin(angle);
         float vy = centerVy + orbitRadius * orbitSpeed * MathUtils.cos(angle);
         sprite.setRotation(tempVelocity.set(vx, vy).angleDeg() - 90);

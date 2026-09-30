@@ -9,6 +9,7 @@ import com.badlogic.gdx.utils.Array;
 import whitelabeltest.enemy.Enemy;
 import whitelabeltest.enemy.bullets.EnemyBullet;
 
+/** Runs sub-patterns one at a time for their durations, looping. */
 public class SequencedFiringPattern implements FiringPattern {
     private final Array<FiringPattern> patterns;
     private final float[] durations;
@@ -43,8 +44,7 @@ public class SequencedFiringPattern implements FiringPattern {
         for (FiringPattern p : patterns) p.reset();
     }
 
-    // Same step the timer-expiry branch of update() takes, just triggered externally instead of by
-    // durations[currentIndex] elapsing - see Enemy.advanceFiringPattern().
+    // Skips to the next stage now (the same step as the timer expiring).
     @Override
     public void advance() {
         if (patterns.size == 0) return;

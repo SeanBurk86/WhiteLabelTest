@@ -12,17 +12,9 @@ import whitelabeltest.gamemanagers.audio.AudioManager;
 import whitelabeltest.gamemanagers.ObjectPools;
 import whitelabeltest.player.Player;
 
-/** Two very different things share this class:
- *  - the "prototype" instance held in Player.weaponSlots, which never itself orbits or draws -
- *    it just tracks the reflect-shield's active/cooldown state and, via maintainRing(), keeps
- *    the ring of orbiting bullets in sync with the weapon's level; and
- *  - the ring member instances (pooled, added to the shared bullets array) that actually orbit
- *    and damage enemies on contact, one per maintainRing() call per level.
- *  Ring members never touch the shield fields (only the prototype's tryActivateShield() does,
- *  since that's the instance Player.getCurrentWeapon() returns), so the split is safe despite
- *  being the same class. The fire button just controls whether the ring exists (see
- *  Player.maintainOrbitRing) - the reflect shield is a separate ability, raised by the Hyper
- *  Attack input via tryActivateShield(). */
+/** Used two ways: the slot instance (never drawn) owns the reflect shield and maintains the ring;
+ *  the pooled ring members (one per level) orbit the ship and damage on contact. Hyper Attack
+ *  raises the reflect shield. */
 public class OrbitWeapon extends BaseWeapon {
     public static final float SHIELD_DURATION = 2f;
     private static final float SHIELD_COOLDOWN = 4f;
@@ -83,9 +75,7 @@ public class OrbitWeapon extends BaseWeapon {
 
         float prevAngle = angle;
         angle += def.rotationSpeed * delta;
-        // Crack the whip once per full lap this ring member completes, regardless of its phase
-        // offset - since every member shares the same rotation speed, level members crossing this
-        // grid of 2*PI marks independently adds up to `level` cracks per rotation of the ring.
+        // A whip crack per lap per member, i.e. `level` cracks per ring rotation.
         if (audio != null && Math.floor(angle / TWO_PI) != Math.floor(prevAngle / TWO_PI)) {
             audio.playOrbitWhip();
         }
@@ -103,9 +93,7 @@ public class OrbitWeapon extends BaseWeapon {
     @Override
     public boolean isOffScreen(float worldHeight) { return false; }
 
-    /** Creates/replaces the ring of orbiting bullets so its size always matches this weapon's
-     *  level - called every frame while OrbitWeapon is the actively selected slot, regardless of
-     *  firing, so the ring is up whenever this weapon is the one selected. */
+    /** Keeps the ring's member count equal to the level (called every frame the ring is up). */
     public void maintainRing(Array<Weapon> bullets, Texture texture, Player player, AudioManager audio) {
         int currentOrbitWeapons = 0;
         for (Weapon w : bullets) {
@@ -149,9 +137,7 @@ public class OrbitWeapon extends BaseWeapon {
     public void playFireSound(AudioManager audio, int level) {
     }
 
-    /** OrbitWeapon's Hyper Attack: raises the reflect shield, subject to its own active/cooldown
-     *  timers (independent of the normal fire-rate cooldown). Reuses WaveBlastWeapon's fire
-     *  sounds rather than a dedicated bank of its own. */
+    /** Raises the reflect shield if it's off cooldown (uses WaveBlast's fire sound). */
     @Override
     public void hyperAttack(Player player, Array<Weapon> activeWeapons, Array<Enemy> enemies, AssetManager assets, AudioManager audio) {
         if (tryActivateShield()) {
@@ -169,9 +155,7 @@ public class OrbitWeapon extends BaseWeapon {
     @Override
     public boolean shouldDestroyOnCollision() { return false; }
 
-    // Advanced every frame while equipped in either slot (see Player.advanceWeaponTimers), same
-    // as the fire-rate cooldown every other weapon uses - so the shield's duration/cooldown run
-    // on real elapsed time regardless of which slot is active.
+    // Also ticks the shield's duration/cooldown.
     @Override
     public void addShootTimer(float delta) {
         super.addShootTimer(delta);

@@ -5,14 +5,14 @@ import com.badlogic.gdx.graphics.Texture;
 import com.badlogic.gdx.graphics.g2d.SpriteBatch;
 import com.badlogic.gdx.graphics.glutils.ShaderProgram;
 
+/** The tutorial's "boxTunnel" ray-marched background (tunnel.frag). */
 public class TutorialBoxTunnelShader implements BackgroundShader {
     private final ShaderProgram shader;
     private final GraphicsSettings.ShaderQuality quality;
     private float time;
 
     public TutorialBoxTunnelShader() {
-        // See GraphicsSettings.ShaderQuality - lower levels march fewer, longer steps (the define), and
-        // ReducedResolutionRenderer renders them smaller and, at LOW, less often.
+        // Lower quality levels compile with fewer march steps.
         quality = GraphicsSettings.getShaderQuality();
         shader = quality.define != null
             ? ShaderLoader.compile("TutorialBoxTunnelShader", "background.vert", "tunnel.frag", quality.define)

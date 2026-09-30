@@ -5,10 +5,7 @@ import com.badlogic.gdx.utils.Array;
 import com.badlogic.gdx.utils.Json;
 import com.badlogic.gdx.utils.ObjectMap;
 
-/** Parses data/enemies.json into an id-keyed map - split out of
- *  whitelabeltest.gamemanagers.spawning.SpawnScheduler (which still calls this rather than
- *  duplicating the logic) so GameController can also build this map for a triggerFile-driven stage
- *  that has no SpawnScheduler running at all - see GameController.loadStage(). */
+/** Parses data/enemies.json into an id-keyed map. */
 public final class EnemyDefinitionLoader {
     private EnemyDefinitionLoader() {}
 

@@ -2,13 +2,8 @@ package whitelabeltest.gamemanagers;
 
 import com.badlogic.gdx.utils.Array;
 
-/** State of the "pick your next stage" screen shown after a stage is cleared on a sequence with a
- *  stageMap - see GameController.openStageSelect() and UIManager.drawStageSelect().
- *
- *  It's the whole StageMap plus where the player has been (`path`, ending at the stage just cleared) and
- *  the choices from there - the stages the current node connects to. The cursor moves between those.
- *  Pure state - no rendering and no input - so it stays trivially deterministic for replays:
- *  GameController feeds it the same recorded movement/confirm inputs either way. */
+/** State of the stage-select screen after a clear: the map, the path taken so far and a cursor over
+ *  the next choices. Pure state (no rendering or input), so replays stay deterministic. */
 public class StageSelect {
     private final StageMap map;
     private final Array<StageMap.Node> path;

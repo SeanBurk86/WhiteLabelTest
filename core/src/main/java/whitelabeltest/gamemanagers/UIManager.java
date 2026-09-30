@@ -28,18 +28,18 @@ import com.badlogic.gdx.utils.Disposable;
 import whitelabeltest.enemy.Enemy;
 import whitelabeltest.player.Player;
 
+/** Draws the HUD side panels, text cues, game over / stage clear / stage select screens and every
+ *  debug overlay and menu. */
 public class UIManager implements Disposable {
-    // "Cyber terminal" HUD palette - see drawHUD()/drawLeftHudPanel()/drawRightHudPanel(), modeled
-    // on the reference mockup (Screenshot 2026-08-06 131050.png): green/amber readouts over dim
-    // dividers and borders on a near-black panel. Package-visible (not private) so ChainFireEffect
-    // can reuse these exact colors for its own ramp instead of duplicating hand-picked literals.
+    // "Cyber terminal" HUD palette: green/amber readouts on a near-black panel. Public so effects
+    // like ChainFireEffect can reuse it.
     public static final Color HUD_GREEN = new Color(0.35f, 1f, 0.55f, 1f);
     public static final Color HUD_GREEN_DIM = new Color(0.16f, 0.4f, 0.24f, 1f);
     public static final Color HUD_AMBER = new Color(1f, 0.72f, 0.18f, 1f);
     public static final Color HUD_RED = new Color(1f, 0.32f, 0.26f, 1f);
     private static final Color HUD_LABEL = new Color(0.5f, 0.62f, 0.55f, 1f);
     private static final Color HUD_GAUGE_BG = new Color(0.05f, 0.12f, 0.08f, 1f);
-    // Bright near-white "hot head" leading each DATA_STREAM column - see drawRightHudPanel().
+    // The bright head of each DATA_STREAM column.
     private static final Color HUD_STREAM_HEAD = new Color(0.85f, 1f, 0.9f, 1f);
 
     private final BitmapFont font;
@@ -47,9 +47,7 @@ public class UIManager implements Disposable {
     private final GlyphLayout textCueLayout;
     private final GlyphLayout measureLayout;
 
-    // HUD text that changes far less often than every frame, rebuilt only when its value does - see
-    // CachedText. String.format parses its format string and allocates on every call, which added up at
-    // several calls a frame.
+    // HUD strings rebuilt only when their value changes (String.format allocates on every call).
     private final CachedText scoreText = new CachedText();
     private final CachedText highScoreText = new CachedText();
     private final CachedText grazeText = new CachedText();
@@ -71,8 +69,7 @@ public class UIManager implements Disposable {
     }
     private final Texture whitePixel;
     private final Texture heartIcon;
-    // GameOverSign.png (4 columns x 3 rows, 12 frames) - see drawGameOver(), which plays it once
-    // and freezes on the last frame via Animation.PlayMode.NORMAL rather than looping.
+    // 4x3 sheet, 12 frames; plays once and holds the last frame.
     private final Texture gameOverSignTexture;
     private final Animation<TextureRegion> gameOverSignAnimation;
     private static final float GAME_OVER_SIGN_FRAME_DURATION = 0.07f;
@@ -105,8 +102,7 @@ public class UIManager implements Disposable {
         whitePixel = new Texture(pixmap);
         pixmap.dispose();
 
-        // Baked once as a plain white icon (two lobes + a point), tinted per-draw via
-        // batch.setColor() the same way whitePixel is - see drawHeartIcon()/INTEGRITY readout.
+        // White heart icon, tinted per draw.
         Pixmap heartPixmap = new Pixmap(32, 32, Pixmap.Format.RGBA8888);
         heartPixmap.setColor(Color.WHITE);
         heartPixmap.fillCircle(10, 11, 8);
@@ -159,8 +155,7 @@ public class UIManager implements Disposable {
         drawSectionLabel(batch, "CHAIN_COUNTER", x, y);
         y -= 1.0f;
 
-        // Fire effect behind the big chain number - see ChainFireEffect - sized to bracket the
-        // number's footprint at its scale-3.2 glyph height (~0.96) with a little breathing room.
+        // Flames behind the chain number, sized around its ~0.96-high glyphs.
         float chainNumberHeight = 0.96f;
         float chainFlameWidth = 3.4f;
         float chainFlameHeight = 1.35f;
@@ -184,8 +179,7 @@ public class UIManager implements Disposable {
         y -= 0.35f;
         drawDivider(batch, x, y, innerWidth);
 
-        // Bottom-anchored footer (lives/bombs), matching the reference mockup's large empty gap
-        // between the chain block and this row rather than continuing to stack downward from y.
+        // Lives/bombs footer, anchored to the bottom of the panel.
         float labelY = 1.0f;
         float iconY = 0.55f;
         float iconSpacing = 0.34f;
@@ -266,8 +260,7 @@ public class UIManager implements Disposable {
 
     private static final float WEAPON_BOX_HEIGHT = 1.05f;
 
-    /** One bordered SPREAD/LASER-style box in WEAPON_SYSTEM - see the reference mockup. yTop is
-     *  the box's top edge; the box occupies [yTop - WEAPON_BOX_HEIGHT, yTop]. */
+    /** One bordered weapon box in WEAPON_SYSTEM, occupying [yTop - WEAPON_BOX_HEIGHT, yTop]. */
     private void drawWeaponBox(SpriteBatch batch, Player player, int slot, float x, float yTop, float width) {
         String weaponId = player.getSlotWeaponId(slot);
         boolean equipped = weaponId != null;
@@ -443,10 +436,7 @@ public class UIManager implements Disposable {
         batch.setColor(Color.WHITE);
     }
 
-    // whitePixel is a plain Texture, and SpriteBatch's rotated-draw overload only exists for
-    // TextureRegion except for one Texture overload that also demands an explicit source rect -
-    // this just supplies that rect (the whole 1x1 pixel) so callers can rotate whitePixel like any
-    // other quad (see drawDivider's marker/drawDiamondIcon).
+    // Rotated whitePixel quad (SpriteBatch's rotated Texture overload needs an explicit source rect).
     private void drawRotatedQuad(SpriteBatch batch, float x, float y, float originX, float originY, float width, float height, float rotation) {
         batch.draw(whitePixel, x, y, originX, originY, width, height, 1f, 1f, rotation, 0, 0, whitePixel.getWidth(), whitePixel.getHeight(), false, false);
     }
@@ -457,10 +447,7 @@ public class UIManager implements Disposable {
         batch.setColor(Color.WHITE);
     }
 
-    // Player-facing (not debug-only, unlike drawEnemyHealthDebug below): a small meter floating
-    // above every enemy that opts in via Enemy.showsHealthBar() - e.g. the tutorial's
-    // bullet-streaming targets, whose regenerating health isn't otherwise visible to the player
-    // deciding whether their stream is actually landing.
+    // Health meter above enemies with showHealthBar (e.g. the tutorial's streaming targets).
     public void drawEnemyHealthBars(SpriteBatch batch, Array<Enemy> enemies) {
         float barHeight = 0.12f;
         for (Enemy enemy : enemies) {
@@ -526,16 +513,8 @@ public class UIManager implements Disposable {
         font.setColor(Color.WHITE);
     }
 
-    // Debug-only: TriggerManager's current camera distance, plus whichever gate (if any) is
-    // currently freezing it and what it's still waiting on - see TriggerManager.describeActiveGate().
-    // Lets a stuck trigger-driven stage (e.g. the tutorial) be diagnosed on screen instead of
-    // guessing which of several back-to-back gates is the blocker. Drawn as its own solid-backed bar
-    // across the top of the PLAY AREA (not either side panel, both of which are already packed edge
-    // to edge with the real HUD - see drawLeftHudPanel()/drawRightHudPanel() - with nowhere left that
-    // wouldn't just print this on top of/underneath that text) - the backdrop keeps it legible over
-    // gameplay too, the same trick drawTextCue() already uses for its own box. Drawn whenever a
-    // distance is available, gate or no - "not currently blocked" is itself useful information
-    // (confirms the camera really is advancing, not just LOOKING stuck). */
+    // Debug-only: camera distance and the gate (if any) freezing it, in a backed bar across the top
+    // of the play area. Shown even with no gate, to confirm the camera is advancing.
     public void drawDebugTriggerInfo(SpriteBatch batch, float worldWidth, float worldHeight, float distance, String activeGateInfo) {
         float boxHeight = activeGateInfo != null ? 0.9f : 0.5f;
         float x = 0.2f;
@@ -555,9 +534,7 @@ public class UIManager implements Disposable {
         }
     }
 
-    // Debug-only: current FPS in the right panel, with the lowest/highest seen since the last
-    // reset listed below it - drawn whether or not the F1 debug menu is open, since that menu's
-    // own dim overlay only spans the play area, not the side panels.
+    // Debug-only: current, lowest and highest FPS since reset, in the right panel.
     public void drawDebugFpsMonitor(SpriteBatch batch, float rightPanelX, float worldHeight, int currentFps, int lowestFps, int highestFps) {
         float x = rightPanelX + 0.2f;
         float y = worldHeight - 0.2f;
@@ -576,11 +553,8 @@ public class UIManager implements Disposable {
     private static final float FPS_HISTOGRAM_HEIGHT = 1.6f;
     private static final Color FPS_HISTOGRAM_TRACK = new Color(0.2f, 0.2f, 0.2f, 1f);
 
-    /** Debug-only: below drawDebugFpsMonitor - one bar per second of fpsHistory (oldest on the
-     *  left, this second on the right; see GameController.updateFpsMonitor), bar height scaled
-     *  against the highest FPS seen so far so the chart doesn't need a fixed axis. Colored red/
-     *  orange/green by how choppy that second was, so a dip reads at a glance without needing to
-     *  read the bar height precisely. */
+    /** Debug-only: one bar per second of FPS history (oldest left), scaled to the highest FPS seen
+     *  and colored red/orange/green by smoothness. */
     public void drawDebugFpsHistogram(SpriteBatch batch, float rightPanelX, float worldHeight, int[] fpsHistory, int highestFps) {
         float x = rightPanelX + 0.2f;
         float labelY = worldHeight - 1.7f;
@@ -614,8 +588,7 @@ public class UIManager implements Disposable {
         return Color.GREEN;
     }
 
-    // Debug-only: F1 menu for jumping the spawn schedule clock to a chosen time or a saved
-    // bookmark, and for setting equipped weapons/slots and their levels.
+    // Debug-only: the F1 menu (seek, bookmarks, weapon slots and levels, lives, tools).
     public void drawDebugMenu(SpriteBatch batch, float worldWidth, float worldHeight, float scheduleTime,
                                float seekTime, int selectedIndex, Array<DebugSaveState> saveStates, Player player,
                                boolean audioMuted, Array<String> stageIds, int stageIndex) {
@@ -730,8 +703,7 @@ public class UIManager implements Disposable {
         font.setColor(Color.WHITE);
     }
 
-    // Debug-only: file picker for recorded replays, opened from the "Replay Browser" row of the
-    // main debug menu - see ReplayBrowser/GameController.startReplay().
+    // Debug-only: recorded replay picker.
     public void drawReplayBrowser(SpriteBatch batch, float worldWidth, float worldHeight, ReplayBrowser browser) {
         batch.setColor(0f, 0f, 0f, 0.75f);
         batch.draw(whitePixel, 0, 0, worldWidth, worldHeight);
@@ -773,11 +745,7 @@ public class UIManager implements Disposable {
         font.setColor(Color.WHITE);
     }
 
-    // Debug-only: live editor for enemies and their movement/firing pattern trees, opened from
-    // the "Enemy / Pattern Editor" row of the main debug menu. See PatternPreviewer for the row
-    // model - each row is either a header, a numeric/boolean/id field, a type switcher, or an
-    // action ("+ New X", "+ Add sub-pattern", "Save"). The row list can be long for a deeply
-    // nested boss pattern, so this scrolls a fixed-size window around the selected row.
+    // Debug-only: PatternPreviewer's rows, scrolled in a fixed window around the selection.
     private static final int PATTERN_EDITOR_VISIBLE_ROWS = 24;
 
     public void drawPatternPreview(SpriteBatch batch, float worldWidth, float worldHeight, PatternPreviewer previewer) {
@@ -836,8 +804,7 @@ public class UIManager implements Disposable {
         font.setColor(Color.WHITE);
     }
 
-    /** Modal id-entry field shown in place of the row list while PatternPreviewer is waiting on
-     *  a new enemy/movement/firing pattern id (see PatternPreviewer.promptNewId). */
+    /** PatternPreviewer's modal text-entry field. */
     private void drawTextEntryPrompt(SpriteBatch batch, float worldWidth, float worldHeight, PatternPreviewer previewer) {
         float x = 0.4f;
         float y = worldHeight / 2f + 0.7f;
@@ -857,9 +824,7 @@ public class UIManager implements Disposable {
         font.setColor(Color.WHITE);
     }
 
-    // Debug-only: the spawn event editor opened from the "Spawn Schedule Editor" row of the main
-    // debug menu - see SpawnScheduleEditor for the row model (same header/number/toggle/id-pick/
-    // action row shapes as PatternPreviewer, just over one SpawnEvent at a time).
+    // Debug-only: SpawnScheduleEditor's rows.
     private static final int SCHEDULE_EDITOR_VISIBLE_ROWS = 24;
 
     public void drawSpawnScheduleEditor(SpriteBatch batch, float worldWidth, float worldHeight, SpawnScheduleEditor editor) {
@@ -918,10 +883,7 @@ public class UIManager implements Disposable {
         font.setColor(Color.WHITE);
     }
 
-    /** Modal number-entry field shown in place of the row list while SpawnScheduleEditor is
-     *  waiting on typed input (see SpawnScheduleEditor.promptNumber) - same modal as
-     *  drawTextEntryPrompt below, just reading from SpawnScheduleEditor instead of PatternPreviewer
-     *  since the two screens' text-entry state isn't shared. */
+    /** SpawnScheduleEditor's modal number-entry field. */
     private void drawScheduleEditorTextEntryPrompt(SpriteBatch batch, float worldWidth, float worldHeight, SpawnScheduleEditor editor) {
         float x = 0.4f;
         float y = worldHeight / 2f + 0.7f;
@@ -952,9 +914,7 @@ public class UIManager implements Disposable {
         };
     }
 
-    /** elapsedTime is seconds since gameOver first became true (GameController.getGameOverTimer())
-     *  - drives the GameOverSign reveal, which plays once and then holds on its last frame instead
-     *  of looping (see gameOverSignAnimation's PlayMode.NORMAL). */
+    /** @param elapsedTime seconds since game over, driving the one-shot GameOverSign animation. */
     public void drawGameOver(SpriteBatch batch, float worldWidth, float worldHeight, float elapsedTime) {
         float aspect = gameOverSignTexture.getWidth() / 4f / (gameOverSignTexture.getHeight() / 3f);
         float signWidth = 6.5f;
@@ -971,15 +931,8 @@ public class UIManager implements Disposable {
         font.setColor(Color.WHITE);
     }
 
-    /** "Cyber terminal" stage-clear screen, restyled to match the same HUD language as
-     *  drawHUD()/drawLeftHudPanel() (reference mockup: Screenshot 2026-08-07 093835.png) instead
-     *  of the old plain centered text block. Shows what's actually tracked: enemies destroyed vs.
-     *  SpawnScheduler's total scripted spawn count (ScoreManager.enemiesDestroyed /
-     *  GameController.getTotalEnemyCount(), shown as "ICE DELETED"), the run's peak chain
-     *  (ScoreManager.maxChainCount), the boss takedown time bonus and the rest of the bonus
-     *  breakdown from GameController.applyLevelCompleteBonus(), and the final score - plus, beside
-     *  that stats panel like the mockup's "TACTICAL RANK" card, the letter grade GameController.
-     *  computeRank() derives from those same stats. */
+    /** Stage-clear screen: kills vs total spawns ("ICE DELETED"), peak chain, the bonus breakdown,
+     *  final score, and the rank card beside it. */
     public void drawLevelComplete(SpriteBatch batch, float worldWidth, float worldHeight, int score, int bombBonus, int livesMultiplier,
                                    int enemiesDestroyed, int totalEnemies, int bossTimeBonus, float bossFightSeconds, int maxChainCount,
                                    LevelRank rank, boolean hasNextStage, String stageName) {
@@ -999,10 +952,7 @@ public class UIManager implements Disposable {
         float subtitleY = titleY - 0.5f;
         drawCentered(batch, "-- HOSTILE ARRAY NEUTRALIZED --", centerX, subtitleY, HUD_GREEN);
 
-        // Decorative scan panel standing in for the mockup's radar graphic - a full CircleMeterEffect
-        // ring (fraction 1.0, "scan complete") captioned with the boss kill that always triggers
-        // level completion (see GameController: levelCompleteDelayTimer only starts once
-        // EntityManager.consumeBossKilled() fires).
+        // Decorative "scan complete" ring captioned with the boss kill.
         float scanTop = subtitleY - 1.0f;
         float scanHeight = 2.6f;
         float scanBottom = scanTop - scanHeight;
@@ -1016,8 +966,7 @@ public class UIManager implements Disposable {
 
         drawCentered(batch, "[ BOSS DEFEATED ]", centerX, scanBottom + 0.35f, HUD_AMBER);
 
-        // Bonus breakdown panel, with the rank badge card beside it (mockup layout) rather than
-        // below it - both share the same top/bottom/height so their borders line up.
+        // Bonus breakdown with the rank card beside it; both share top/bottom so borders line up.
         float statsTop = scanBottom - 0.6f;
         float statsHeight = 4.3f;
         float statsBottom = statsTop - statsHeight;
@@ -1074,13 +1023,9 @@ public class UIManager implements Disposable {
         drawCentered(batch, prompt, centerX, statsBottom - 0.5f, HUD_LABEL);
     }
 
-    /** The stage-select screen shown after a stage clear on a sequence with a stageMap (see StageMap/
-     *  StageSelect), laid out like the reference sketch (assets/stage guide.png): a lattice of hexagon nodes
-     *  running left to right, fanning out from Stage 1 in the middle, each node joined to the two ahead of
-     *  it. Nodes with a stage carry its name; the route already taken is lit green, the stages on offer
-     *  are red (the one under the cursor pulses with a halo), stages on a branch not taken are dimmed, and
-     *  nodes with no stage yet are dark and marked "?". The controls and the highlighted stage's name sit in
-     *  a panel underneath. */
+    /** Stage select: a left-to-right lattice of hexagon nodes. Route taken = green, choices = red
+     *  (the selected one pulses), untaken branches dimmed, stageless nodes dark with "?". The
+     *  selected stage's name and the controls sit in a panel below. */
     public void drawStageSelect(SpriteBatch batch, float worldWidth, float worldHeight, StageSelect select) {
         batch.setColor(0f, 0f, 0f, 0.9f);
         batch.draw(whitePixel, 0, 0, worldWidth, worldHeight);
@@ -1107,9 +1052,8 @@ public class UIManager implements Disposable {
         Array<StageMap.Node> nodes = map.getNodes();
         float time = select.getTime();
 
-        // Node coordinates are 0..1 across the area inside the panel's padding. The hexagons are sized off the
-        // tightest spacing on the map - the vertical gap between neighbours in the tallest column, and the gap
-        // between columns - so they nearly touch their neighbours like the sketch's do, but never overlap.
+        // Node coordinates are 0..1 inside the padding. Hexagons are sized off the tightest spacing
+        // so they nearly touch but never overlap.
         float padX = 0.9f, padY = 0.8f;
         float mapLeft = panelX + padX;
         float mapWidth = panelWidth - padX * 2f;
@@ -1127,8 +1071,7 @@ public class UIManager implements Disposable {
         StageMap.Node current = select.getCurrent();
         StageMap.Node selected = select.getSelected();
 
-        // Links first, so the hexagons cover their ends. Lit along the route taken, amber from where the player
-        // stands to each stage on offer (pulsing on the highlighted one), dim everywhere else.
+        // Links first so hexagons cover their ends: lit along the route, amber to each choice, dim elsewhere.
         for (StageMap.Node from : nodes) {
             float fx = mapLeft + from.x * mapWidth, fy = mapBottom + from.y * mapHeight;
             for (StageMap.Node to : from.next) {
@@ -1176,8 +1119,7 @@ public class UIManager implements Disposable {
 
         }
 
-        // Names go INSIDE the hexagons, drawn after all of them: stacked nodes leave no room above or beside
-        // one for a label, and a bigger neighbour must never paint over it. Long names shrink to fit.
+        // Names go inside the hexagons, after all of them are drawn; long names shrink to fit.
         for (StageMap.Node node : nodes) {
             float nx = mapLeft + node.x * mapWidth, ny = mapBottom + node.y * mapHeight;
             if (!node.hasStage() || node.label == null) {
@@ -1211,14 +1153,11 @@ public class UIManager implements Disposable {
 
     private static final float SQRT3 = 1.7320508f;
 
-    /** A filled regular hexagon with flat top and bottom and points left and right (like the sketch's),
-     *  `radius` from its centre to a point. Drawn as a stack of horizontal strips - a hexagon is only
-     *  ever as wide as 2*(radius - |y|/sqrt(3)) at height y from its centre - since the batch only draws
-     *  textured quads. */
+    /** A filled flat-topped hexagon (points left/right), drawn as horizontal strips of width
+     *  2*(radius - |y|/sqrt(3)) since the batch only draws quads. */
     private void drawHexagon(SpriteBatch batch, float cx, float cy, float radius, float r, float g, float b, float a) {
         float halfHeight = radius * SQRT3 / 2f;
-        // About 90 strips per world unit of height (~1 pixel or less at any sensible window size), so the slanted
-        // edges come out smooth rather than stair-stepped.
+        // ~90 strips per world unit (about a pixel each) so the slanted edges look smooth.
         int strips = Math.max(22, (int) (2f * halfHeight * 90f));
         float stripHeight = 2f * halfHeight / strips;
         batch.setColor(r, g, b, a);
@@ -1226,18 +1165,17 @@ public class UIManager implements Disposable {
             float y0 = -halfHeight + i * stripHeight;
             float mid = Math.abs(y0 + stripHeight / 2f);
             float width = 2f * (radius - mid / SQRT3);
-            // A hair of overlap between strips so no seams show through at fractional pixel positions - but only
-            // when opaque: overlapping translucent strips would double up into visible stripes.
+            // Slight overlap hides seams, but only when opaque (translucent overlap shows stripes).
             batch.draw(whitePixel, cx - width / 2f, cy + y0, width, a >= 1f ? stripHeight + 0.004f : stripHeight);
         }
         batch.setColor(Color.WHITE);
     }
 
-    /** A straight, `thickness`-wide line between two points - one piece of the stage-select path. */
+    /** A `thickness`-wide line between two points. */
     private void drawPathSegment(SpriteBatch batch, float x1, float y1, float x2, float y2, float thickness,
                                  float r, float g, float b, float a) {
         float dx = x2 - x1, dy = y2 - y1;
-        // A touch longer than the segment so neighbouring pieces overlap instead of leaving gaps at the bends.
+        // Slightly longer than the segment so bends don't show gaps.
         float length = (float) Math.hypot(dx, dy) + thickness * 0.5f;
         float angle = MathUtils.atan2(dy, dx) * MathUtils.radiansToDegrees;
         float cx = (x1 + x2) / 2f, cy = (y1 + y2) / 2f;
@@ -1246,9 +1184,7 @@ public class UIManager implements Disposable {
         batch.setColor(Color.WHITE);
     }
 
-    /** The mockup's side "TACTICAL RANK" card: a bordered box (border tinted by rank) holding a
-     *  full CircleMeterEffect ring around the big letter grade, with "TACTICAL RANK" and the
-     *  rank's flavor subtitle (LevelRank.subtitle) centered below it. */
+    /** The "TACTICAL RANK" card: rank-tinted border, ring around the letter, subtitle below. */
     private void drawRankCard(SpriteBatch batch, float x, float y, float width, float height, LevelRank rank) {
         Color accent = rankColor(rank);
         drawBoxBorder(batch, x, y, width, height, accent);
@@ -1283,9 +1219,7 @@ public class UIManager implements Disposable {
         drawTextRightAligned(batch, value, rightEdge, y, valueColor);
     }
 
-    // Cheap outline/glow: the base color drawn once, on top of the glow color drawn at four
-    // diagonal offsets - approximates the reference mockup's neon-outlined title without a real
-    // shader pass.
+    // Cheap neon glow: the text in the glow color at four diagonal offsets, then the base color on top.
     private void drawGlowCentered(SpriteBatch batch, String text, float centerX, float y, float scale, Color glowColor, Color color) {
         float o = 0.035f;
         drawScaledCentered(batch, text, centerX - o, y - o, scale, glowColor);
@@ -1295,23 +1229,17 @@ public class UIManager implements Disposable {
         drawScaledCentered(batch, text, centerX, y, scale, color);
     }
 
-    // Solid gray backdrop drawn behind a text cue's own bounds (see drawTextCue()) to keep it
-    // legible over whatever's on screen behind it (shader backgrounds, bullets, enemies).
+    // Backdrop behind text cues so they stay legible over gameplay.
     private static final Color TEXT_CUE_BOX_COLOR = new Color(0.5f, 0.5f, 0.5f, 0.85f);
     private static final float TEXT_CUE_BOX_PAD_X = 0.25f;
     private static final float TEXT_CUE_BOX_PAD_TOP = 0.15f;
     private static final float TEXT_CUE_BOX_PAD_BOTTOM = 0.15f;
-    // Extra room reserved below the message itself for the "press to continue" hint - see
-    // drawTextCue()'s showHint branch, only used while requireConfirm is true.
+    // Room below the message for the "press to continue" hint.
     private static final float TEXT_CUE_HINT_HEIGHT = 0.4f;
 
-    // realTime must be SpawnScheduler's own never-frozen clock (see TextCue.triggeredAtRealTime),
-    // not its gate-freezable totalTime - otherwise a cue whose window spans an unsatisfied gate
-    // would stall its typewriter reveal for however long the player takes to clear it.
-    // @param requireConfirm mirrors SpawnScheduler.isTextCuesRequireConfirm() for the owning
-    //  schedule - true suppresses the normal duration-based auto-hide (a confirm-gated cue lingers
-    //  until SpawnScheduler.update() marks it dismissed, however long that takes) and draws the
-    //  "press to continue" hint; confirmKeyLabel is only read in that case.
+    // realTime must be the never-frozen clock, or a gate would stall typewriter reveals.
+    // requireConfirm (schedule-wide) or a cue's own requireConfirm keeps the cue up past its duration
+    // until dismissed and shows the "press to continue" hint.
     public void drawTextCues(SpriteBatch batch, float realTime, Array<TextCue> cues, boolean requireConfirm, String confirmKeyLabel) {
         if (cues == null) return;
 
@@ -1333,9 +1261,7 @@ public class UIManager implements Disposable {
             font.getData().setScale(originalScaleX * cue.fontSize, originalScaleY * cue.fontSize);
         }
 
-        // Measured against the cue's FULL text, not just whatever's revealed so far - keeps the
-        // backdrop box a stable size while a typewriter cue is still typing instead of growing
-        // along with it.
+        // Measure the full text so the backdrop doesn't grow while typing.
         textCueLayout.setText(font, cue.text);
         float textWidth = textCueLayout.width;
         float textHeight = textCueLayout.height;
@@ -1347,10 +1273,7 @@ public class UIManager implements Disposable {
             y = cue.y + textHeight / 2f;
         }
 
-        // The box must cover whichever of the message or the hint line is wider - a short message
-        // (e.g. "Nice flying!") is often narrower than "Press SPACE to continue", and both share
-        // the same left edge x, so sizing the box off the message alone left the hint sticking out
-        // past its right edge, uncovered.
+        // The box covers whichever is wider: the message or the hint.
         String hintText = requireConfirm ? "Press " + confirmKeyLabel + " to continue" : null;
         float hintWidth = 0f;
         if (hintText != null) {

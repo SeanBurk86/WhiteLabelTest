@@ -1,32 +1,23 @@
 package whitelabeltest.enemy;
 
-/** One collision shape of an enemy - see EnemyDefinition.hitboxes. An enemy can have any number of these,
- *  each a rectangle or a circle, so a hitbox can hug the part of the art that should actually be hittable
- *  (a body plus separate wings, say) instead of the sprite's whole bounding box.
- *
- *  Everything is expressed in the sprite's own frame - the UNROTATED sprite, centred on (0, 0), y up - and as
- *  a FRACTION of the sprite's drawn size, so a hitbox keeps lining up with the art when EnemyDefinition.size
- *  changes. The shape then rotates with the sprite, around the sprite's centre, exactly like the old single
- *  sprite-sized box did. See EnemyHitboxes for turning one into a world-space shape. */
+/** One enemy collision shape (EnemyDefinition.hitboxes), a rectangle or circle, in the unrotated
+ *  sprite's frame (centered at 0,0, y up) as fractions of the sprite's drawn size, so it scales with
+ *  the sprite and rotates with it. See EnemyHitboxes for the world-space shape. */
 public class HitboxDef {
     public static final String RECT = "rect";
     public static final String CIRCLE = "circle";
 
     // RECT or CIRCLE.
     public String shape = RECT;
-    // Where the shape's centre sits relative to the sprite's centre, as a fraction of the sprite's drawn
-    // width (x, positive = right) and height (y, positive = up).
+    // Center offset as fractions of the sprite's width (x, right) and height (y, up).
     public float x = 0f;
     public float y = 0f;
     // RECT: the size as a fraction of the sprite's drawn width/height (1 x 1 = the whole sprite).
     public float width = 1f;
     public float height = 1f;
-    // RECT: how far the rectangle is turned about its OWN centre, in degrees counter-clockwise (the same convention
-    // as sprite rotation), in the sprite's frame - so it turns with the sprite on top of this. Meaningless for a
-    // CIRCLE.
+    // RECT: rotation about its own center, degrees counter-clockwise, on top of the sprite's rotation.
     public float rotation = 0f;
-    // CIRCLE: the radius as a fraction of the sprite's SHORTER side, so it stays a true circle on a
-    // non-square sprite (0.5 = as wide as the shorter side).
+    // CIRCLE: radius as a fraction of the sprite's shorter side (0.5 = as wide as that side).
     public float radius = 0.5f;
 
     public HitboxDef() {}

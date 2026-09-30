@@ -30,19 +30,9 @@ import static whitelabeltest.editor.FormControls.numberRow;
 import static whitelabeltest.editor.FormControls.sectionLabel;
 import static whitelabeltest.editor.FormControls.withBlank;
 
-/** Builds the tabbed field editor for one FiringPatternDef - shared by FiringPatternEditorDialog
- *  (the top-level pattern being edited) and, recursively, by its own "Sub-Patterns" tab (a
- *  Sequence/Combined pattern's nested FiringPatternDef entries, each just as editable as the
- *  top-level one - see build()'s own doc). Every FiringPatternDef field this codebase actually
- *  reads (see that class and PatternFactory.createFiring()'s per-type dispatch) has a row
- *  somewhere in here - grouped by SHMUP Creator's own Weapon Editor layout (General/Pattern/
- *  Bullet/Sub-Patterns tabs) as a UX guide, NOT by which fields a given `type` actually consults:
- *  unlike PropertiesPanel's per-Trigger-kind field visibility, every row here always shows
- *  regardless of the current `type` - the flat FiringPatternDef file format already tolerates
- *  fields a type ignores (see that class's write(), which only omits DEFAULT-valued fields, not
- *  type-inapplicable ones), and PatternPreviewer (the existing in-game debug editor this mirrors
- *  field-for-field) shows type-specific rows dynamically only because it's rebuilt every single
- *  edit anyway - not worth replicating that complexity here for a form saved by hand. */
+/** The tabbed editor for one FiringPatternDef (General / Pattern / Bullet / Sub-Patterns), used
+ *  recursively for Sequence/Combined children. Every field is always shown, whatever the type;
+ *  types ignore fields they don't use. */
 final class FiringPatternFieldsEditor {
     private FiringPatternFieldsEditor() {}
 
@@ -50,21 +40,14 @@ final class FiringPatternFieldsEditor {
         "SineWave", "Feather", "Orbiting", "Wall", "PolkaDot", "RadialNearMiss", "SpawnEnemy", "Aimed", "QuarterCircle",
         "AimedAtPoint", "Laser", "Shape", "Sequence", "Combined");
 
-    // Shared across every Sub-Patterns list this editor opens (including nested ones), so a
-    // sub-pattern copied out of one Sequence/Combined pattern can be pasted into a completely
-    // different one - not just reordered within its own list the way drag-and-drop already allows.
+    // Shared by every Sub-Patterns list, so copies can be pasted into other patterns.
     private static FiringPatternDef subPatternClipboard = null;
 
     private static final String NONE_LABEL = "(none)";
-    // Matches PatternPreviewer's own HITBOX_SHAPE_OPTIONS exactly - see HitboxSpec.Shape.
+    // HitboxSpec.Shape, plus "none".
     private static final List<String> HITBOX_SHAPE_OPTIONS = List.of(NONE_LABEL, "Circle", "Rectangle");
 
-    /** @param onDirty called after ANY field on `def` (or, transitively, one of its nested
-     *  sub-patterns) commits an edit - the caller's own hook to mark the document/list/preview
-     *  stale. Rebuilding this whole TabPane on every edit (the way PatternPreviewer's live
-     *  in-game version does, to keep type-conditional rows in sync) isn't needed here since every
-     *  row is always shown - onDirty only needs to repaint the static preview and flag unsaved
-     *  changes, not rebuild this form out from under whatever field the user is mid-edit on. */
+    /** @param onDirty called after any edit, including in nested sub-patterns */
     static TabPane build(FiringPatternDef def, Runnable onDirty) {
         Tab general = tab("General", buildGeneral(def, onDirty));
         Tab pattern = tab("Pattern", buildPattern(def, onDirty));
@@ -86,7 +69,7 @@ final class FiringPatternFieldsEditor {
         return scroll;
     }
 
-    // --- General: identity, type, timing, the bullet this pattern fires -------------------------
+    // --- General: id, type, timing, bullet ---
 
     private static ScrollPane buildGeneral(FiringPatternDef def, Runnable onDirty) {
         VBox box = new VBox(6);
@@ -106,7 +89,7 @@ final class FiringPatternFieldsEditor {
         return scrollOf(box);
     }
 
-    // --- Pattern: shot geometry - spread/aim/sweep/orbit/wall/near-miss, all in one flat list ----
+    // --- Pattern: shot geometry ---
 
     private static ScrollPane buildPattern(FiringPatternDef def, Runnable onDirty) {
         VBox box = new VBox(6);
@@ -182,7 +165,7 @@ final class FiringPatternFieldsEditor {
         return scrollOf(box);
     }
 
-    // --- Bullet: the projectile itself - size/speed/hitbox/damage/animation ----------------------
+    // --- Bullet: size, speed, hitbox, damage, animation ---
 
     private static ScrollPane buildBullet(FiringPatternDef def, Runnable onDirty) {
         VBox box = new VBox(6);
@@ -216,10 +199,7 @@ final class FiringPatternFieldsEditor {
         return scrollOf(box);
     }
 
-    /** One row per BulletSpeedPhase (acceleration + duration) plus Add/Remove - see that class's
-     *  own doc for what the sequence means. Rebuilds `holder` in place on every add/remove so the
-     *  row list always matches def.bulletSpeedPhases exactly, the same "clear and re-add" idiom
-     *  every other panel in this editor already uses on a structural (not per-field) change. */
+    /** A row per BulletSpeedPhase, with Add/Remove (rebuilt on each change). */
     private static VBox buildSpeedPhases(FiringPatternDef def, Runnable onDirty) {
         VBox holder = new VBox(4);
         Runnable[] refresh = new Runnable[1];
@@ -256,12 +236,10 @@ final class FiringPatternFieldsEditor {
         return holder;
     }
 
-    // --- Sub-Patterns: Sequence/Combined's own nested FiringPatternDef list -----------------------
+    // --- Sub-Patterns (Sequence/Combined children) ---
 
-    /** A Sequence/Combined pattern's own children - each one just as editable as the top-level
-     *  pattern, via a recursive build() call the moment it's selected in the list (see selection
-     *  listener below). Meaningless for any other `type` (nothing reads def.patterns then), but
-     *  shown unconditionally like every other tab here - see build()'s own doc. */
+    /** The children list; selecting one opens a nested editor. Supports reorder by drag, add,
+     *  remove, copy and paste. */
     private static VBox buildSubPatterns(FiringPatternDef def, Runnable onDirty) {
         VBox root = new VBox(6);
         root.setPadding(new Insets(8));
@@ -269,20 +247,13 @@ final class FiringPatternFieldsEditor {
 
         ListView<FiringPatternDef> list = new ListView<>();
         list.setPrefHeight(140);
-        // Fixed, not just preferred: without this, selecting a sub-pattern below drops a
-        // potentially-tall nested TabPane into subEditorHolder (see its own vgrow-ALWAYS below),
-        // and a plain VBox squeezes a non-growing sibling with only a "preferred" height down
-        // toward its own tiny default minimum once the total no longer fits - which is exactly
-        // what made the list of OTHER sub-patterns disappear the moment you opened one to edit it.
+        // A minimum height, so a tall nested editor can't squeeze the list away.
         list.setMinHeight(140);
         if (def.patterns != null) {
             for (FiringPatternDef sub : def.patterns) list.getItems().add(sub);
         }
 
-        // Writes list.getItems()' current order back onto def.patterns (the Array that's actually
-        // serialized - see FiringPatternDef.write()) so a Sequence/Combined's own child ORDER (which
-        // is semantically load-bearing - PatternFactory.createFiring()'s "Sequence" case walks
-        // def.patterns in file order) survives a drag-reorder, not just the ListView's own display.
+        // Order matters (Sequence runs children in file order), so copy the list order to def.patterns.
         Runnable syncOrderToDef = () -> {
             if (def.patterns == null) def.patterns = new Array<>();
             def.patterns.clear();
@@ -291,11 +262,7 @@ final class FiringPatternFieldsEditor {
 
         list.setCellFactory(lv -> buildDraggableCell(list, syncOrderToDef, onDirty));
 
-        // A drop that lands on the ListView's own empty space below the last real cell (a short
-        // list with room left in its fixed 140px height, or dragging past the last row) never
-        // reaches any cell's own drag handlers - see buildDraggableCell()'s own doc on why cells
-        // alone aren't enough. Treated as "move to the very end" - the one place a drop there could
-        // sensibly mean.
+        // A drop on the empty space below the last row moves the item to the end.
         list.setOnDragOver(event -> {
             if (event.getGestureSource() != list && event.getDragboard().hasString()) event.acceptTransferModes(TransferMode.MOVE);
             event.consume();
@@ -319,10 +286,7 @@ final class FiringPatternFieldsEditor {
             event.consume();
         });
 
-        // Scrolls internally rather than growing - a nested sub-pattern's own tabs (General/
-        // Pattern/Bullet, each already a ScrollPane) can still want more height than this dialog
-        // has room for; without this wrapper that demand pushed straight up through subEditorHolder
-        // onto the whole Sub-Patterns tab, which is what shrank `list` above in the first place.
+        // Scrolls rather than growing, so the nested editor can't push the list out.
         VBox subEditorHolder = new VBox();
         ScrollPane subEditorScroll = new ScrollPane(subEditorHolder);
         subEditorScroll.setFitToWidth(true);
@@ -366,9 +330,7 @@ final class FiringPatternFieldsEditor {
             if (subPatternClipboard == null) return;
             if (def.patterns == null) def.patterns = new Array<>();
             FiringPatternDef pasted = deepCopy(subPatternClipboard);
-            // Pasting is additive, same as "Add Sub-Pattern" - it never overwrites whatever is
-            // currently selected, so pasting the same clipboard entry repeatedly just stacks up
-            // that many independent copies (each free to be edited/reordered on its own afterward).
+            // Paste appends an independent copy; it never overwrites the selection.
             def.patterns.add(pasted);
             list.getItems().add(pasted);
             list.getSelectionModel().select(pasted);
@@ -381,15 +343,8 @@ final class FiringPatternFieldsEditor {
         return root;
     }
 
-    /** One drag-reorderable row of the "Sub-Patterns" list - keeps buildSubPatterns()'s own
-     *  updateItem/index-prefix display exactly as before, plus the actual drag machinery: press-drag
-     *  a row and drop it on another to move it there (before the drop target if dragging upward,
-     *  after it if dragging downward - see the index-shift math below), reordering `list`'s own
-     *  items AND (via `syncOrderToDef`) def.patterns together so the persisted file order actually
-     *  changes, not just the display. Only a NON-empty cell can start a drag or accept a drop -
-     *  dropping past the last real row lands in the ListView's own empty space below every cell
-     *  instead, which is why buildSubPatterns() ALSO wires a drop handler on `list` itself (append
-     *  to the end) rather than relying on cells alone to cover that case. */
+    /** A draggable Sub-Patterns row: drop on another row to move it there. Updates the list and
+     *  def.patterns. */
     private static ListCell<FiringPatternDef> buildDraggableCell(ListView<FiringPatternDef> list, Runnable syncOrderToDef, Runnable onDirty) {
         ListCell<FiringPatternDef> cell = new ListCell<>() {
             @Override
@@ -435,8 +390,7 @@ final class FiringPatternFieldsEditor {
                 int dropIndex = cell.getIndex();
                 if (draggedIndex != dropIndex) {
                     FiringPatternDef dragged = list.getItems().remove(draggedIndex);
-                    // Removing the dragged row shifts every LATER index down by one - if the drop
-                    // target was after it, its own index needs the same correction before inserting.
+                    // Removing the dragged row shifts later indices down by one.
                     int insertIndex = dropIndex > draggedIndex ? dropIndex - 1 : dropIndex;
                     list.getItems().add(insertIndex, dragged);
                     syncOrderToDef.run();
@@ -455,10 +409,7 @@ final class FiringPatternFieldsEditor {
         return cell;
     }
 
-    /** Same "serialize then deserialize" clone FiringPatternEditorDialog's own Duplicate button
-     *  uses - a plain Java field copy would still alias nested Arrays/objects (bulletSpeedPhases,
-     *  a Sequence/Combined's own nested `patterns`), so editing the pasted copy would silently edit
-     *  the original it was copied from too. */
+    /** Deep copy via Json, so nested arrays aren't shared with the original. */
     private static FiringPatternDef deepCopy(FiringPatternDef source) {
         Json json = new Json();
         return json.fromJson(FiringPatternDef.class, json.toJson(source, FiringPatternDef.class));

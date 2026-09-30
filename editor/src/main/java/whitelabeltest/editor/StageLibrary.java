@@ -12,12 +12,8 @@ import java.io.UncheckedIOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 
-/** Reads data/stages.json and data/enemies.json once at startup - the stage picker (Open Stage...)
- *  and enemy palette source their lists from here. Every path is relative to the assets root, the
- *  same convention every existing *.json data file already uses (e.g.
- *  StageDefinition.spawnSchedule = "data/stages/stage1_schedule.json") - the editor's run task sets
- *  its working directory to assets/ (see editor/build.gradle) specifically so these plain relative
- *  paths resolve exactly the way the game itself resolves them, with no translation. */
+/** Loads data/stages.json and data/enemies.json at startup and saves edits back. Paths are
+ *  relative to assets/, the editor's working directory. */
 public class StageLibrary {
     private static final Path STAGES_JSON = Path.of("data/stages.json");
     private static final Path ENEMIES_JSON = Path.of("data/enemies.json");
@@ -54,12 +50,7 @@ public class StageLibrary {
         return null;
     }
 
-    /** A fresh, blank EnemyDefinition with just its own id set - appended to the in-memory list
-     *  immediately (so it shows up in EnemyPalette/EnemyDefinitionPanel right away, same as every
-     *  other field a user edits there) but not written to data/enemies.json until saveEnemies() is
-     *  next called - same "new, unsaved until Save" convention FiringPatternLibrary.createNew()/
-     *  MovementPatternLibrary.createNew() already use for their own libraries. Caller's job to check
-     *  findEnemy(id) first - this never checks for a collision itself. */
+    /** Adds a blank enemy in memory (saved by saveEnemies()). The caller checks the id is unused. */
     public EnemyDefinition createEnemy(String id) {
         EnemyDefinition def = new EnemyDefinition();
         def.id = id;
@@ -67,33 +58,22 @@ public class StageLibrary {
         return def;
     }
 
-    /** Writes the current in-memory enemy list back to data/enemies.json - see
-     *  EnemyDefinitionPanel, the only caller. Every EnemyDefinition instance here is shared by
-     *  reference with whatever a placed Trigger's TriggerNode looked up (findEnemy()), so edits
-     *  already show up live on the canvas before this is even called; this just persists them. */
+    /** Instances are shared with the canvas, so edits show immediately; this persists them. */
     public void saveEnemies() {
         Json json = new Json();
         json.setOutputType(JsonWriter.OutputType.json);
         writeText(ENEMIES_JSON, json.prettyPrint(json.toJson(enemies, Array.class, EnemyDefinition.class)));
     }
 
-    /** Writes the current in-memory stage list back to data/stages.json - see
-     *  StageDefinitionPanel, the only caller. Every StageDefinition instance here is shared by
-     *  reference with whatever OpenStageDialog/StagePalette already listed, so edits already show
-     *  up live (e.g. a stage's own background art updating in EditorDocument.getStageDefinition()-
-     *  driven previews) before this is even called; this just persists them. Mirrors saveEnemies()
-     *  exactly. */
+    /** As saveEnemies(), for stages. */
     public void saveStages() {
         Json json = new Json();
         json.setOutputType(JsonWriter.OutputType.json);
         writeText(STAGES_JSON, json.prettyPrint(json.toJson(stages, Array.class, StageDefinition.class)));
     }
 
-    /** For a stage with no triggerFile yet: writes a fresh, empty trigger JSON at the conventional
-     *  data/stages/&lt;id&gt;_triggers.json path and patches only that one stage's triggerFile field
-     *  into stages.json (re-serializing the whole array - every other field/stage round-trips
-     *  untouched through the same Json class the game itself parses stages.json with). Returns the
-     *  new file's path so the caller can immediately EditorDocument.load() it. */
+    /** Creates an empty data/stages/&lt;id&gt;_triggers.json, sets the stage's triggerFile and saves
+     *  stages.json. Returns the new path. */
     public Path createTriggerFileForStage(StageDefinition stage) {
         String relativePath = "data/stages/" + stage.id + "_triggers.json";
         Path triggerPath = Path.of(relativePath);

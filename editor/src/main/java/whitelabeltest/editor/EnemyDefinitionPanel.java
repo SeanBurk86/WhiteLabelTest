@@ -30,21 +30,9 @@ import static whitelabeltest.editor.FormControls.sectionLabel;
 import static whitelabeltest.editor.FormControls.textRow;
 import static whitelabeltest.editor.FormControls.withBlank;
 
-/** Right-hand editing form for an EnemyDefinition's own template stats - health, size, textures,
- *  default patterns, behavior flags - selected from EnemyPalette (a base definition, not a placed
- *  instance). Distinct from PropertiesPanel, which edits one placed Trigger's per-spawn overrides;
- *  EditorApp swaps whichever of the two is relevant into the same dock slot.
- *
- * No movement pattern field here at all, deliberately - see EnemyDefinition.java's own doc. Every
- * placed enemy spawn gets its own movement assigned individually via PropertiesPanel's "Movement
- * Path" section once it's on the Stage canvas, scoped to that one placement - a dedicated small
- * canvas docked in this narrow sidebar made editing a path needlessly cramped anyway, and a placed
- * spawn already has real stage context (where other triggers/background art sit) a standalone
- * canvas never had.
- *
- * Edits commit straight onto the live EnemyDefinition (shared by reference with whatever
- * TriggerNode.buildEnemyImage() already looked up via StageLibrary.findEnemy()), and "Save
- * enemies.json" persists the whole list - see StageLibrary.saveEnemies(). */
+/** Form for an enemy type (EnemyDefinition), opened from EnemyPalette: stats, textures, firing
+ *  pattern, weapon sets, hitboxes, flags. There's no movement here; movement is set per placed
+ *  spawn. Edits apply to the shared definition; "Save enemies.json" persists them. */
 public class EnemyDefinitionPanel extends ScrollPane {
     private final StageLibrary library;
     private final VBox root = new VBox(8);
@@ -88,10 +76,6 @@ public class EnemyDefinitionPanel extends ScrollPane {
         root.getChildren().add(numberRow("Score", def.score, v -> def.score = v.intValue()));
         root.getChildren().add(numberRow("Health regen/sec", def.healthRegenPerSecond, v -> def.healthRegenPerSecond = v));
         root.getChildren().add(buildHitboxSection());
-        // Movement is deliberately NOT configured here - see EnemyDefinition.java's own doc. Every
-        // placed spawn gets its own movement (a WaypointPath, usually) assigned individually via
-        // PropertiesPanel's "Movement Path" section once it's on the Stage canvas, with no
-        // type-level default to fall back to.
         root.getChildren().add(comboRow("Firing pattern", withBlank(PatternIds.firingPatternIds()), def.firingPattern,
             v -> def.firingPattern = v.isEmpty() ? null : v));
         root.getChildren().add(buildWeaponSetsSection());
@@ -144,22 +128,13 @@ public class EnemyDefinitionPanel extends ScrollPane {
         root.getChildren().add(statusLabel);
     }
 
-    /** Re-shows this same definition - used after editing texture/size, whose preview/canvas icons
-     *  need to reflect the change; a fresh EnemyPalette entry still needs a reload to pick up a
-     *  texture swap (same "next rebuild" limitation TriggerNode's own doc already covers for a
-     *  placed instance). */
+    /** Rebuilds the form (after texture/size or list edits). */
     private void refresh() {
         showDefinition(def);
     }
 
-    /** Named alternates this enemy's WaypointPath waypoints can switch its live firing pattern to
-     *  mid-flight - see EnemyDefinition.weaponSets' own doc and PropertiesPanel's "Weapon Set"
-     *  combo (Movement Path panel), which is where a name defined here actually gets referenced
-     *  from a placed spawn's path. Each row's own combo commits straight to the map on change (no
-     *  full refresh() needed, unlike a row add/remove); only the name is fixed once created - this
-     *  editor doesn't offer a rename, just remove-and-recreate, since nothing on disk indexes these
-     *  names except each MovementPatternDef.weaponSet string authored against them, and silently
-     *  updating those from here would be more surprising than requiring a deliberate re-link. */
+    /** Weapon sets: named firing patterns that waypoints can switch to. Names can't be renamed
+     *  (waypoints refer to them); remove and re-add instead. */
     private VBox buildWeaponSetsSection() {
         VBox box = new VBox(4);
         box.getChildren().add(sectionLabel("Weapon Sets (named firing-pattern alternates for Movement Path waypoints)"));
@@ -208,8 +183,7 @@ public class EnemyDefinitionPanel extends ScrollPane {
         return row;
     }
 
-    /** Where an enemy's collision shapes are edited - see HitboxEditorDialog. Shows a one-line summary of what
-     *  it has now (the default whole-sprite box, or how many custom shapes) next to the button that opens it. */
+    /** A hitbox summary and a button to open HitboxEditorDialog. */
     private VBox buildHitboxSection() {
         VBox box = new VBox(4);
         int count = def.hitboxes == null ? 0 : def.hitboxes.size;

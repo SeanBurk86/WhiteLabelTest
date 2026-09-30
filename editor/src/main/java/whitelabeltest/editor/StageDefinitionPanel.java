@@ -21,20 +21,9 @@ import static whitelabeltest.editor.FormControls.sectionLabel;
 import static whitelabeltest.editor.FormControls.textRow;
 import static whitelabeltest.editor.FormControls.withBlank;
 
-/** Right-hand editing form for a StageDefinition's own metadata - content file paths, music,
- *  background (video/shader/layers), kaleidoscope/ground-scroll overrides - selected from
- *  StagePalette. Distinct from PropertiesPanel (a placed Trigger's per-spawn settings) and
- *  EnemyDefinitionPanel (an enemy type's own template stats); EditorApp swaps whichever of the
- *  three is relevant into the same dock slot.
- *
- * `id` is shown as a label, not an editable field - same "don't let this get out of sync with
- * whatever else on disk already references it" reasoning EnemyDefinitionPanel already applies to
- * EnemyDefinition.id (stage_sequences.json/trigger-file `triggerFile` paths and the id itself would
- * silently desync from a rename otherwise).
- *
- * Edits commit straight onto the live StageDefinition (shared by reference with whatever
- * EditorDocument.setStageDefinition() already pointed the open document at, and with StagePalette's
- * own list), and "Save stages.json" persists the whole list - see StageLibrary.saveStages(). */
+/** Form for a stage (StageDefinition), opened from StagePalette: files, music, background
+ *  (video / shader / layers) and overrides. The id is read-only because other files refer to it.
+ *  "Save stages.json" persists the edits. */
 public class StageDefinitionPanel extends ScrollPane {
     private static final List<String> SHADER_IDS = List.of("boxTunnel", "kaleidoscope", "mandelbulb");
 
@@ -111,16 +100,12 @@ public class StageDefinitionPanel extends ScrollPane {
         root.getChildren().add(statusLabel);
     }
 
-    /** Re-shows this same stage - used after an add/remove edit to a background layer, whose row
-     *  list needs to be rebuilt from scratch (same reasoning EnemyDefinitionPanel.refresh() already
-     *  applies to its own weapon-sets list). */
+    /** Rebuilds the form (after adding or removing a layer). */
     private void refresh() {
         showStage(stage);
     }
 
-    /** ScrollingBackground.drawBaseContent() draws these far-to-near in declaration order (see
-     *  StageDefinition.BackgroundLayerDef's own doc) - so index 0 here is the farthest-back layer,
-     *  same as every existing stages.json entry already authors them. */
+    /** Layers are listed far to near (index 0 is the farthest back). */
     private VBox buildBackgroundLayersSection() {
         VBox box = new VBox(6);
         box.getChildren().add(sectionLabel("Background Layers (declared far-to-near)"));
@@ -178,9 +163,7 @@ public class StageDefinitionPanel extends ScrollPane {
         });
         row.getChildren().add(sequenceArea);
 
-        // BackgroundLayerDef.scrollSpeed is already NaN-as-"unset" (see its own doc), the exact
-        // convention numberRowNullable already speaks - no null<->NaN boxing needed here, unlike
-        // kaleidoscopeTransitionTime/groundScrollSpeed above.
+        // NaN = unset.
         row.getChildren().add(numberRowNullable("Scroll speed (blank = engine default)", layer.scrollSpeed, v -> layer.scrollSpeed = v));
 
         return row;

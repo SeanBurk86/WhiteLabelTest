@@ -3,22 +3,17 @@ package whitelabeltest.gamemanagers.background;
 import com.badlogic.gdx.Gdx;
 import com.badlogic.gdx.Preferences;
 
-/** Persisted graphics options, edited from the Options screen - see OptionsScreen. Static (unlike
- *  AudioSettings) because the only reader is the shader backgrounds' construction, deep inside stage
- *  loading; the value is read when a stage's background is built, so a change applies from the next
- *  stage load.
- *
- *  shaderQuality scales back the heaviest procedural backgrounds (stage 3's Mandelbulb, the tutorial's
- *  box tunnel) for weaker GPUs - see ShaderQuality for what each level does. */
+/** Persisted graphics options (Options screen). Static because it's read deep inside stage loading;
+ *  changes apply from the next stage load. shaderQuality scales back the heavy procedural backgrounds
+ *  for weaker GPUs. */
 public final class GraphicsSettings {
     public enum ShaderQuality {
         /** Full march step counts at ReducedResolutionRenderer.RESOLUTION_SCALE. */
         HIGH("High", null),
         /** Fewer, longer march steps (the shaders' QUALITY_MEDIUM define) at a lower resolution scale. */
         MEDIUM("Medium", "QUALITY_MEDIUM"),
-        /** For integrated GPUs (e.g. an Intel Iris Pro MacBook): fewer steps still (QUALITY_LOW), a fixed
-         *  pixel budget instead of a fraction of the screen - a Retina play area otherwise has several
-         *  times the pixels of a 1080p one - and the shader redrawn only every other frame. */
+        /** Integrated GPUs: fewer steps still (QUALITY_LOW), a fixed pixel budget instead of a screen
+         *  fraction (Retina displays have many more pixels), and redrawn every other frame. */
         LOW("Low", "QUALITY_LOW");
 
         public final String label;
@@ -38,7 +33,7 @@ public final class GraphicsSettings {
 
     private static final String PREFS_NAME = "whitelabeltest-graphics";
     private static final String SHADER_QUALITY_KEY = "shaderQuality";
-    // The earlier on/off setting - its "on" is today's MEDIUM.
+    // Old on/off setting, migrated: "on" = MEDIUM.
     private static final String LEGACY_LOW_KEY = "lowShaderQuality";
 
     private static Preferences prefs;

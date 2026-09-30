@@ -10,34 +10,26 @@ import com.badlogic.gdx.graphics.glutils.ShaderProgram;
 import com.badlogic.gdx.math.MathUtils;
 import com.badlogic.gdx.utils.Disposable;
 
-/**
- * Fire effect drawn behind the chain counter, ported from a Godot canvas_item fire shader.
- * The original sampled a noise texture; since this project has no noise asset, that sampling
- * is replaced with an equivalent procedural hash noise. Chain count maps to an intensity value
- * (0..1) that shifts the color ramp from dim embers to a full blaze, and speeds up / narrows
- * the flame as the chain grows. Beyond {@link #CHAIN_COUNT_AT_MAX_INTENSITY}, a second ramp
- * shifts the blaze toward a purple-bluish "mystic" hue, reaching full effect at double that count.
- */
+/** Shader flames behind the chain counter (ported from a Godot fire shader, with procedural noise).
+ *  The chain count drives intensity (embers to full blaze, faster and narrower flames); beyond
+ *  CHAIN_COUNT_AT_MAX_INTENSITY an overdrive ramp takes over, fully at double that count. */
 public class ChainFireEffect implements Disposable {
     private static final int CHAIN_COUNT_AT_MAX_INTENSITY = 125;
     private static final float FADE_OUT_DURATION = 0.5f;
-    // Higher = intensity catches up to the target faster. Kept low so a chain-count bump eases
-    // the flame's shape (noise scale/aperture/speed all key off intensity) instead of snapping it.
+    // How fast displayed intensity eases toward the target (low, so flame shape doesn't snap).
     private static final float INTENSITY_SMOOTHING_SPEED = 3f;
 
-    // Dim green embers at low chain counts - a muted version of UIManager's own HUD_GREEN_DIM.
+    // Low-chain ember ramp.
     private static final Color EMBER_BOTTOM = new Color(0.10f, 0.3f, 0.16f, 1f);
     private static final Color EMBER_MIDDLE = UIManager.HUD_GREEN_DIM;
     private static final Color EMBER_TOP = new Color(0.04f, 0.1f, 0.06f, 1f);
 
-    // Full-blaze ramp at the chain's normal max intensity - bright HUD_GREEN core cooling to
-    // HUD_AMBER at the tip, the same two colors the rest of the HUD reads as "healthy/active".
+    // Full-blaze ramp: HUD green core to amber tip.
     private static final Color BLAZE_BOTTOM = new Color(0.6f, 1.0f, 0.75f, 1f);
     private static final Color BLAZE_MIDDLE = UIManager.HUD_GREEN;
     private static final Color BLAZE_TOP = UIManager.HUD_AMBER;
 
-    // "Mystic" overdrive ramp, blended in once the chain climbs past CHAIN_COUNT_AT_MAX_INTENSITY -
-    // pushes further along the same palette into HUD_RED, matching the HUD's own "critical" color.
+    // Overdrive ramp past max intensity: amber to HUD red.
     private static final Color MYSTIC_BOTTOM = new Color(1.0f, 0.85f, 0.55f, 1f);
     private static final Color MYSTIC_MIDDLE = UIManager.HUD_AMBER;
     private static final Color MYSTIC_TOP = UIManager.HUD_RED;
@@ -71,16 +63,14 @@ public class ChainFireEffect implements Disposable {
         displayedMysticT += (targetMysticT - displayedMysticT) * Math.min(1f, delta * INTENSITY_SMOOTHING_SPEED);
     }
 
-    /** Draws the fire effect stretched over the given rect using quadTexture only as a UV carrier (e.g. a 1x1 white pixel). Safe to call every frame; no-ops once fully faded out. */
+    /** Draws the flames over the rect; quadTexture only carries UVs (e.g. a 1x1 white pixel). */
     public void render(SpriteBatch batch, Texture quadTexture, float x, float y, float width, float height) {
         if (fadeAlpha <= 0f) return;
 
         float intensity = displayedIntensity;
         float mysticT = displayedMysticT;
 
-        // Gameplay draws (flashing sprites, additive glow effects, etc.) can leave the batch's
-        // tint and blend function in a state that would wash out or hide this effect, so save
-        // and force known-good state rather than inheriting whatever came before.
+        // Save and force a known batch tint/blend state; earlier draws may have changed it.
         ShaderProgram previousShader = batch.getShader();
         float previousPackedColor = batch.getPackedColor();
         int previousSrcFunc = batch.getBlendSrcFunc();

@@ -25,33 +25,24 @@ public class StartScreen implements Disposable {
     private enum Phase { SELECTING, MENU, FADING, DONE }
 
     private static final float FADE_DURATION = 0.7f;
-    // Played the instant ARCADE MODE or TUTORIAL is confirmed (see updateMenu()) - pentest.mp3,
-    // previously played here at the end of the fade, now plays instead when the weapon loadout is
-    // confirmed on WeaponSelectScreen (see WeaponSelectScreen.CONFIRM_SOUND).
+    // On confirming ARCADE MODE or TUTORIAL.
     private static final String ARCADE_CONFIRM_SOUND = "audio/menu/arcadeselectsoundmenu.mp3";
     private static final String MENU_SELECT_SOUND = "audio/menu/selectsoundmenu.mp3";
-    // Played when OPTIONS/REPLAYS is confirmed instead - the same generic confirm cue
-    // OptionsScreen's own menu uses internally, since ARCADE_CONFIRM_SOUND is specifically a
-    // run-start cue (see MENU_ARCADE_MODE/MENU_TUTORIAL).
+    // On confirming OPTIONS / REPLAYS (the generic menu cue).
     private static final String OPTIONS_CONFIRM_SOUND = "audio/menu/confirmsoundmenu.mp3";
 
-    // Looping background music for this screen, faded in from silence over MUSIC_FADE_IN_DURATION
-    // rather than starting at full volume - see update(). Stopped/disposed alongside the rest of
-    // this screen once a run actually starts (see dispose()).
+    // Looping music, faded in over MUSIC_FADE_IN_DURATION.
     private static final String OPENING_MUSIC = "audio/music/openingmusic.mp3";
     private static final float MUSIC_FADE_IN_DURATION = 2f;
 
-    // Selection-box styling for drawMenu() - see drawSelectionBox().
+    // Green box around the highlighted item.
     private static final Color SELECTION_BOX_COLOR = new Color(0.35f, 1f, 0.55f, 1f);
     private static final float SELECTION_BOX_PADDING_X = 0.15f;
     private static final float SELECTION_BOX_PADDING_Y = 0.08f;
     private static final float SELECTION_BOX_THICKNESS = 0.025f;
 
-    // Shown in place of PressButtonSign once the player presses anything in SELECTING - Up/Down or
-    // the D-Pad move the highlight, Enter/Space/Z or the A button confirms (same scheme as
-    // WeaponSelectScreen, which follows right after this). Index 0 starts the run as before;
-    // index 1 signals Main to open OptionsScreen (see consumeOptionsRequested()) without leaving
-    // this phase, so the menu is still showing when Options closes.
+    // Replaces the "press any button" sign after the first press. OPTIONS/REPLAYS leave this
+    // screen in the MENU phase so it's still showing when the player comes back.
     private static final String[] MENU_ITEMS = { "ARCADE MODE", "TUTORIAL", "REPLAYS", "OPTIONS", "EXIT" };
     private static final int MENU_ARCADE_MODE = 0;
     private static final int MENU_TUTORIAL = 1;
@@ -59,12 +50,8 @@ public class StartScreen implements Disposable {
     private static final int MENU_OPTIONS = 3;
     private static final int MENU_EXIT = 4;
 
-    /** One looping animated sign in the opening screen's stacked composition (reference mockup:
-     *  Screenshot 2026-08-07 145711.png) - replaces the old single openingscreen.webm loop with
-     *  several independently-looping sprite-sheet flicker animations layered over a plain black
-     *  background. width is the sign's on-screen width in world units; its drawn height follows
-     *  from that plus the sheet's own per-frame aspect ratio, so it doesn't need to be measured by
-     *  hand. */
+    /** One looping sprite-sheet sign in the title stack. Height follows from width and the frame's
+     *  aspect ratio. */
     private static final class Sign {
         final String file;
         final int columns, rows;
@@ -92,9 +79,8 @@ public class StartScreen implements Disposable {
 
     private static final float SIGN_FRAME_DURATION = 0.09f;
 
-    // Order/grid layout from the reference mockup: publisher wordmark, subtitle, revision tag,
-    // then a big gap down to the "press any button" prompt, with the studio credit pinned near
-    // the bottom independent of the rest of the stack.
+    // Top to bottom: wordmark, subtitle, revision tag, gap, prompt; the studio credit is pinned
+    // near the bottom.
     private final Sign penTestSign = new Sign("images/ui/ThePenTestSign.png", 3, 4, 8.0f);
     private final Sign scathachSign = new Sign("images/ui/ScathachSign.png", 2, 6, 6.5f);
     private final Sign revisionSign = new Sign("images/ui/2ndRevSign.png", 3, 4, 5.0f);
@@ -127,15 +113,11 @@ public class StartScreen implements Disposable {
     private int menuIndex;
     private boolean optionsRequested;
     private boolean replaysRequested;
-    // Set when MENU_TUTORIAL (rather than MENU_ARCADE_MODE) confirmed the FADING/DONE transition -
-    // see updateMenu()/isTutorialSelected(). Both share the same phase machine/detectedInput signal
-    // (Main.render() only learns "a run is starting" once, from update()'s return value), so this
-    // is how Main tells the two apart once it does.
+    // Tells Main whether the run being started is the tutorial or arcade mode.
     private boolean tutorialSelected;
     private boolean prevMenuDpadUpDown, prevMenuDpadDownDown, prevMenuConfirmDown;
 
-    // Kept alive after this screen is disposed (see getConfirmSound()) so the cue can keep
-    // playing while GameController loads; the caller is responsible for disposing it eventually.
+    // Outlives the screen so the cue keeps playing while the game loads; the caller disposes it.
     private Sound confirmSound;
     private final Sound menuSelectSound;
     private final Sound optionsConfirmSound;
@@ -207,21 +189,13 @@ public class StartScreen implements Disposable {
         return null;
     }
 
-    /** Applies the current fade-in progress and audioSettings volume to openingMusic - split out
-     *  of update() so Main can keep calling it every frame while the Options screen has input focus
-     *  (this screen's own update() isn't called then), which is exactly when the player is most
-     *  likely to be dragging the Music/Master sliders and expecting this still-playing background
-     *  track to respond live rather than only catching up once they back out of Options. */
+    /** Separate from update() so Main can keep the music volume live while Options is open. */
     public void applyMusicVolume() {
         float fadeFraction = musicFadeTimer / MUSIC_FADE_IN_DURATION;
         openingMusic.setVolume(fadeFraction * audioSettings.getEffectiveMusicVolume());
     }
 
-    /** Whatever gamepad button just triggered SELECTING -> MENU (commonly buttonA, which is also
-     *  the menu's own confirm button) is very likely still physically held down on the first frame
-     *  MENU runs - seeding prevMenu*Down from the controller's actual current state here (instead
-     *  of leaving them at their false default) stops updateMenu() from misreading that same held
-     *  press as a fresh confirm/nav input and instantly selecting ARCADE MODE. */
+    /** Seeds the button states so the still-held press that opened the menu isn't read as a new one. */
     private void enterMenuPhase() {
         phase = Phase.MENU;
         Controller controller = Controllers.getCurrent();
@@ -276,26 +250,21 @@ public class StartScreen implements Disposable {
         menuIndex = newIndex;
     }
 
-    /** Consumed by Main once it opens OptionsScreen in response - this phase (MENU) is left
-     *  untouched either way, so the menu (still on whichever item was highlighted) is what's
-     *  showing again once Options closes, rather than reopening the PressButtonSign prompt. */
+    /** One-shot flag read by Main. */
     public boolean consumeOptionsRequested() {
         boolean requested = optionsRequested;
         optionsRequested = false;
         return requested;
     }
 
-    /** Consumed by Main once it opens ReplaySelectScreen in response - same pattern as
-     *  consumeOptionsRequested(), this phase (MENU) is left untouched either way. */
+    /** One-shot flag read by Main. */
     public boolean consumeReplaysRequested() {
         boolean requested = replaysRequested;
         replaysRequested = false;
         return requested;
     }
 
-    /** Which run mode the just-completed FADING/DONE transition was for - see tutorialSelected.
-     *  Only meaningful once update() has returned non-null (i.e. detectedInput is set); read it
-     *  before this screen gets disposed. */
+    /** Valid once update() returns non-null. */
     public boolean isTutorialSelected() {
         return tutorialSelected;
     }
@@ -341,10 +310,7 @@ public class StartScreen implements Disposable {
         font.setColor(Color.WHITE);
     }
 
-    /** Green rectangle drawn around whichever menu row is currently selected - centerX/topY match
-     *  drawCentered()'s own placement of that row's text (font.draw(batch, layout, x, y) treats y
-     *  as the TOP of the rendered text, not its baseline, so the box hangs down from topY by
-     *  textHeight rather than up from it), so the box tracks it exactly regardless of row width. */
+    /** topY is the text's top (font.draw's y), so the box hangs down from it. */
     private void drawSelectionBox(SpriteBatch batch, float centerX, float topY, float textWidth, float textHeight) {
         float x = centerX - textWidth / 2f - SELECTION_BOX_PADDING_X;
         float y = topY - textHeight - SELECTION_BOX_PADDING_Y;
@@ -404,11 +370,7 @@ public class StartScreen implements Disposable {
         return justPressed;
     }
 
-    /** Returns the fire-and-forget arcade-confirm sound so the caller can dispose it once it's
-     * safe to cut off (e.g. at app shutdown). Never disposed here, since this screen is torn down
-     * while the sound is still meant to be playing. May be null if neither ARCADE MODE nor
-     * TUTORIAL was ever
-     * confirmed. */
+    /** The caller disposes this (e.g. at shutdown). Null if no run was started. */
     public Sound getConfirmSound() {
         return confirmSound;
     }

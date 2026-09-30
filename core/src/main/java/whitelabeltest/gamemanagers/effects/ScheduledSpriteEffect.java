@@ -1,7 +1,5 @@
 package whitelabeltest.gamemanagers.effects;
 
-/** A one-shot sprite/animation played at a fixed world position and time - driven entirely by
- *  spawn_schedule.json's spriteCues (see SpawnScheduler.SpriteCue/spawnSpriteCue), the same way
- *  SoundCue triggers a scripted one-off SFX. */
+/** A scripted sprite cue (from a trigger or schedule) played once at a fixed position. */
 public class ScheduledSpriteEffect extends SingleShotAnimation {
 }

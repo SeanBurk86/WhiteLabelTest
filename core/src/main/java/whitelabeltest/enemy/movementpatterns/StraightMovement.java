@@ -5,6 +5,7 @@ import com.badlogic.gdx.math.Circle;
 import com.badlogic.gdx.math.Rectangle;
 import com.badlogic.gdx.math.Vector2;
 
+/** Moves in a straight line at angleDeg, facing its direction. */
 public class StraightMovement implements MovementPattern {
     private final float speed;
     private final Vector2 direction;
@@ -21,7 +22,7 @@ public class StraightMovement implements MovementPattern {
 
     @Override
     public void update(float delta, Sprite sprite, Rectangle rectangle, float worldWidth, float worldHeight, Circle playerHitbox, boolean inverseMovement) {
-        float dirSign = inverseMovement ? -1f : 1f; // Reverse direction
+        float dirSign = inverseMovement ? -1f : 1f;
         sprite.translate(direction.x * speed * dirSign * delta, direction.y * speed * dirSign * delta);
         facing.set(direction).scl(dirSign);
         sprite.setRotation(facing.angleDeg() + 90f);

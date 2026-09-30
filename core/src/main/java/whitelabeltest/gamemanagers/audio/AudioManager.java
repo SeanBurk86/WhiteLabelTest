@@ -9,6 +9,8 @@ import com.badlogic.gdx.utils.Json;
 import com.badlogic.gdx.utils.ObjectMap;
 import whitelabeltest.perf.PerfProbe;
 
+/** All sound effects and music. Weapon/explosion/gem sound banks come from data/sounds.json (a random
+ *  pick per play); trigger/waypoint cue sounds are loaded by path and cached. */
 public class AudioManager implements Disposable {
     private static final float STAGE_MUSIC_FADE_DURATION = 3f;
 
@@ -23,42 +25,25 @@ public class AudioManager implements Disposable {
     private final Sound gameOverSound;
     private final Sound powerupSound;
     private final Sound gemPickupSound;
-    // Plays once per TextCue the instant it becomes visible (see SpawnScheduler.update(), which
-    // edge-detects each cue's own triggeredAtRealTime the same way GameController edge-detects
-    // backgroundVideoTriggered/musicFadeOutTriggered) - a UI blip, not tied to any particular
-    // weapon/enemy, so it's preloaded here rather than going through the lazy-loaded cueSounds map
-    // below (that one's for level-scripted SoundCues, keyed by their own arbitrary asset path).
+    // Text cue blip (single for static/blinking cues, looped while a typewriter cue types).
     private final Sound textCueSound;
-    // BasicWeapon's Hyper Attack (see Player.triggerBasicHyperAttack): plays once, the moment the
-    // halo actually detaches from the ship to dash out - not on the re-press that starts its
-    // return trip.
+    // BasicWeapon Hyper Attack: halo detaches, hits an enemy, starts returning, reattaches.
     private final Sound haloDetachSound;
-    // BasicWeapon's Hyper Attack dash (see CollisionManager.checkHaloDashCollisions): plays once
-    // per enemy the halo clips while dashing out.
     private final Sound haloBashSound;
-    // BasicWeapon's Hyper Attack (see Player.triggerBasicHyperAttack/recallHaloOnWeaponSwitch):
-    // plays once, the moment the halo starts gliding back to reattach.
     private final Sound haloReturnSound;
-    // Sound.play()'s instance id for the currently-playing haloReturnSound, so playHaloLatch() can
-    // stop that specific instance rather than every playing copy of the sound - see playHaloLatch().
+    // Instance id of the playing return sound, so playHaloLatch() can cut just that one.
     private long haloReturnSoundId = -1;
-    // BasicWeapon's Hyper Attack (see Player.updateHaloMovement): plays once, the moment the halo
-    // finishes its glide back and reattaches to the ship.
     private final Sound haloLatchSound;
-    // Played when graze points earn a bomb - see playGrazeBombEarned().
+    // Graze points earned a bomb.
     private final Sound grazeLevelUpSound;
-    // Played when the bomb cooldown ends with a bomb in stock - see playBombReady().
+    // Bomb cooldown ended with a bomb in stock.
     private final Sound bombReadySound;
-    // Played when the orbit weapon's reflect shield finishes recharging - see playShieldsReady().
+    // Orbit weapon's reflect shield recharged.
     private final Sound shieldsReadySound;
-    // ThunderboltWeapon's Hyper Attack (see Player.updateThunderboltCharge/CollisionManager.
-    // checkThunderboltDetonation): one distinct sound per charge tier, played in a fixed order as
-    // the bomb climbs through them - not a random pick from a pool like the per-weapon-level
-    // sound banks below - plus a dedicated explosion sound on detonation.
+    // Thunderbolt Hyper Attack: one sound per charge tier (in order), plus the detonation.
     private final Sound[] thunderboltHyperLevelSounds;
     private final Sound thunderboltHyperExplosionSound;
-    // ThunderboltWeapon's main fire when it finds nothing to strike (see ThunderboltWeapon.spawn's
-    // nearest-enemy selection) - played instead of the normal per-level weapon sound bank.
+    // Thunderbolt main fire with nothing to strike.
     private final Sound thunderboltNullSound;
     private final Music victoryFanfare;
     private final Music victoryLoop;
@@ -69,28 +54,20 @@ public class AudioManager implements Disposable {
     private final ObjectMap<Integer, Array<Sound>> basicWeaponSounds;
     private final ObjectMap<Integer, Array<Sound>> waveBlastWeaponSounds;
     private final ObjectMap<Integer, Array<Sound>> thunderboltWeaponSounds;
-    // OrbitWeapon's bullet-hits-enemy impact sound (see CollisionManager.checkBulletEnemyCollisions)
-    // - OrbitWeapon's Hyper Attack (shield) sound instead reuses waveBlastWeaponSounds (see
-    // OrbitWeapon.hyperAttack()).
+    // Orbit weapon bullet impact.
     private final ObjectMap<Integer, Array<Sound>> orbitGongSounds;
-    // OrbitWeapon's ring-rotation firing sound (see OrbitWeapon.update()) - plays once per ring
-    // member per full lap, so it fires `level` times per rotation (one crack per orbiting blade).
+    // Orbit ring whip crack, once per blade per lap.
     private final ObjectMap<Integer, Array<Sound>> orbitWhipSounds;
-    // Scripted one-off SFX triggered by SpawnScheduler's SoundCue (see playCueSound()) - keyed by
-    // asset path and loaded lazily the first time each is cued, since these are level-specific and
-    // not worth preloading into a dedicated field like the sounds above.
+    // Scripted cue sounds keyed by asset path, loaded on first use or preload.
     private final ObjectMap<String, Sound> cueSounds = new ObjectMap<>();
 
-    // Sounds that can fire many times in one frame (a gem shower being collected, a swarm or a bomb killing
-    // a dozen enemies at once, the orbit ring grinding through several enemies) play at most once per
-    // this many seconds each: one start per event piled up to hundreds of Sound.play() calls a frame,
-    // each hunting through the audio device's 64 sources, which showed up as frame-rate drops - and
-    // dozens of copies of one sound starting together sound no different from a single one.
+    // Sounds that can fire many times a frame (gem showers, mass kills) play at most once per
+    // interval: hundreds of Sound.play() calls a frame caused frame drops and sound no different.
     private static final float POINT_GEM_SOUND_INTERVAL = 0.05f;
     private static final float EXPLOSION_SOUND_INTERVAL = 0.04f;
     private static final float ORBIT_GONG_SOUND_INTERVAL = 0.05f;
     private static final float HALO_BASH_SOUND_INTERVAL = 0.05f;
-    // Seconds of audio time (see update()) and when each throttled sound last played.
+    // Audio clock and when each throttled sound last played.
     private float clock;
     private float lastPointGem = -1f, lastExplosion = -1f, lastOrbitGong = -1f, lastHaloBash = -1f;
 
@@ -165,9 +142,8 @@ public class AudioManager implements Disposable {
         soundsArray.put(sBank.level, tempArray);
     }
 
-    /** Swaps the currently-loaded stage track for the one at path, disposing the old one - called
-     *  once per stage load (see GameController.loadStage()), always before playStageMusic()/
-     *  setMuted() are next used, so those methods can keep assuming stageMusic is non-null. */
+    /** Loads the stage track (disposing the old one). Called on every stage load, so stageMusic is
+     *  never null afterwards. */
     public void loadStageMusic(String path) {
         fadingOutStageMusic = false;
         if (stageMusic != null) stageMusic.dispose();
@@ -176,10 +152,8 @@ public class AudioManager implements Disposable {
         stageMusicPath = path;
     }
 
-    /** Swaps the stage's music to the track at `path` mid-stage and starts it playing (looping) - a
-     *  Trigger.music action, e.g. a boss theme. Cancels any fade-out still running on the old track.
-     *  Already on that track and playing = no-op, so re-syncing after a seek (see
-     *  GameController.syncStageMusic()) never restarts a track that's already right. */
+    /** Switches to and plays (looping) the track at `path` mid-stage, cancelling any fade. No-op if
+     *  that track is already playing, so re-syncing after a seek never restarts it. */
     public void switchStageMusic(String path) {
         if (path == null) return;
         if (path.equals(stageMusicPath) && stageMusic.isPlaying() && !fadingOutStageMusic) return;
@@ -188,7 +162,7 @@ public class AudioManager implements Disposable {
         playStageMusic();
     }
 
-    /** The asset path of the currently loaded stage track - see switchStageMusic(). */
+    /** Asset path of the loaded stage track. */
     public String getStageMusicPath() { return stageMusicPath; }
 
     public void setMuted(boolean muted) {
@@ -208,9 +182,8 @@ public class AudioManager implements Disposable {
         stageMusic.stop();
     }
 
-    /** Gradually lowers stageMusic to silence over STAGE_MUSIC_FADE_DURATION and then stops it,
-     *  instead of stopStageMusic()'s hard cut - see update(). Used for the boss video/audio
-     *  handoff in ScrollingBackground, where an abrupt cut would clash with the video's own audio. */
+    /** Fades the stage music out over STAGE_MUSIC_FADE_DURATION, then stops it (used before the boss
+     *  video's own audio). */
     public void fadeOutStageMusic() {
         if (!stageMusic.isPlaying() || fadingOutStageMusic) return;
         fadingOutStageMusic = true;
@@ -251,26 +224,18 @@ public class AudioManager implements Disposable {
         if (!muted) powerupSound.play(settings.getEffectiveSfxVolume());
     }
 
-    // Non-typewriter TextCues (effect "static"/"blinking" - nothing to reveal, so nothing to loop
-    // a blip against) still get a single blip on appearing - see SpawnScheduler.update(). A
-    // typewriter cue instead loops/stops via loopTextCue()/stopTextCueLoop() below, timed to its
-    // own reveal.
+    // Single blip for a static/blinking text cue appearing.
     public void playTextCue() {
         PerfProbe.soundStarted();
         if (!muted) textCueSound.play(settings.getEffectiveSfxVolume());
     }
 
-    // Starts (or, called again while already looping, restarts) the text-blip sound looping for as
-    // long as a typewriter cue is still revealing characters - see SpawnScheduler.update(), which
-    // calls this once per cue on first reach and stopTextCueLoop() once the reveal (or the cue's own
-    // duration, whichever comes first) finishes.
+    // Loops the blip while a typewriter cue reveals.
     public void loopTextCue() {
         if (!muted) textCueSound.loop(settings.getEffectiveSfxVolume());
     }
 
-    // Stops every currently playing instance of the text-blip sound - safe to call even if none is
-    // playing. Deliberately not gated on `muted`: a loop started while unmuted must still be
-    // stoppable after the player mutes mid-reveal.
+    // Stops every blip instance. Not gated on `muted`, so a loop started before muting still stops.
     public void stopTextCueLoop() {
         textCueSound.stop();
     }
@@ -292,9 +257,7 @@ public class AudioManager implements Disposable {
         if (!muted) haloReturnSoundId = haloReturnSound.play(settings.getEffectiveSfxVolume());
     }
 
-    /** Cuts off halo_return.mp3 if it's still playing from the start of this same return trip -
-     *  the two can otherwise overlap when the glide back is short/fast enough that the return cue
-     *  hasn't finished by the time the halo actually reattaches. */
+    /** Cuts off a still-playing return sound so it doesn't overlap the latch on a short return. */
     public void playHaloLatch() {
         if (haloReturnSoundId != -1) {
             haloReturnSound.stop(haloReturnSoundId);
@@ -304,19 +267,16 @@ public class AudioManager implements Disposable {
         if (!muted) haloLatchSound.play(settings.getEffectiveSfxVolume());
     }
 
-    /** Graze points just earned the player another bomb - see Player.resolveGrazePoints(). */
     public void playGrazeBombEarned() {
         PerfProbe.soundStarted();
         if (!muted) grazeLevelUpSound.play(settings.getEffectiveSfxVolume());
     }
 
-    /** The bomb cooldown just ran out with a bomb in stock - see GameController.update(). */
     public void playBombReady() {
         PerfProbe.soundStarted();
         if (!muted) bombReadySound.play(settings.getEffectiveSfxVolume());
     }
 
-    /** The orbit weapon's reflect shield just finished recharging - see Player.advanceWeaponTimers(). */
     public void playShieldsReady() {
         PerfProbe.soundStarted();
         if (!muted) shieldsReadySound.play(settings.getEffectiveSfxVolume());
@@ -349,8 +309,6 @@ public class AudioManager implements Disposable {
         if (!muted && explosionSounds != null) explosionSounds.get(1).random().play(settings.getEffectiveSfxVolume());
     }
 
-    /** OrbitWeapon's bullet-hits-enemy impact sound - see CollisionManager.checkBulletEnemyCollisions,
-     *  which calls this once per orbit-bullet hit alongside its OrbitSparks.png hit effect. */
     public void playOrbitGong() {
         if (clock - lastOrbitGong < ORBIT_GONG_SOUND_INTERVAL && lastOrbitGong >= 0f) return;
         lastOrbitGong = clock;
@@ -366,9 +324,6 @@ public class AudioManager implements Disposable {
         if (!muted && waveBlastWeaponSounds != null && waveBlastWeaponSounds.containsKey(level)) waveBlastWeaponSounds.get(level).random().play(settings.getEffectiveSfxVolume());
     }
 
-    /** OrbitWeapon's ring-rotation whip crack - see OrbitWeapon.update(), which calls this once per
-     *  ring member each time that member completes a full lap, so it plays `level` times per
-     *  rotation of the ring (one crack per orbiting blade). */
     public void playOrbitWhip() {
         PerfProbe.soundStarted();
         if (!muted && orbitWhipSounds != null) orbitWhipSounds.get(1).random().play(settings.getEffectiveSfxVolume());
@@ -378,17 +333,12 @@ public class AudioManager implements Disposable {
         if (!muted && thunderboltWeaponSounds != null && thunderboltWeaponSounds.containsKey(level)) thunderboltWeaponSounds.get(level).random().play(settings.getEffectiveSfxVolume());
     }
 
-    /** See ThunderboltWeapon.playFireSound - the "whiff" sound for firing with no enemy on screen
-     *  to strike, in place of the normal playThunderboltWeaponSound(). */
     public void playThunderboltNullSound() {
         PerfProbe.soundStarted();
         if (!muted) thunderboltNullSound.play(settings.getEffectiveSfxVolume());
     }
 
-    /** Plays the tier-th (0-based) charge sound for ThunderboltWeapon's Hyper Attack bomb - see
-     *  Player.updateThunderboltCharge, which calls this once per tier as the bomb climbs through
-     *  its damage tiers (weapons.json's thunderboltChargeDamageByTier), in order, rather than
-     *  picking randomly like the sound banks above. */
+    /** The charge sound for Thunderbolt Hyper Attack tier `tier` (0-based). */
     public void playThunderboltHyperLevel(int tier) {
         PerfProbe.soundStarted();
         if (!muted && tier >= 0 && tier < thunderboltHyperLevelSounds.length) thunderboltHyperLevelSounds[tier].play(settings.getEffectiveSfxVolume());
@@ -399,28 +349,19 @@ public class AudioManager implements Disposable {
         if (!muted) thunderboltHyperExplosionSound.play(settings.getEffectiveSfxVolume());
     }
 
-    /** Plays a scripted one-off SFX by asset path - see SpawnScheduler.SoundCue. Loads and caches
-     *  the Sound the first time this path is triggered rather than up front, since which cue
-     *  sounds exist is entirely down to spawn_schedule.json. */
+    /** Plays a scripted cue sound by asset path (loaded and cached on first use). */
     public void playCueSound(String path) {
         playCueSound(path, 1f, 1f);
     }
 
-    /** Same lazy-load-and-cache cue-sound path as playCueSound(String), plus an explicit
-     *  volume/pitch - see MovementPatternDef's per-waypoint sound fields (soundVolume/soundPitch,
-     *  the latter already jittered by soundPitchVariation before it reaches here - see
-     *  BaseEnemy.resolveMovementCue()) and Sound.play(volume, pitch, pan)'s own libGDX contract:
-     *  pitch 1.0 is unmodified, higher raises it, lower lowers it. `volume` here is multiplied
-     *  into the effective SFX volume exactly like every other cue, not used in place of it, so the
-     *  player's own SFX volume setting still applies on top. */
-    /** Loads a cue sound now, if it isn't already, so its first playCueSound() doesn't stall a frame decoding it
-     *  from disk - see GameController.loadStage(), which preloads every sound a stage can cue. */
+    /** Loads a cue sound ahead of time so its first play doesn't stall a frame. */
     public void preloadCueSound(String path) {
         if (path == null || cueSounds.containsKey(path)) return;
         if (!Gdx.files.internal(path).exists()) return;
         cueSounds.put(path, Gdx.audio.newSound(Gdx.files.internal(path)));
     }
 
+    /** @param volume multiplied into the SFX volume setting. @param pitch 1 = unchanged. */
     public void playCueSound(String path, float volume, float pitch) {
         if (path == null) return;
         Sound sound = cueSounds.get(path);

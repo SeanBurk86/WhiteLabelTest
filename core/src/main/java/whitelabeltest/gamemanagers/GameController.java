@@ -49,6 +49,9 @@ import whitelabeltest.player.WeaponLoadout;
 import whitelabeltest.player.powerups.Powerup;
 import whitelabeltest.player.powerups.WeaponPowerup;
 
+/** The game loop for one run: loads stages from a stage sequence, updates entities, triggers,
+ *  collisions, scoring and the background, and handles game over, level complete, stage select,
+ *  replays and the debug menu. See the README's "Game loop" section. */
 public class GameController implements Disposable {
     private final AssetManager assets;
     private final AudioManager audio;
@@ -56,80 +59,58 @@ public class GameController implements Disposable {
     private final EntityManager entities;
     private final CollisionManager collisionManager;
     private ScrollingBackground background;
+    // Legacy time-based schedule; null for stages with a trigger file.
     private SpawnScheduler spawnScheduler;
-    // Camera-position-driven counterpart to spawnScheduler - see TriggerManager's class doc. Null
-    // for any stage whose StageDefinition.triggerFile is unset (every stage but stage1, for now).
+    // The stage's trigger file runner; null for stages without one.
     private TriggerManager triggerManager;
-    // Distance at which the kaleidoscope background finishes fading to colour - see loadStage(); <= 0 means
-    // "no distance-driven fade" (the shader falls back to its own clock).
+    // Distance by which the kaleidoscope background has faded to color; <= 0 = use the shader's clock.
     private float colorFadeDistance = -1f;
-    // How many distance units before the boss trigger the kaleidoscope background swaps to the tentacles.
+    // Distance units before the boss trigger that the kaleidoscope swaps to the tentacles tunnel.
     private static final float KALEIDOSCOPE_SWITCH_LEAD = 4f;
-    // How many distance units before the boss trigger the mandelbulb background's camera starts diving
-    // into the bulb. The camera itself needs a few seconds after that to reach the bulb and burst through
-    // its skin (it only starts once the blend passes halfway - MandelbulbShader.DIVE_BLEND_DISTANCE units
-    // in - see MandelbulbCamera), so this is sized to have it settled inside a few units before the boss.
+    // Distance units before the boss trigger that the mandelbulb camera starts diving; sized so the
+    // dive has settled inside the bulb shortly before the boss.
     private static final float MANDELBULB_DIVE_LEAD = 10f;
-    // spawnScheduler's own (wall-clock) textCues plus triggerManager's (distance-driven) ones,
-    // refreshed every update() - see getTextCues(). A stage like stage1, whose schedule.json no
-    // longer authors any text cues at all, just contributes an empty list here, so UIManager keeps
-    // drawing from one combined source either way.
+    // Text cues from both the schedule and the triggers, rebuilt every update().
     private final Array<TextCue> combinedTextCues = new Array<>();
     private final InputManager input;
     private final AudioSettings audioSettings;
-    // Which named ordering of stages (see StageSequenceDefinition/AssetManager.getStageSequence())
-    // this run is playing through - swapping this is how alternate modes (tutorial, practice, a
-    // boss-rush, etc.) reuse the same stage pool in a different order/subset without any other
-    // GameController change.
+    // Stage sequence ids from stage_sequences.json.
     public static final String DEFAULT_STAGE_SEQUENCE_ID = "campaign";
-    // TUTORIAL on the start menu skips WeaponSelectScreen entirely and jumps straight here - see
-    // Main.transitionToTutorial() and this sequence's startingLoadout in stage_sequences.json.
+    // TUTORIAL skips WeaponSelectScreen and uses the sequence's startingLoadout.
     public static final String TUTORIAL_STAGE_SEQUENCE_ID = "tutorial";
-    // Non-final: startReplay() swaps this to the recorded run's sequence id without needing a new
-    // GameController instance.
+    // Non-final: a replay swaps in the recorded run's sequence.
     private String stageSequenceId;
-    // The resolved list of stage ids for stageSequenceId, fixed for the lifetime of this
-    // GameController (re-resolved on every reset() in case the underlying JSON changed, e.g. via
-    // the debug enemy/pattern editor's live-reload path).
+    // Stage ids for this run, re-resolved on every reset().
     private Array<String> stageSequence;
-    // For a sequence with a stageMap (see StageSequenceDefinition.stageMap): the map itself, and the nodes
-    // the player has played through so far (the last one is the stage currently loaded). stageSequence
-    // then grows one stage per choice as the run goes, instead of being fixed up front. Both null for an
-    // ordinary fixed-order sequence.
+    // For a map sequence: the map and the nodes played so far (last = current stage). stageSequence
+    // then grows one stage per choice. Both null for a fixed-order sequence.
     private StageMap stageMap;
     private Array<StageMap.Node> stageMapPath;
-    // Non-null while the stage-select map is up after a stage clear - see openStageSelect().
+    // Non-null while stage select is open after a clear.
     private StageSelect stageSelect;
-    // Explicit index into stageSequence (not raw position in AssetManager's stage pool) of the
-    // currently-loaded stage - see loadStage()/advanceToNextStage().
+    // Index into stageSequence of the loaded stage.
     private int stageIndex;
     private int totalEnemiesAcrossRun;
-    // Non-final: startReplay() swaps this to the recorded run's loadout without needing a new
-    // GameController instance.
+    // Non-final: a replay swaps in the recorded run's loadout.
     private WeaponLoadout loadout;
 
-    // Replay recording/playback - see ReplayRecorder/ReplayPlayer/ReplayBrowser. Mutually
-    // exclusive: recorder is null while a replay is being watched, and vice versa.
+    // Replay recording and playback are mutually exclusive.
     private final ReplayBrowser replayBrowser = new ReplayBrowser();
     private ReplayRecorder recorder;
     private ReplayPlayer replayPlayer;
 
-    // Full-screen "before the stage starts" cinematic - see InterstitialPlayer/startInterstitial().
+    // Pre-stage video.
     private final InterstitialPlayer interstitialPlayer = new InterstitialPlayer();
 
     private final ScoreManager scoreManager;
     private boolean gameOver;
     private float gameOverTimer;
     private boolean levelComplete;
-    // Set when QUIT is confirmed from the game-over/level-complete prompt - see
-    // handleGameOverInput()/handleLevelCompleteInput(). Main polls this each frame while PLAYING and
-    // tears this GameController down for the start screen once it's set, same as it already does
-    // when a replay-from-menu playback ends or the tutorial's schedule reaches its scripted end.
+    // Set when QUIT is chosen after game over/level complete; Main then returns to the start screen.
     private boolean quitToMenuRequested;
     private boolean bossVideoTriggered;
     private boolean musicFadeTriggered;
-    // The current stage's own track (StageDefinition.music) - what syncStageMusic() falls back to before
-    // any Trigger.music has been reached.
+    // The stage's own music, used until a Trigger.music is reached.
     private String stageMusicPath;
     private static final float LEVEL_COMPLETE_DELAY = 3f;
     private float levelCompleteDelayTimer = -1f;
@@ -138,15 +119,8 @@ public class GameController implements Disposable {
     private float levelStartTimer;
     private float bombCooldownTimer;
     private final float worldWidth, worldHeight;
-    // The stage currently loaded (see loadStage()) - kept around so the debug Spawn Schedule Editor
-    // can still open the right file (StageDefinition.spawnSchedule) even for a stage whose
-    // spawnScheduler is null (see that field's own doc), without needing a live SpawnScheduler
-    // instance just to ask it for the path it was already constructed from.
     private StageDefinition currentStageDef;
-    // Resolved once per loadStage() from stageDef.groundScrollSpeed (falling back to
-    // ScrollingBackground.DEFAULT_SCROLL_SPEED) for a stage with no spawnScheduler running -
-    // consulted every frame in update() the same way spawnScheduler.getGroundScrollSpeed() is for
-    // one that still has one. See StageDefinition.groundScrollSpeed's own doc.
+    // Ground scroll speed for stages without a spawnScheduler (from StageDefinition or the default).
     private float groundScrollSpeed;
 
     private final DebugSaveStateManager debugSaveStateManager;
@@ -155,9 +129,7 @@ public class GameController implements Disposable {
     private boolean debugMenuOpen;
     private int debugMenuSelectedIndex;
     private float debugMenuSeekTime;
-    // Index into AssetManager.getStageIds() the ROW_STAGE_SELECT row is currently showing - see
-    // handleDebugMenuInput()/debugLoadStage(). Initialized to the currently-loaded stage whenever
-    // the menu opens, same as debugMenuSeekTime snapping to the current schedule time.
+    // Index into AssetManager.getStageIds() shown on the debug stage-select row.
     private int debugMenuStageIndex;
 
     private static final float DEBUG_MENU_SCRUB_SPEED = 5f;
@@ -185,6 +157,7 @@ public class GameController implements Disposable {
 
     private LevelRank levelCompleteRank = LevelRank.D;
 
+    // After a hit, the player has this long to bomb and cancel it ("panic bomb").
     private static final float BOMB_SAVE_WINDOW = 0.0325f;
     private float hitGraceTimer = -1f;
 
@@ -200,9 +173,7 @@ public class GameController implements Disposable {
         this(worldWidth, worldHeight, keyBindings, audioSettings, loadout, DEFAULT_STAGE_SEQUENCE_ID);
     }
 
-    /** @param stageSequenceId id of the StageSequenceDefinition (assets/data/stage_sequences.json)
-     *  this run plays through - e.g. a future tutorial/practice mode would pass its own sequence id
-     *  here instead of DEFAULT_STAGE_SEQUENCE_ID. */
+    /** @param stageSequenceId the stage_sequences.json entry this run plays. */
     public GameController(float worldWidth, float worldHeight, KeyBindings keyBindings, AudioSettings audioSettings, WeaponLoadout loadout, String stageSequenceId) {
         this.worldWidth = worldWidth;
         this.worldHeight = worldHeight;
@@ -230,11 +201,8 @@ public class GameController implements Disposable {
 
     public void update(float delta) {
         ReplayFrame frame = null;
-        // Mirrors recording's own rule (recorder.record() only runs once past the debugMenuOpen
-        // early-return below) - don't consume a replay frame while the menu is open, or reopening
-        // it mid-playback would drop frames the same way starting a replay used to. Same reasoning
-        // for the interstitial: it's a real-time cosmetic moment outside "the run" (see
-        // InterstitialPlayer's class doc), so it must never eat into the frame stream either.
+        // Like recording, playback skips frames while the debug menu or an interstitial is up, so
+        // neither consumes replay frames.
         if (replayPlayer != null && !debugMenuOpen && !interstitialPlayer.isActive()) {
             if (!replayPlayer.hasNext()) {
                 stopReplay();
@@ -247,14 +215,13 @@ public class GameController implements Disposable {
                 syncStageMusic();
                 entities.clearWorld();
                 background.seekTo(frame.seekToTime);
-                return; // instantaneous - consumes no simulated time, resume on the next update() call
+                return; // a seek frame takes no simulated time
             }
             delta = frame.delta;
         }
 
         if (interstitialPlayer.isActive()) {
-            // Always live input here, live run or replay watch alike - a skip must never touch the
-            // recorded/replayed frame stream (see InterstitialPlayer's class doc).
+            // Always live input, even in a replay: skipping is outside the recorded stream.
             input.update(null);
             interstitialPlayer.update(delta);
             if (input.isRestartJustPressed() || input.isShootJustPressed()) interstitialPlayer.skip();
@@ -267,7 +234,6 @@ public class GameController implements Disposable {
         levelStartTimer += delta;
         if (bombCooldownTimer > 0) {
             bombCooldownTimer -= delta;
-            // The bomb is usable again the moment its cooldown runs out, as long as there's one in stock.
             if (bombCooldownTimer <= 0 && entities.getPlayer().getNumBombs() > 0 && !gameOver) audio.playBombReady();
         }
         input.update(frame);
@@ -311,15 +277,9 @@ public class GameController implements Disposable {
 
         if (recorder != null && !gameOver) recorder.record(delta, input);
 
-        // See SpawnScheduler.isWeaponsDisabled() - a scripted "you haven't been taught this yet"
-        // window (e.g. the tutorial, before its weapons section) that withholds both firing and
-        // bombing, not just one. OR'd with TriggerManager's own distance-based equivalent (see
-        // TriggerManager.isWeaponsDisabled()) so a stage can author these windows either way.
+        // Scripted "not taught yet" windows (e.g. in the tutorial), from whichever system runs the stage.
         boolean weaponsDisabled = spawnScheduler != null ? spawnScheduler.isWeaponsDisabled(spawnScheduler.getTotalTime())
             : (triggerManager != null && triggerManager.isWeaponsDisabled(triggerManager.getCamera().getPosition()));
-        // See SpawnScheduler.isHyperAttackDisabled()/isBombDisabled() - separate "not taught yet"
-        // windows from weaponsDisabled, since a tutorial teaches normal fire, Hyper Attack, and
-        // bombing at three different points rather than all at once.
         boolean hyperAttackDisabled = spawnScheduler != null ? spawnScheduler.isHyperAttackDisabled(spawnScheduler.getTotalTime())
             : (triggerManager != null && triggerManager.isHyperAttackDisabled(triggerManager.getCamera().getPosition()));
         boolean bombDisabled = spawnScheduler != null ? spawnScheduler.isBombDisabled(spawnScheduler.getTotalTime())
@@ -349,14 +309,8 @@ public class GameController implements Disposable {
             return;
         }
 
-        // A triggerFile-driven stage's Trigger.setSpeed action changes camera.getSpeed() (see
-        // TriggerManager.fire()), but that camera is purely a distance clock for arming triggers -
-        // see LevelCamera's own class doc - and was never itself wired to anything visual. Reading
-        // it back as a scale (see TriggerManager.getSpeedScale()) and feeding it into the ACTUAL
-        // on-screen scroll rates below is what makes a setSpeed(0) action (e.g. freezing the screen
-        // for a stationary boss fight) or a later setSpeed back to normal actually visible, rather
-        // than only affecting when later triggers arm. 1f (full speed, unmodified) for a stage with
-        // no triggerManager at all, so this is a no-op everywhere that doesn't use setSpeed.
+        // Scale visible scrolling by the camera's speed so Trigger.setSpeed (e.g. 0 for a stationary
+        // boss fight) actually stops the world, not just trigger arming.
         float cameraSpeedScale = triggerManager != null ? triggerManager.getSpeedScale() : 1f;
         background.setScrollSpeedScale(cameraSpeedScale);
         PerfProbe.begin(PerfProbe.Section.BACKGROUND_UPDATE);
@@ -367,10 +321,7 @@ public class GameController implements Disposable {
         PerfProbe.begin(PerfProbe.Section.ENTITY_UPDATE);
         entities.update(delta, input, assets, audio, weaponsDisabled, hyperAttackDisabled, effectiveGroundScrollSpeed, background);
         PerfProbe.end(PerfProbe.Section.ENTITY_UPDATE);
-        // Keeps the phosphene lattice overlay's downward drift (kaleidoscope_source.frag) riding
-        // along at exactly this frame's real ground-scroll rate - see
-        // ScrollingBackground.setKaleidoscopeGroundScrollSpeed()'s own doc. No-op for any other
-        // shaderBackground/no-shader stage, so this is safe to call unconditionally every frame.
+        // Kaleidoscope overlay drift follows the ground scroll (no-op for other backgrounds).
         background.setKaleidoscopeGroundScrollSpeed(effectiveGroundScrollSpeed);
         if (spawnScheduler != null) {
             spawnScheduler.update(delta, entities, audio, input,
@@ -441,8 +392,7 @@ public class GameController implements Disposable {
         collisionManager.checkEnemyBulletEnemyCollisions(entities.getEnemyBullets(), entities.getEnemies(), audio, entities, assets, worldWidth, worldHeight, scoreManager);
         collisionManager.checkHaloDashCollisions(entities.getPlayer(), entities.getEnemies(), audio, entities, assets, worldWidth, worldHeight, scoreManager);
         collisionManager.checkThunderboltDetonation(entities.getPlayer(), entities.getEnemies(), audio, entities, assets, worldWidth, worldHeight, scoreManager);
-        // Must run after every check above - see its javadoc for why paired-enemy deaths are
-        // deferred instead of resolved inline in each of those.
+        // Must run after every damage check above.
         collisionManager.resolvePairedEnemyDeaths(entities.getEnemies(), audio, entities, assets, worldWidth, worldHeight, scoreManager, delta);
         PerfProbe.end(PerfProbe.Section.COLLISIONS);
         PerfProbe.counts(entities.getEnemies().size, entities.getEnemyBullets().size, entities.getBullets().size, entities.getPointGems().size,
@@ -539,15 +489,10 @@ public class GameController implements Disposable {
                 debugLoadStage(stageIds.get(debugMenuStageIndex));
             }
         } else if (debugMenuSelectedIndex == ROW_SPAWN_SCHEDULE_EDITOR) {
-            // No-op for a stage now driven entirely by its triggerFile (spawnScheduler == null -
-            // see StageDefinition.triggerFile's own doc) - since nothing reads spawnSchedule content
-            // back into live gameplay for one anymore, opening this editor for it would just be
-            // misleading (edits made there would silently have no in-game effect).
+            // Only for stages actually running a schedule (edits would do nothing otherwise).
             if (input.isDebugMenuConfirmJustPressed() && spawnScheduler != null) {
                 spawnScheduleEditor.open(assets, currentStageDef.spawnSchedule, worldWidth, worldHeight,
-                    // Saving must reach the currently-running game immediately (see
-                    // SpawnScheduleEditor.onSavedToDisk's doc) - reuses the same full stage reload
-                    // the Stage Select row already does, for the stage that's currently active.
+                    // Reload the stage after saving so the change takes effect.
                     () -> {
                         spawnScheduleEditor.close();
                         debugLoadStage(stageSequence.get(stageIndex));
@@ -588,25 +533,19 @@ public class GameController implements Disposable {
         entities.clearWorld();
         background.seekTo(targetTime);
         debugMenuOpen = false;
-        // A seek is an instantaneous clock jump outside the normal delta-accumulation model
-        // recorder.record() captures - without this, a replay of this run would have no idea the
-        // jump happened and would desync from whatever the recorded player was actually reacting to.
+        // Record the jump so a replay seeks at the same moment.
         if (recorder != null) recorder.recordSeek(targetTime);
     }
 
-    /** Puts the track that should be playing at the camera's current distance back on after a seek/
-     *  checkpoint restart - TriggerManager.seekTo() skips triggers rather than replaying them, so a jump
-     *  past (or back before) a Trigger.music switch would otherwise leave the wrong track playing. No-op
-     *  when that track is already the one playing - see AudioManager.switchStageMusic(). */
+    /** After a seek, restores the music that should be playing at the current distance (seeks skip
+     *  music triggers rather than replay them). */
     private void syncStageMusic() {
         if (triggerManager == null || stageMusicPath == null) return;
         String track = triggerManager.musicAt(triggerManager.getCamera().getPosition());
         audio.switchStageMusic(track != null ? track : stageMusicPath);
     }
 
-    /** Loads every sound this stage can cue - its triggers' sounds and any waypoint sound in the movement
-     *  patterns - up front, so none of them stalls a frame loading from disk the first time it plays mid-stage
-     *  (e.g. the Warning cue, or a boss' waypoint screech). Already-loaded ones are skipped. */
+    /** Preloads every trigger sound and waypoint sound so none stalls a frame on first play. */
     private void preloadStageSounds() {
         if (triggerManager != null) for (String path : triggerManager.getCueSoundPaths()) audio.preloadCueSound(path);
         for (String id : PatternRegistry.getMovementIds()) preloadWaypointSounds(PatternRegistry.getMovement(id));
@@ -627,9 +566,6 @@ public class GameController implements Disposable {
         if (levelCompleteBombBonus > 0) scoreManager.addBonus(levelCompleteBombBonus);
 
         float bossSpawnTime = spawnScheduler != null ? spawnScheduler.getBossSpawnTime() : -1f;
-        // Falls back to the trigger-driven boss spawn (see TriggerManager.getBossSpawnDistance())
-        // once a stage's boss spawns via a trigger instead of a SpawnEvent - otherwise this stays -1
-        // forever and the boss time bonus/rank contribution below silently zeroes out.
         if (bossSpawnTime < 0f && triggerManager != null) bossSpawnTime = triggerManager.getBossSpawnDistance();
         if (bossDefeatedScheduleTime >= 0f && bossSpawnTime >= 0f) {
             levelCompleteBossFightSeconds = Math.max(0f, bossDefeatedScheduleTime - bossSpawnTime);
@@ -684,7 +620,7 @@ public class GameController implements Disposable {
         if (input.isRestartJustPressed()) {
             if (!hasNextStage()) reset();
             else if (stageMap != null) {
-                // Only one way on = nothing to choose; otherwise it's the stage-select screen.
+                // With a single way on there's nothing to choose.
                 Array<StageMap.Node> choices = stageMap.choicesAfter(stageMapPath.peek());
                 if (choices.size > 1) openStageSelect();
                 else moveToMapNode(choices.first());
@@ -694,15 +630,11 @@ public class GameController implements Disposable {
         }
     }
 
-    /** Opens the stage-select screen: the whole map, the route taken so far, and the stages the one just
-     *  cleared connects to - see StageSelect. */
     private void openStageSelect() {
         stageSelect = new StageSelect(stageMap, stageMapPath);
     }
 
-    /** Up/down (or left/right) pick between the stages on offer and the same confirm key as the STAGE
-     *  CLEAR screen launches the highlighted one. All of it comes from the recorded/replayed input stream
-     *  (move edges + confirm), so a replay makes the same choices with nothing extra to record. */
+    /** Move to pick, confirm to launch. Uses only recorded input, so replays make the same choices. */
     private void handleStageSelectInput(float delta) {
         stageSelect.tick(delta);
         if (input.isMoveUpJustStarted() || input.isMoveLeftJustStarted()) stageSelect.move(-1);
@@ -716,17 +648,15 @@ public class GameController implements Disposable {
         }
     }
 
-    /** Steps the run onto `node` - appends its stage to the sequence (which is how loadStage()/
-     *  advanceToNextStage() find it) and starts it like any other advance. */
+    /** Appends `node`'s stage to the sequence and advances to it. */
     private void moveToMapNode(StageMap.Node node) {
         stageMapPath.add(node);
         stageSequence.add(node.stageId);
         advanceToNextStage();
     }
 
-    /** Builds the runtime map for a sequence's stageMap, giving every node that has a stage that stage's
-     *  display name. An unknown stage id fails here, at the start of the run, rather than mid-run when
-     *  somebody first chooses it. */
+    /** Builds the map and labels each node with its stage's name. An unknown stage id fails here at
+     *  run start rather than when first chosen. */
     private StageMap buildStageMap(StageMapDefinition def) {
         StageMap map = new StageMap(def);
         for (StageMap.Node node : map.getNodes()) {
@@ -743,10 +673,7 @@ public class GameController implements Disposable {
         if (background != null) background.dispose();
         background = new ScrollingBackground(worldWidth, worldHeight, audioSettings, assets, stageDef.backgroundLayers, stageDef.bossVideo, stageDef.backgroundVideo, stageDef.shaderBackground, stageDef.hueCycleBackground, stageDef.playerFeedbackBackground);
         background.setMuted(audio.isMuted());
-        // A stage with a triggerFile reads ONLY from it for gameplay - see StageDefinition.
-        // triggerFile's own doc - so spawnScheduler isn't even constructed for one, keeping the
-        // level editor (which only ever edits triggerFile) in full parity with what actually runs.
-        // spawnSchedule stays a fallback for some hypothetical future stage authored the old way.
+        // A trigger file replaces the schedule entirely, so the editor and the game always agree.
         if (stageDef.triggerFile != null) {
             spawnScheduler = null;
             triggerManager = new TriggerManager(worldWidth, worldHeight, assets, stageDef.triggerFile, EnemyDefinitionLoader.load(), background);
@@ -765,10 +692,7 @@ public class GameController implements Disposable {
             : (bossDistance > 0f ? Math.max(0f, bossDistance - MANDELBULB_DIVE_LEAD) : -1f));
         groundScrollSpeed = stageDef.groundScrollSpeed != null ? stageDef.groundScrollSpeed
             : (spawnScheduler != null ? spawnScheduler.getGroundScrollSpeed() : ScrollingBackground.DEFAULT_SCROLL_SPEED);
-        // A trigger-authored boss video (see Trigger.triggerBossVideo) wins over the schedule's own
-        // (wall-clock) backgroundVideoTime when both could apply - see
-        // TriggerManager.getBossVideoDistance()'s own doc on why this period is derived from
-        // whichever source actually drives this stage's boss video now.
+        // Hue-cycle period = time/distance to the boss video, so one cycle ends as it starts.
         float bossVideoDistance = triggerManager != null ? triggerManager.getBossVideoDistance() : -1f;
         background.setHueCyclePeriod(bossVideoDistance >= 0f ? bossVideoDistance : (spawnScheduler != null ? spawnScheduler.getBackgroundVideoTime() : -1f));
         audio.loadStageMusic(stageDef.music);
@@ -793,11 +717,8 @@ public class GameController implements Disposable {
         startInterstitial();
     }
 
-    /** Kicks off a randomly-chosen interstitial video before a stage's gameplay begins - see
-     *  InterstitialPlayer/update(). Falls straight through to stage music with no video if none are
-     *  configured (empty data/interstitials.json). The pick draws from the same seeded
-     *  MathUtils.random stream as everything else, so which clip plays stays reproducible across a
-     *  replay's record/playback - see InterstitialPlayer's class doc. */
+    /** Plays a random interstitial video (seeded, so replays pick the same one), or goes straight to
+     *  the stage music if none are configured. */
     private void startInterstitial() {
         Array<String> videos = assets.getInterstitialVideos();
         if (videos.size == 0) {
@@ -808,12 +729,9 @@ public class GameController implements Disposable {
         interstitialPlayer.play(chosen, audio.isMuted() ? 0f : audioSettings.getEffectiveMusicVolume());
     }
 
-    /** Debug-only: jumps straight into an arbitrary stage from stages.json, bypassing whatever
-     *  stage_sequences.json normally governs progression - the only way to reach a stage (like
-     *  "testground") that isn't part of any curated sequence. Replaces stageSequence with a
-     *  synthetic single-entry list so hasNextStage() is false and normal advancement stays inert.
-     *  Not representable as a mid-run seek (c.f. seekToTime's recordSeek), so any in-progress
-     *  replay recording is simply dropped rather than corrupted. */
+    /** Debug: loads any stage from stages.json as a single-stage sequence (the only way to reach
+     *  stages outside every sequence, e.g. "testground"). Drops any in-progress replay recording,
+     *  since this can't be replayed. */
     private void debugLoadStage(String stageId) {
         recorder = null;
         stageSequence = new Array<>();
@@ -833,22 +751,9 @@ public class GameController implements Disposable {
         debugMenuOpen = false;
     }
 
-    /** The JavaFX editor's "Quick Play" button (see Main.transitionToQuickPlay()) - jumps straight
-     *  into `stageId` (reusing debugLoadStage()'s existing, already-proven "arbitrary stage" path),
-     *  overrides the player's two weapon slots directly (bypassing WeaponLoadout - Player.
-     *  setSlotWeapon() is the same call WeaponLoadout's own application already goes through), then
-     *  seeks to startDistance (reusing seekToTime() - already safe for a triggerFile-only stage, see
-     *  its own null-guards) so testing can start mid-level instead of always from distance 0. A
-     *  slot id of null leaves that slot at whatever the constructor's placeholder WeaponLoadout gave
-     *  it; startDistance <= 0 skips seeking entirely (already at distance 0 from the fresh
-     *  debugLoadStage() above, so nothing to do).
-     *  @param slotALevel starting level for whichever weapon ends up in slot A
-     *  @param slotBLevel starting level for whichever weapon ends up in slot B - see
-     *  Main.QuickPlayConfig.slotALevel's own doc on why <= 0 means "leave it" rather than "set it
-     *  to 0": setSlotWeapon() above already brings a freshly-equipped weapon up to level 1 on its
-     *  own (same as an ordinary equip), so a real override only needs to run when the caller
-     *  actually asked for a SPECIFIC level - applied after setSlotWeapon() precisely so it
-     *  overrides that implicit level-1, not the other way around. */
+    /** The editor's Quick Play: loads `stageId`, sets the weapon slots (null = leave as is), and
+     *  seeks to startDistance (if > 0).
+     *  @param slotALevel,slotBLevel weapon levels; <= 0 keeps the level 1 a fresh equip gets. */
     public void quickStartAtStage(String stageId, float startDistance, String slotAWeaponId, String slotBWeaponId,
                                    int slotALevel, int slotBLevel) {
         debugLoadStage(stageId);
@@ -859,25 +764,19 @@ public class GameController implements Disposable {
         if (startDistance > 0) seekToTime(startDistance);
     }
 
-    /** On a map sequence there's a next stage as long as the current node connects to one that has a stage
-     *  built - a dead end (nodes ahead with no stage yet, or none at all) is the end of the run. */
+    /** On a map, true while the current node connects to a node with a stage; a dead end ends the run. */
     public boolean hasNextStage() {
         if (stageMap != null) return !stageMap.choicesAfter(stageMapPath.peek()).isEmpty();
         return stageIndex + 1 < stageSequence.size;
     }
 
-    /** The current stage's own name for display ("STAGE 3 CLEAR"). Its name rather than a count of stages
-     *  played, since on a map the player takes a route through stages and "the second stage you played"
-     *  isn't a stable thing to call one. */
+    /** The current stage's display name (by name, not play order, since map routes vary). */
     public String getStageName() {
         String name = currentStageDef != null ? currentStageDef.name : null;
         return name != null ? name : "STAGE " + (stageIndex + 1);
     }
 
-    /** Overrides entities.reset(loadout)'s ordinary WeaponSelectScreen-driven loadout with a stage
-     *  sequence's fixed StartingLoadoutDefinition (e.g. "tutorial"'s) - see reset(). Runs right
-     *  after entities.reset(loadout), which has already zeroed every weapon's level and cleared
-     *  both slots, so this only needs to set what the config actually specifies. */
+    /** Applies a sequence's fixed loadout over the freshly reset player. */
     private void applyStartingLoadout(StartingLoadoutDefinition config) {
         Player player = entities.getPlayer();
         if (config.weaponLevels != null) {
@@ -892,9 +791,7 @@ public class GameController implements Disposable {
         player.setNumLives(config.numLives);
     }
 
-    /** Switches this GameController into replaying a previously-recorded run - see ReplayBrowser/
-     *  ReplayRecorder. Doesn't flush the outgoing recorder itself; reset() (called at the end here)
-     *  already does that at its own top, exactly once, in the right place. */
+    /** Starts watching a recorded run (reset() flushes the outgoing recording). */
     public void startReplay(ReplayData data) {
         this.stageSequenceId = data.stageSequenceId;
         try {
@@ -904,16 +801,12 @@ public class GameController implements Disposable {
             return;
         }
         this.replayPlayer = new ReplayPlayer(data);
-        // Picking a replay happens *from inside* the debug menu - leaving it open would otherwise
-        // silently drop every frame update() pulls from replayPlayer (consumed at the top of
-        // update(), but discarded by the debugMenuOpen early-return below) until the dev manually
-        // closes it, permanently offsetting the schedule from the input stream from that point on.
+        // Replays are picked from the debug menu; close it so playback isn't paused.
         this.debugMenuOpen = false;
         reset();
     }
 
-    /** Hands control back to live play with a fresh recording - called once a replay's frames run
-     *  out (see update()) or manually to abandon a replay early. */
+    /** Returns to live play with a fresh recording. */
     public void stopReplay() {
         this.replayPlayer = null;
         reset();
@@ -935,12 +828,9 @@ public class GameController implements Disposable {
     }
 
     private void applyPlayerHit() {
-        // Performance runs only (-Dperf.invincible, see PerfProbe): hits are ignored so a recorded run plays the
-        // whole stage even after it drifts out of sync with the current code, instead of ending at a game over.
+        // Perf runs (-Dperf.invincible): ignore hits so a desynced replay still plays the whole stage.
         if (PerfProbe.INVINCIBLE) return;
-        // Scripted "safely stand in this fire" window (see SpawnScheduler.isPlayerInvincible) -
-        // completely consequence-free, not even a chain break, unlike every other branch below. OR'd
-        // with TriggerManager's own distance-based equivalent (see TriggerManager.isPlayerInvincible()).
+        // Scripted invincibility window: no consequence at all, not even a chain break.
         if (spawnScheduler != null ? spawnScheduler.isPlayerInvincible(spawnScheduler.getTotalTime())
             : (triggerManager != null && triggerManager.isPlayerInvincible(triggerManager.getCamera().getPosition()))) return;
 
@@ -971,24 +861,12 @@ public class GameController implements Disposable {
         }
     }
 
-    /** A hit during SpawnScheduler.isInPracticeSection() - e.g. a tutorial dodge drill - takes this
-     *  path instead of applyPlayerHit()'s normal life-loss/game-over branch: costs no life, plays a
-     *  hit sound for feedback, then rewinds the schedule back to the section's start and wipes
-     *  whatever hit the player so it replays from scratch - same seekTo()+clearWorld() pairing the
-     *  debug menu's seek uses. Deliberately does NOT call player.startDeath() the way a real hit
-     *  does - that sets isDead for DEATH_WAIT (2s) and then isInvincible for another
-     *  invincibleFrameTime (2s), during which EntityManager holds firingPaused true for every
-     *  enemy (see its firingPaused computation). The schedule doesn't pause for that: with waves
-     *  spawning every ~1.2s here, a 4-second firing freeze let 2+ waves stack up fully spawned but
-     *  unfired, so they all fired together the instant firingPaused cleared - each wave's bullets
-     *  covering the lane the OTHER wave left open, unioning into a solid, gap-free wall. Skipping
-     *  startDeath() avoids that stall entirely; clearWorld() already wipes every bullet on screen,
-     *  so there's nothing left that could hit the player again this instant anyway. */
+    /** A hit inside a practice checkpoint: no life lost; rewinds to the checkpoint start and clears
+     *  the world. Deliberately skips player.startDeath(): its death + i-frame time pauses all enemy
+     *  fire while the stage keeps spawning, and the stacked waves then fire at once as a gapless wall. */
     private void restartPracticeSection() {
         audio.playPlayerDeath();
         entities.destroyAllPlayerBullets();
-        // Whichever source's window actually contains the current position wins - same priority
-        // isInPracticeSection() above already checks (spawnScheduler first, then triggerManager).
         if (spawnScheduler != null) {
             float checkpointStart = spawnScheduler.isInPracticeSection(spawnScheduler.getTotalTime())
                 ? spawnScheduler.getPracticeCheckpointStart(spawnScheduler.getTotalTime())
@@ -996,7 +874,7 @@ public class GameController implements Disposable {
             spawnScheduler.seekTo(checkpointStart, audio);
             if (triggerManager != null) triggerManager.seekTo(checkpointStart);
         } else if (triggerManager != null) {
-            // Also swaps in the checkpoint's retry-only dialogue - see Trigger.firstAttemptOnly/retryOnly.
+            // Also swaps in retry-only triggers (see Trigger.firstAttemptOnly/retryOnly).
             triggerManager.seekToPracticeRetry(triggerManager.getCamera().getPosition());
         }
         syncStageMusic();
@@ -1006,8 +884,7 @@ public class GameController implements Disposable {
     private void sufferBombDamage(int damage, Array<Enemy> enemies) {
         for (int i = enemies.size - 1; i >= 0; i--) {
             Enemy e = enemies.get(i);
-            // See CollisionManager.resolvePairedEnemyDeaths(), called later this same update() -
-            // a paired enemy's death is deferred there instead of scored/destroyed immediately.
+            // Paired enemies are resolved later by CollisionManager.resolvePairedEnemyDeaths().
             if (e.takeDamage(damage) && e.getPairId() == null) {
                 scoreManager.addScore(destroyEnemy(audio, entities, assets, worldWidth, worldHeight, e, scoreManager));
             }
@@ -1038,17 +915,14 @@ public class GameController implements Disposable {
         if (gemCount > 0) {
             Animation<TextureRegion> gemAnimation =
                 AnimationCache.get(assets.pointGemTexture, 6, 4, 24, 0.05f, Animation.PlayMode.LOOP);
-            // The closer the player is when the enemy dies, the bigger - and more valuable - its gems: see
-            // GameBalance.gemScaleForDistance(). Distance is from the player to the enemy's nearest edge, so
-            // ramming an enemy (or being inside its bounds) counts as point-blank.
+            // Closer kills drop bigger, more valuable gems. Distance is to the enemy's nearest edge.
             Player player = entityManager.getPlayer();
             Rectangle bounds = enemy.getRectangle();
             float nearestX = MathUtils.clamp(player.getCenterX(), bounds.x, bounds.x + bounds.width);
             float nearestY = MathUtils.clamp(player.getCenterY(), bounds.y, bounds.y + bounds.height);
             float gemScale = assets.getGameBalance().gemScaleForDistance(
                 Vector2.dst(player.getCenterX(), player.getCenterY(), nearestX, nearestY));
-            // Capped (see GameBalance.maxGemsPerEnemy): the first `extra` gems each stand for one more, so the
-            // gems that spawn always add up to exactly gemCount.
+            // Capped at maxGemsPerEnemy; the represented counts still add up to gemCount.
             int spawned = Math.min(gemCount, Math.max(1, assets.getGameBalance().maxGemsPerEnemy));
             int each = gemCount / spawned, extra = gemCount % spawned;
             for (int i = 0; i < spawned; i++) {
@@ -1089,28 +963,13 @@ public class GameController implements Disposable {
         powerups.add(wp);
     }
 
-    /** Interleaves EnemyDefinition.backgroundLayer-attached enemies between individual background
-     *  layers (see ScrollingBackground.drawLayer()/EntityManager.drawEnemiesAttachedToLayer())
-     *  whenever there's an ordinary layer stack to sandwich them against - see
-     *  ScrollingBackground.isDrawingLayerStack(). Falls back to the plain "background fully behind
-     *  everything" draw whenever there isn't (a boss/background video or shader background is
-     *  covering the screen instead, or this stage simply has no backgroundLayers at all) - a
-     *  layer-attached enemy just draws normally in that case, same as before this feature existed. */
+    /** Draws the background, entities and interstitial. With a background layer stack, layer-attached
+     *  enemies are drawn between their layers; otherwise (video/shader background) everything draws
+     *  in front of the background. */
     public void draw(com.badlogic.gdx.graphics.g2d.SpriteBatch batch) {
-        // No-op unless this stage set StageDefinition.playerFeedbackBackground - see
-        // ScrollingBackground.updatePlayer()/updateHalo(). Must happen before background.draw()/
-        // beginLayeredDraw() below so the feedback overlay composites THIS frame's player position,
-        // not last frame's.
-        //
-        // While the player is dead, Player.update() early-returns (see its own isDead branch), so
-        // sprite/position are frozen for the whole DEATH_WAIT window - feeding that same frozen frame
-        // into the feedback trail every frame at full opacity would reinforce it faster than
-        // PlayerFeedbackShader's own decay can fade it, leaving a solid, non-blinking "statue" sitting
-        // at the respawn point for roughly as long as the invincibility window that follows lasts (a
-        // "reappears without blinking and can't move" bug report - the real player CAN move, a stale
-        // feedback copy is just stuck on top of them). Passing a null frame (but the real position, so
-        // the shader's zoom/warp pivot doesn't snap to the origin) skips that reinforcement entirely,
-        // so any already-accumulated trail just decays normally through the death window instead.
+        // Feed this frame's player to the feedback overlay (if enabled) before drawing it. While dead
+        // the player sprite is frozen, so pass a null frame: re-feeding it would build a solid
+        // "statue" in the trail faster than it decays.
         Player feedbackPlayer = entities.getPlayer();
         TextureRegion feedbackFrame = feedbackPlayer.isDead() ? null : feedbackPlayer.getCurrentFrame();
         TextureRegion feedbackHaloFrame = feedbackPlayer.isDead() ? null : feedbackPlayer.getHaloFrame();
@@ -1129,8 +988,7 @@ public class GameController implements Disposable {
             }
             background.endLayeredDraw(batch);
             PerfProbe.end(PerfProbe.Section.BACKGROUND_DRAW);
-            // draw() itself isn't called on this branch, so the feedback overlay (which draw() would
-            // otherwise apply on top of the layer stack) needs its own explicit call here.
+            // background.draw() isn't used here, so apply its feedback overlay explicitly.
             PerfProbe.begin(PerfProbe.Section.FEEDBACK_DRAW);
             background.drawPlayerFeedbackOverlay(batch);
             PerfProbe.end(PerfProbe.Section.FEEDBACK_DRAW);
@@ -1155,9 +1013,7 @@ public class GameController implements Disposable {
         }
         long seed = replayPlayer != null ? replayPlayer.getSeed() : System.nanoTime();
         MathUtils.random.setSeed(seed);
-        // Tutorial runs are scripted practice, not "a run" worth sharing/replaying - see
-        // ReplayRecorder.record()/dispose(), which only ever fire when recorder is non-null, so
-        // leaving it null here is enough to suppress recording entirely for this mode.
+        // Tutorial runs aren't recorded.
         boolean recordingEnabled = replayPlayer == null && !stageSequenceId.equals(TUTORIAL_STAGE_SEQUENCE_ID);
         recorder = recordingEnabled ? new ReplayRecorder(stageSequenceId, loadout, seed) : null;
 
@@ -1179,9 +1035,7 @@ public class GameController implements Disposable {
         levelCompleteRank = LevelRank.D;
         totalEnemiesAcrossRun = 0;
         StageSequenceDefinition sequenceDef = assets.getStageSequence(stageSequenceId);
-        // Always a copy: a map sequence appends to stageSequence as the player chooses (see moveToMapNode()),
-        // which must never touch the sequence definition AssetManager keeps around and hands out again on
-        // the next reset().
+        // Always a copy: map runs append to stageSequence, which must not modify the definition.
         stageSelect = null;
         if (sequenceDef.stageMap != null) {
             stageMap = buildStageMap(sequenceDef.stageMap);
@@ -1244,8 +1098,7 @@ public class GameController implements Disposable {
     public int getLevelCompleteTimeBonus() { return levelCompleteTimeBonus; }
     public float getLevelCompleteBossFightSeconds() { return levelCompleteBossFightSeconds; }
     public boolean isDebugMode() { return debugMode; }
-    // Debug-only (see UIManager.drawDebugTriggerInfo()) - null when this stage has no trigger file
-    // at all, so the overlay simply doesn't draw.
+    // Debug overlay; null without a trigger file.
     public Float getTriggerDistance() { return triggerManager != null ? triggerManager.getCamera().getPosition() : null; }
     public String getTriggerActiveGateInfo() { return triggerManager != null ? triggerManager.describeActiveGate() : null; }
     public boolean isDebugMenuOpen() { return debugMenuOpen; }
@@ -1256,27 +1109,17 @@ public class GameController implements Disposable {
     public float getSpawnScheduleTotalTime() {
         return spawnScheduler != null ? spawnScheduler.getTotalTime() : (triggerManager != null ? triggerManager.getCamera().getPosition() : 0f);
     }
-    // Falls back to TriggerManager's own clock (see that class's own doc on why it now owns one)
-    // once a stage has no spawnScheduler running - UIManager.drawTextCues() uses this SAME value to
-    // measure every cue's reveal progress regardless of which source actually fired it.
+    // The never-frozen clock text cues are timed against.
     public float getSpawnScheduleRealTime() {
         return spawnScheduler != null ? spawnScheduler.getRealTime() : (triggerManager != null ? triggerManager.getRealTime() : 0f);
     }
-    // See SpawnScheduler.isScheduleEndTriggered()/TriggerManager.isScheduleEndTriggered() - always
-    // false for an ordinary arcade stage (only a schedule/trigger file that explicitly sets one,
-    // e.g. the tutorial, ever latches this).
+    // Stage complete without a boss (e.g. the tutorial).
     public boolean isScheduleEndTriggered() {
         return spawnScheduler != null ? spawnScheduler.isScheduleEndTriggered() : (triggerManager != null && triggerManager.isScheduleEndTriggered());
     }
-    // See SpawnScheduler.isTextCuesRequireConfirm()/UIManager.drawTextCues(). No whole-file
-    // equivalent exists on the trigger side (Trigger.requireConfirm is already per-trigger, a finer
-    // grain than this global UI hint flag ever was) - false (this flag's own default, same as an
-    // empty/unset schedule already produced for every triggerFile-driven stage today) once
-    // spawnScheduler stops running, so this preserves the exact behavior already in effect.
+    // Schedule-wide confirm mode; trigger stages use per-cue TextCue.requireConfirm instead.
     public boolean isTextCuesRequireConfirm() { return spawnScheduler != null && spawnScheduler.isTextCuesRequireConfirm(); }
-    // Matches whichever input the player's actually using - a gamepad player dismissing tutorial
-    // messages with the SHOOT/RESTART buttons (see SpawnScheduler.update()'s cue-await-confirm
-    // block) shouldn't see a keyboard-only "Press SPACE" hint they can't act on.
+    // The SHOOT binding for the active input device (keyboard or gamepad), for the confirm hint.
     public String getTextCueConfirmKeyLabel() {
         if (input.getActiveInput() == InputType.GAMEPAD) {
             return keyBindings.getGamepadButton(KeyBindings.Action.SHOOT).displayName;

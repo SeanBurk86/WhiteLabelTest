@@ -4,38 +4,25 @@ import com.badlogic.gdx.utils.Array;
 import com.badlogic.gdx.utils.Json;
 import com.badlogic.gdx.utils.JsonValue;
 
-/** A reusable bullet appearance bundle — size, speed, texture, sprite-sheet layout and frame
- *  duration — referenced by id from FiringPatternDef.bulletId so multiple firing patterns can
- *  share one definition instead of repeating these fields inline. Any field a pattern sets on
- *  itself still takes priority over the value here. */
+/** A reusable bullet definition from data/bullets.json (size, speed profile, hitbox, texture,
+ *  damage), referenced by FiringPatternDef.bulletId. A pattern's own fields override these. */
 public class BulletDef implements Json.Serializable {
     public static final int DEFAULT_DAMAGE = 1;
 
     public String id;
     public float bulletSize = -1f;
     public float bulletSpeed = -1f;
-    // World units/sec^2 added to bulletSpeed every frame (negative decelerates) - 0 keeps the
-    // classic constant-speed behavior. bulletMinSpeed/bulletMaxSpeed clamp the ramp - -1 (the
-    // default) means "no explicit clamp", which resolves to 0 (can decelerate to a stop but not
-    // reverse) and unbounded, respectively - see PatternFactory's bulletAcceleration/
-    // bulletMinSpeed/bulletMaxSpeed resolvers. Only applies to bullet types whose motion is a
-    // simple speed-along-a-direction (aimed/drifting/sine-wave/exploding-radial bullets) - not
-    // orbiting or laser bullets, whose "speed" means something else.
+    // Acceleration in world units/sec^2 (negative decelerates; 0 = constant speed), clamped to
+    // [min, max] speed; -1 = no clamp (min resolves to 0, max to unbounded). Only for bullets that
+    // move along a direction, not orbiting or laser bullets.
     public float bulletAcceleration = 0f;
     public float bulletMinSpeed = -1f;
     public float bulletMaxSpeed = -1f;
-    // A sequence of speed-up/slow-down phases a bullet cycles through over its flight, in place of
-    // a single constant bulletAcceleration - e.g. accelerate for 1s then decelerate for 1s,
-    // optionally looping. When set (non-empty), this wholly overrides bulletAcceleration - see
-    // PatternFactory.speedProfile for the resolution order against a firing pattern's own fields.
+    // Optional speed-up/slow-down phases (optionally looping); replaces bulletAcceleration when set.
     public Array<BulletSpeedPhase> bulletSpeedPhases;
     public boolean bulletSpeedPhasesLoop = true;
-    // Collision hitbox, independent of the visual sprite - "Circle" or "Rectangle" (null keeps
-    // whichever shape this bullet type already defaults to - see HitboxSpec). hitboxScale
-    // multiplies the hitbox's auto-derived size (1 = exactly fits the sprite, same as before this
-    // field existed); hitboxOffsetX/Y shift the hitbox's center away from the sprite's center, in
-    // world units. See PatternFactory.hitboxSpec for the resolution order against a firing
-    // pattern's own fields.
+    // Hitbox independent of the sprite: "Circle"/"Rectangle" (null = the bullet class's default),
+    // size multiplier (1 = fits the sprite) and center offset in world units.
     public String hitboxShape;
     public float hitboxScale = -1f;
     public float hitboxOffsetX = 0f;

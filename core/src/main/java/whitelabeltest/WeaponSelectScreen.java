@@ -17,16 +17,13 @@ import com.badlogic.gdx.utils.Disposable;
 import whitelabeltest.gamemanagers.audio.AudioSettings;
 import whitelabeltest.player.WeaponLoadout;
 
-/** Shown once, right after StartScreen's "press any key", so the player can pick which two
- *  weapons they start the run with (see WeaponLoadout) - Up/Down or the D-Pad move the highlighted
- *  option, Enter/Space/Z or the A button confirms it. Polls input directly the same way StartScreen
- *  does, rather than going through InputManager/KeyBindings, since neither a GameController nor an
- *  input-type choice exists yet at this point in Main's state machine. */
+/** Picks the starting WeaponLoadout (Up/Down or D-Pad, Enter/Space/Z or A). Polls input directly,
+ *  since there is no GameController/InputManager yet. */
 public class WeaponSelectScreen implements Disposable {
     private static final WeaponLoadout[] OPTIONS = WeaponLoadout.values();
     private static final String CONFIRM_SOUND = "audio/menu/pentest.mp3";
 
-    // Selection-box styling for the highlighted loadout row - see drawSelectionBox().
+    // Green box around the highlighted row.
     private static final Color SELECTION_BOX_COLOR = new Color(0.35f, 1f, 0.55f, 1f);
     private static final float SELECTION_BOX_PADDING_X = 0.15f;
     private static final float SELECTION_BOX_PADDING_Y = 0.08f;
@@ -42,8 +39,7 @@ public class WeaponSelectScreen implements Disposable {
     private int selectedIndex;
     private boolean prevDpadUpDown, prevDpadDownDown, prevConfirmDown;
 
-    // Kept alive after this screen is disposed (see getConfirmSound()) so the cue can keep playing
-    // while GameController loads; the caller is responsible for disposing it eventually.
+    // Outlives the screen so the cue keeps playing while the game loads; the caller disposes it.
     private Sound confirmSound;
 
     public WeaponSelectScreen(float worldWidth, float worldHeight, AudioSettings audioSettings) {
@@ -72,7 +68,7 @@ public class WeaponSelectScreen implements Disposable {
         pm.dispose();
     }
 
-    /** Returns the confirmed loadout the instant it's picked, null every frame before that. */
+    /** The confirmed loadout, or null. */
     public WeaponLoadout update(float delta) {
         if (Gdx.input.isKeyJustPressed(Input.Keys.UP) || Gdx.input.isKeyJustPressed(Input.Keys.W)) moveSelection(-1);
         if (Gdx.input.isKeyJustPressed(Input.Keys.DOWN) || Gdx.input.isKeyJustPressed(Input.Keys.S)) moveSelection(1);
@@ -135,10 +131,7 @@ public class WeaponSelectScreen implements Disposable {
         f.draw(batch, layout, cx - layout.width / 2f, y);
     }
 
-    /** Green rectangle drawn around the currently highlighted loadout row - centerX/topY match
-     *  drawCentered()'s own placement of that row's text (font.draw(batch, layout, x, y) treats y
-     *  as the TOP of the rendered text, not its baseline, so the box hangs down from topY by
-     *  textHeight rather than up from it), so the box tracks it exactly regardless of row width. */
+    /** topY is the text's top (font.draw's y), so the box hangs down from it. */
     private void drawSelectionBox(SpriteBatch batch, float centerX, float topY, float textWidth, float textHeight) {
         float x = centerX - textWidth / 2f - SELECTION_BOX_PADDING_X;
         float y = topY - textHeight - SELECTION_BOX_PADDING_Y;
@@ -154,9 +147,7 @@ public class WeaponSelectScreen implements Disposable {
         batch.setColor(Color.WHITE);
     }
 
-    /** Returns the fire-and-forget confirm sound so the caller can dispose it once it's safe to
-     * cut off (e.g. at app shutdown). Never disposed here, since this screen is torn down while
-     * the sound is still meant to be playing. May be null if no loadout was confirmed yet. */
+    /** The caller disposes this (e.g. at shutdown). Null if nothing was confirmed. */
     public Sound getConfirmSound() {
         return confirmSound;
     }

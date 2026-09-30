@@ -8,6 +8,8 @@ import com.badlogic.gdx.controllers.Controllers;
 import com.badlogic.gdx.math.Vector2;
 import whitelabeltest.gamemanagers.input.KeyBindings.Action;
 
+/** Polls keyboard or gamepad (or reads a replay frame) once per frame into held/just-pressed
+ *  states. Debug hotkeys are always read live from the keyboard. */
 public class InputManager {
     private final KeyBindings keyBindings;
     private final Vector2 moveDirection = new Vector2();
@@ -37,8 +39,7 @@ public class InputManager {
     private boolean moveJustStarted;
     private boolean moveLeftJustStarted;
     private boolean moveRightJustStarted;
-    // Up/down counterparts of the two above - used to move the stage-select cursor between the branches of the
-    // map, which are stacked vertically (see GameController.handleStageSelectInput()).
+    // Up/down: stage-select cursor.
     private boolean moveUpJustStarted;
     private boolean moveDownJustStarted;
 
@@ -54,7 +55,7 @@ public class InputManager {
     private boolean prevMovingRight;
     private boolean prevMovingUp;
     private boolean prevMovingDown;
-    // Guards the one-time seedHeldState() call below - see its javadoc.
+    // Whether seedHeldState() has run.
     private boolean primed = false;
 
     public InputManager(KeyBindings keyBindings) {
@@ -67,14 +68,9 @@ public class InputManager {
 
     public InputType getActiveInput() { return activeInput; }
 
-    /** Primes prevShootHeld/prevHyperAttackHeld/prevMoving/etc. from the actual current
-     *  keyboard/gamepad state instead of leaving them at their false default - without this, a key
-     *  still physically held down from confirming the PREVIOUS screen (e.g. SPACE, which is both
-     *  the start-menu's confirm key and the default SHOOT bind; or gamepad A, both the menu confirm
-     *  and the default HYPER_ATTACK button) reads as a fresh press on this InputManager's very
-     *  first update() - instantly firing/bombing/etc. from input the player never actually pressed
-     *  during gameplay. Same fix as StartScreen.enterMenuPhase()'s gamepad-confirm debounce,
-     *  applied here for the analogous carry-over into a freshly-constructed GameController. */
+    /** Seeds the previous-frame states from what's physically held now, so a key still held from the
+     *  previous screen's confirm (SPACE / gamepad A double as SHOOT / HYPER_ATTACK) isn't read as a
+     *  fresh press on the first frame. */
     private void seedHeldState() {
         if (activeInput == InputType.KEYBOARD) {
             prevShootHeld = Gdx.input.isKeyPressed(keyBindings.getKey(Action.SHOOT));
@@ -110,7 +106,7 @@ public class InputManager {
                     || controller.getButton(controller.getMapping().buttonDpadDown);
                 prevMovingLeft = axisX < -0.2f || dpadLeft;
                 prevMovingRight = axisX > 0.2f || dpadRight;
-                // Gamepad up is a NEGATIVE Y axis reading - see update()'s own moveDirection.y -= axisY.
+                // Gamepad up is negative Y.
                 prevMovingUp = axisY < -0.2f || controller.getButton(controller.getMapping().buttonDpadUp);
                 prevMovingDown = axisY > 0.2f || controller.getButton(controller.getMapping().buttonDpadDown);
             }
@@ -121,14 +117,9 @@ public class InputManager {
         update(null);
     }
 
-    /** frame != null replays a previously-recorded ReplayFrame instead of polling live
-     *  keyboard/gamepad state - see ReplayRecorder/ReplayPlayer. Debug hotkeys are always polled
-     *  live regardless (see the bottom of this method), so debug tooling stays reachable while
-     *  watching a replay. */
+    /** @param frame a recorded frame to replay instead of polling hardware, or null for live input. */
     public void update(ReplayFrame frame) {
-        // Live play only (a replay's frame stream is a recorded run and must reproduce exactly, not
-        // get perturbed by whatever the watching machine's hardware happens to be doing) - see
-        // seedHeldState()'s javadoc for why this needs to run before the first real frame.
+        // Live play only; a replay must reproduce exactly.
         if (!primed) {
             primed = true;
             if (frame == null) seedHeldState();
@@ -217,9 +208,7 @@ public class InputManager {
             }
         }
 
-        // Held/edge state is derived once here instead of separately per input type, so a hyper
-        // attack charge started on one input type is still tracked correctly even if a rebind or
-        // input-type switch happens mid-charge - see Player.updateThunderboltCharge.
+        // Edges derived once from the combined held state, independent of input type.
         hyperAttackJustPressed = hyperAttackHeld && !prevHyperAttackHeld;
         hyperAttackJustReleased = !hyperAttackHeld && prevHyperAttackHeld;
         prevHyperAttackHeld = hyperAttackHeld;
@@ -241,23 +230,16 @@ public class InputManager {
         debugMenuNewBookmarkJustPressed = Gdx.input.isKeyJustPressed(Input.Keys.N);
         debugMuteJustPressed = Gdx.input.isKeyJustPressed(Input.Keys.M);
 
-        // A replayed frame's moveX/moveY is already final (e.g. a partial analog-stick tilt of
-        // length 0.3) - only live-polled input needs renormalizing after combining axes/keys.
+        // Replayed movement is already final; only live input needs normalizing.
         if (frame == null && moveDirection.len() > 1.0f) {
             moveDirection.nor();
         }
 
-        // Same held/edge derivation as shootJustPressed above, but for movement - lets a
-        // SpawnScheduler "moved" gate (see GateCue) require a fresh press after the gate engages
-        // instead of being trivially satisfied by a direction key already held from earlier,
-        // unrestricted play.
+        // Movement edges (for "moved"/"movedLeft"/"movedRight" conditions): held input doesn't count.
         boolean moving = !moveDirection.isZero();
         moveJustStarted = moving && !prevMoving;
         prevMoving = moving;
 
-        // Same idea, but split by X-axis direction - lets a "movedLeft"/"movedRight" gate (see
-        // GateCue) require a fresh press specifically in that direction, for a scripted
-        // left/right/left micro-dodging drill instead of just "moved at all".
         boolean movingLeft = moveDirection.x < 0f;
         boolean movingRight = moveDirection.x > 0f;
         moveLeftJustStarted = movingLeft && !prevMovingLeft;

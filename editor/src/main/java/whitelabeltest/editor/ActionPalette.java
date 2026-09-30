@@ -8,14 +8,8 @@ import javafx.scene.input.TransferMode;
 import javafx.scene.layout.VBox;
 import javafx.scene.paint.Color;
 
-/** Drag source for the non-enemy trigger actions this pass supports - see
- *  whitelabeltest.gamemanagers.trigger.Trigger's sound/spriteTexture/setSpeed fields and
- *  TriggerManager.fire()'s dispatch. Dragging an entry onto StageCanvas puts "action:&lt;kind&gt;"
- *  on the Dragboard - see StageCanvas.createTrigger(). "Trigger Event" is the odd one out: it drops
- *  a blank, unconfigured trigger (gated purely by whatever conditions you give it - see
- *  PropertiesPanel's own doc) that you then link to an actual action - enemy spawn, sound, sprite,
- *  camera speed, or one of the scripted enemy-list actions - via the Action combo in the properties
- *  panel, rather than committing to one up front by which palette tile you dragged. */
+/** Drag source for non-enemy triggers ("action:&lt;kind&gt;"). "Trigger Event" drops a blank
+ *  trigger whose action is picked later in the properties panel. */
 public class ActionPalette extends VBox {
     private record Entry(String label, String icon, String payload) {}
 

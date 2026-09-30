@@ -34,27 +34,22 @@ import whitelabeltest.player.weapons.ThunderboltWeapon;
 import whitelabeltest.player.weapons.Weapon;
 import whitelabeltest.perf.PerfProbe;
 
+/** Application root: a small state machine over the menu screens and the game (GameController),
+ *  plus the letterboxed draw and the debug hitbox overlay. */
 public class Main extends ApplicationAdapter {
     private enum AppState { START, WEAPON_SELECT, OPTIONS, REPLAY_SELECT, PLAYING }
 
-    /** Carries the JavaFX editor's "Quick Play" button's chosen stage/distance/weapons through to
-     *  create() - see Lwjgl3Launcher.main(), which builds one from system properties a forked quick-
-     *  play process is launched with, or null for every ordinary desktop launch. */
+    /** The editor's Quick Play settings (read from system properties by Lwjgl3Launcher); null for
+     *  a normal launch. */
     public static class QuickPlayConfig {
         public final String stageId;
         public final float startDistance;
         public final String slotAWeaponId;
         public final String slotBWeaponId;
-        // Starting level for whichever weapon occupies each slot - 0 (Lwjgl3Launcher's own
-        // fallback for a missing/blank quickPlay.slotXLevel property) means "leave it at whatever
-        // GameController.quickStartAtStage()'s own setSlotWeapon() call already left it at" (level
-        // 1, same as an ordinary equip - see Player.setSlotWeapon()), not "set it to 0".
+        // 0 = keep the default equip level (1).
         public final int slotALevel;
         public final int slotBLevel;
-        // Which device transitionToQuickPlay() should poll - chosen in QuickPlayDialog's own Launch
-        // tab, since (unlike an ordinary run) there's no StartScreen input-detection step to read
-        // this from when skipping straight to gameplay. Never null - Lwjgl3Launcher.readQuickPlayConfig()
-        // falls back to KEYBOARD for a missing/unrecognized quickPlay.input property.
+        // Chosen in the editor, since the start screen's input detection is skipped. Never null.
         public final InputType inputType;
 
         public QuickPlayConfig(String stageId, float startDistance, String slotAWeaponId, String slotBWeaponId,
@@ -81,10 +76,7 @@ public class Main extends ApplicationAdapter {
     private InputType pendingInputType;
     private OptionsScreen optionsScreen;
     private ReplaySelectScreen replaySelectScreen;
-    // True only when the current PLAYING session was launched by picking a replay from the start
-    // menu (as opposed to an ordinary ARCADE MODE run) - see transitionToReplayWatch(). Drives
-    // whether finishing/backing out of watching returns to the start screen instead of leaving the
-    // player in a live run they never asked to start - see render()'s PLAYING branch.
+    // Watching a replay picked from the menu: when it ends or is cancelled, return to the start screen.
     private boolean replayFromMenu;
     private KeyBindings keyBindings;
     private AudioSettings audioSettings;
@@ -109,9 +101,8 @@ public class Main extends ApplicationAdapter {
 
     private boolean prevControllerBackDown;
 
-    // -DautoReplay=<replay json> starts that replay straight away (no menus) and quits when it ends -
-    // with -DautoReplay.seconds=<n>, after n seconds of play instead. For repeatable, hands-free
-    // performance runs (see PerfProbe). 0 = not an auto replay.
+    // -DautoReplay=<replay json> plays that replay with no menus and quits when it ends, or after
+    // -DautoReplay.seconds=<n>. For repeatable perf runs (see PerfProbe). 0 = not an auto replay.
     private float autoReplayLimit;
     private float autoReplayElapsed;
 
@@ -178,10 +169,7 @@ public class Main extends ApplicationAdapter {
             }
         } else if (state == AppState.OPTIONS) {
             ScreenUtils.clear(Color.BLACK);
-            // startScreen is still alive (and its music still playing) behind Options whenever
-            // Options was reached from the start menu - see transitionToOptions() - so its volume
-            // needs to keep tracking the sliders live here too, not just once startScreen.update()
-            // resumes after backing out.
+            // The start screen's music keeps playing behind Options; track the volume sliders live.
             if (startScreen != null) startScreen.applyMusicVolume();
             optionsScreen.render(delta);
             if (isControllerBackJustPressed()) {
@@ -191,8 +179,6 @@ public class Main extends ApplicationAdapter {
                 transitionToStartFromOptions();
             }
         } else if (state == AppState.REPLAY_SELECT) {
-            // startScreen is still alive behind this screen (see transitionToReplaySelect()), same
-            // reasoning as the OPTIONS branch above.
             if (startScreen != null) startScreen.applyMusicVolume();
             ReplayData picked = replaySelectScreen.update(delta);
             drawReplaySelectScreen();
@@ -210,19 +196,13 @@ public class Main extends ApplicationAdapter {
             PerfProbe.end(PerfProbe.Section.DRAW);
             if (replayFromMenu) {
                 boolean backPressed = Gdx.input.isKeyJustPressed(Input.Keys.ESCAPE) || isControllerBackJustPressed();
-                // !isReplaying() covers the replay finishing on its own (GameController auto-stops
-                // once frames run out); backPressed covers the player bailing out early.
                 if (!game.isReplaying() || backPressed) {
                     transitionToStartFromReplayWatch();
                 }
             } else if (game.isScheduleEndTriggered()) {
-                // See SpawnScheduler.scheduleEndTime - only ever true for a schedule that has no
-                // boss to drive the normal levelComplete flow (the tutorial), so this is a no-op for
-                // every ordinary arcade run.
+                // Boss-less stages (the tutorial) end here instead of at level complete.
                 transitionToStartFromTutorial();
             } else if (game.isQuitToMenuRequested()) {
-                // QUIT confirmed from the game-over/level-complete prompt - see
-                // GameController.handleGameOverInput()/handleLevelCompleteInput().
                 transitionToStartFromGameOver();
             }
         }
@@ -247,10 +227,8 @@ public class Main extends ApplicationAdapter {
         state = AppState.PLAYING;
     }
 
-    /** TUTORIAL skips WeaponSelectScreen entirely - the WeaponLoadout passed to the constructor
-     *  here is just a placeholder (same pattern as transitionToReplayWatch()'s), immediately
-     *  overridden by reset()'s applyStartingLoadout() once it resolves the "tutorial" stage
-     *  sequence's StartingLoadoutDefinition (assets/data/stage_sequences.json). */
+    /** Skips weapon select; the loadout is a placeholder replaced by the tutorial sequence's
+     *  startingLoadout. */
     private void transitionToTutorial(InputType inputType) {
         startScreenConfirmSound = startScreen.getConfirmSound();
         startScreen.dispose();
@@ -262,13 +240,8 @@ public class Main extends ApplicationAdapter {
         state = AppState.PLAYING;
     }
 
-    /** Entry point for the JavaFX editor's "Quick Play" button - see QuickPlayConfig's own doc on
-     *  how quickPlay gets here. Skips StartScreen/WeaponSelectScreen entirely, the same shape
-     *  transitionToTutorial() above already uses for its own skip-weapon-select path: the
-     *  WeaponLoadout passed to the constructor here is just a placeholder, immediately overridden
-     *  by GameController.quickStartAtStage()'s explicit slot ids. quickPlay.inputType is whatever
-     *  QuickPlayDialog's Launch tab had selected - there's no start-screen input detection to read
-     *  here the way transitionToWeaponSelect()'s does. */
+    /** Editor Quick Play: straight into a stage at a distance with the chosen weapons (the loadout
+     *  here is a placeholder). */
     private void transitionToQuickPlay() {
         game = new GameController(PLAY_AREA_WIDTH, PLAY_AREA_HEIGHT, keyBindings, audioSettings, WeaponLoadout.BASIC_THUNDERBOLT);
         game.quickStartAtStage(quickPlay.stageId, quickPlay.startDistance, quickPlay.slotAWeaponId, quickPlay.slotBWeaponId,
@@ -302,9 +275,7 @@ public class Main extends ApplicationAdapter {
     }
 
     private void transitionToReplaySelect() {
-        // startScreen is deliberately left alive (not disposed) here, same as transitionToOptions()
-        // - so backing out via transitionToStartFromReplaySelect() resumes it exactly where it was
-        // instead of needing to rebuild it from scratch.
+        // startScreen stays alive so backing out resumes it.
         replaySelectScreen = new ReplaySelectScreen(PLAY_AREA_WIDTH, PLAY_AREA_HEIGHT, audioSettings);
         state = AppState.REPLAY_SELECT;
     }
@@ -319,16 +290,12 @@ public class Main extends ApplicationAdapter {
         replaySelectConfirmSound = replaySelectScreen.getConfirmSound();
         replaySelectScreen.dispose();
         replaySelectScreen = null;
-        // Only now leave the start-menu flow for good - startScreen was kept alive through OPTIONS
-        // and REPLAY_SELECT (see transitionToReplaySelect()), same as WeaponSelectScreen's own
-        // disposal in transitionToWeaponSelect().
         if (startScreen != null) {
             startScreen.dispose();
             startScreen = null;
         }
         replayFromMenu = true;
-        // The loadout/stage sequence passed here are placeholders - GameController.startReplay()
-        // overwrites both from the recorded data before anything simulates.
+        // Placeholder loadout; startReplay() applies the recorded one.
         game = new GameController(PLAY_AREA_WIDTH, PLAY_AREA_HEIGHT, keyBindings, audioSettings, WeaponLoadout.BASIC_THUNDERBOLT);
         game.setActiveInput(InputType.KEYBOARD);
         game.startReplay(data);
@@ -336,10 +303,7 @@ public class Main extends ApplicationAdapter {
         state = AppState.PLAYING;
     }
 
-    /** Returns to the start screen after a menu-launched replay finishes or the player backs out
-     *  early (see render()'s PLAYING branch) - rebuilds StartScreen from scratch since it was
-     *  disposed back in transitionToReplayWatch(). No equivalent path exists for an ordinary ARCADE
-     *  MODE run - restarting/quitting are handled entirely inside GameController for that case. */
+    /** After a menu replay ends or is cancelled (an auto replay quits instead). */
     private void transitionToStartFromReplayWatch() {
         if (autoReplayLimit != 0f) { Gdx.app.exit(); return; }
         replayFromMenu = false;
@@ -353,10 +317,7 @@ public class Main extends ApplicationAdapter {
         state = AppState.START;
     }
 
-    /** Returns to the start screen once the tutorial's own schedule reaches its scripted end (see
-     *  GameController.isScheduleEndTriggered()) - the tutorial has no boss, so it never reaches the
-     *  normal levelComplete flow other stages use to advance/restart; this is its equivalent. Mirrors
-     *  transitionToStartFromReplayWatch() exactly, just triggered by a different condition. */
+    /** When the tutorial reaches its scripted end. */
     private void transitionToStartFromTutorial() {
         game.dispose();
         game = null;
@@ -368,10 +329,7 @@ public class Main extends ApplicationAdapter {
         state = AppState.START;
     }
 
-    /** Returns to the start screen when QUIT is confirmed from the game-over/level-complete prompt
-     *  (see GameController.isQuitToMenuRequested()) - previously this just called Gdx.app.exit() and
-     *  closed the whole game; now it backs out to the main menu instead, same as every other way of
-     *  leaving a run early. Mirrors transitionToStartFromTutorial() exactly. */
+    /** When QUIT is confirmed on the game-over / level-complete prompt. */
     private void transitionToStartFromGameOver() {
         game.dispose();
         game = null;
@@ -522,24 +480,20 @@ public class Main extends ApplicationAdapter {
 
         shapeRenderer.setColor(Color.RED);
         for (Enemy enemy : em.getEnemies()) {
-            // Enemy.getRotationPivotX/Y() is always this rectangle's own center (see its own doc
-            // comment - GenericEnemy's sprite always uses setOriginCenter()), so the origin offset
-            // passed to this rotated overload is always exactly half its width/height.
+            // Enemies rotate about their rectangle's center.
             Rectangle r = enemy.getRectangle();
             Array<HitboxDef> boxes = enemy.getHitboxDefs();
             if (boxes == null) {
                 shapeRenderer.rect(r.x, r.y, r.width / 2f, r.height / 2f, r.width, r.height, 1f, 1f, enemy.getRotation());
                 continue;
             }
-            // Custom hitboxes (EnemyDefinition.hitboxes) - the actual shapes collisions test, each rotated with
-            // the sprite around its centre, via the same EnemyHitboxes math CollisionManager uses.
+            // Custom hitboxes, using the same EnemyHitboxes math as collision.
             for (int i = 0; i < boxes.size; i++) {
                 HitboxDef box = boxes.get(i);
                 if (box.isCircle()) {
                     EnemyHitboxes.circle(box, r, enemy.getRotation(), debugCircle);
                     shapeRenderer.circle(debugCircle.x, debugCircle.y, debugCircle.radius, 16);
                 } else {
-                    // Centred where the hitbox really is, turned about its own centre - see EnemyHitboxes.rect().
                     Rectangle hb = EnemyHitboxes.rect(box, r, enemy.getRotation(), debugRect);
                     shapeRenderer.rect(hb.x, hb.y, hb.width / 2f, hb.height / 2f, hb.width, hb.height, 1f, 1f, EnemyHitboxes.totalRotation(box, enemy.getRotation()));
                 }
@@ -551,9 +505,7 @@ public class Main extends ApplicationAdapter {
             Rectangle r = bullet.getRectangle();
             float rotation = bullet.getRotation();
 
-            // getHitboxOffsetX/Y() is defined in the bullet's own unrotated frame - rotate it into
-            // world space the same way CollisionManager.overlaps(Circle, EnemyBullet) does, so a
-            // rotating bullet's hitbox offset stays attached to (and turns with) its sprite here too.
+            // The hitbox offset is in the bullet's own frame; rotate it to world space (as collision does).
             float offsetX = bullet.getHitboxOffsetX();
             float offsetY = bullet.getHitboxOffsetY();
             float cosR = MathUtils.cosDeg(rotation);
@@ -561,9 +513,7 @@ public class Main extends ApplicationAdapter {
             float worldOffsetX = offsetX * cosR - offsetY * sinR;
             float worldOffsetY = offsetX * sinR + offsetY * cosR;
 
-            // The actual hit-tested box - r scaled around its own center by getHitboxScale() and
-            // then shifted by the (now world-space) offset. Reduces to r itself for
-            // scale=1/offset=(0,0).
+            // The hit-tested box: r scaled about its center, then offset.
             float scale = bullet.getHitboxScale();
             float effWidth = r.width * scale;
             float effHeight = r.height * scale;
@@ -575,12 +525,7 @@ public class Main extends ApplicationAdapter {
                 shapeRenderer.circle(effX + effWidth / 2f, effY + effHeight / 2f, hitRadius * scale, 16);
                 continue;
             }
-            // getRotation() is 0 for most ordinary bullets (a no-op rotation below); bullets that
-            // visually turn to face their travel direction (see AimedEnemyBullet and friends) or a
-            // beam like LaserBullet report their real angle, rotated around
-            // getRotationPivotX()/Y() per EnemyBullet.getRotation()'s contract - which may or may
-            // not be effWidth/2, 0 (that pair only happens to be right for a bottom-center pivot
-            // like LaserBullet's, not a center pivot like AimedEnemyBullet's).
+            // Rotate about the bullet's own pivot (center for most, bottom-center for lasers).
             float originX = bullet.getRotationPivotX() + worldOffsetX - effX;
             float originY = bullet.getRotationPivotY() + worldOffsetY - effY;
             shapeRenderer.rect(effX, effY, originX, originY, effWidth, effHeight, 1f, 1f, rotation);
@@ -595,8 +540,7 @@ public class Main extends ApplicationAdapter {
         for (Weapon bullet : em.getBullets()) {
             if (bullet instanceof ThunderboltWeapon) {
                 Rectangle r = bullet.getRectangle();
-                // getRectangle() is the un-rotated shape pivoted at getRotationPivotX/Y(); rotate
-                // it into place the same way the CollisionManager SAT test does.
+                // Un-rotated shape plus rotation about the pivot, as in the SAT test.
                 float originX = bullet.getRotationPivotX() - r.x;
                 float originY = bullet.getRotationPivotY() - r.y;
                 shapeRenderer.rect(r.x, r.y, originX, originY, r.width, r.height, 1f, 1f, bullet.getRotation());

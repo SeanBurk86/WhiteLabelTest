@@ -13,15 +13,9 @@ import whitelabeltest.enemy.bullets.AimedEnemyBullet;
 import whitelabeltest.enemy.bullets.EnemyBullet;
 import whitelabeltest.gamemanagers.ObjectPools;
 
-/** Fires a checkerboard field of individual dots straight down, laid out in world-space X (like
- *  WallFiring) rather than relative to the firing enemy's own position. Unlike WallFiring - a
- *  solid curtain with exactly one gap - every row here only occupies HALF its lanes (even-indexed
- *  on one row, odd-indexed on the next), so the whole screen fills with evenly spaced dots and the
- *  safe lane shifts by one spacing-step every row. There's no single gap to find; the player has
- *  to keep making small side-to-side corrections to stay between dots as the field scrolls down -
- *  the polka-dot equivalent of WallFiring's scripted single hole.
- *
- *  reset() re-arms the row counter for pooled reuse. */
+/** Fires full-width rows straight down (laid out in world X like WallFiring), each row filling
+ *  alternate lanes (even, then odd), so the screen fills with a checkerboard of dots the player must
+ *  weave between. The first row fires immediately. */
 public class PolkaDotFiring implements FiringPattern {
     private final float bulletSize;
     private final float bulletSpeed;
@@ -54,8 +48,7 @@ public class PolkaDotFiring implements FiringPattern {
 
     @Override
     public void update(float delta, Enemy self, Sprite sprite, Rectangle rectangle, Array<EnemyBullet> enemyBullets, Animation<TextureRegion> bulletAnimation, Circle playerHitbox) {
-        // First row fires immediately (matches WallFiring's own convention); every row after that
-        // waits fireRate apart.
+        // First row fires immediately, then every fireRate seconds.
         if (rowIndex > 0) {
             timer += delta;
             if (timer < fireRate) return;
@@ -68,8 +61,7 @@ public class PolkaDotFiring implements FiringPattern {
         Animation<TextureRegion> animation = spriteOverride != null ? spriteOverride : bulletAnimation;
         float originY = sprite.getY() + sprite.getHeight() / 2f;
 
-        // +1 so a field that divides evenly still includes its final lane - see WallFiring's own
-        // laneCount comment for why.
+        // +1 so an evenly dividing field still includes its last lane.
         int laneCount = (int) ((worldWidth - marginX * 2f) / spacing + 0.0001f) + 1;
         for (int i = 0; i < laneCount; i++) {
             if ((i % 2 == 0) != evenRow) continue;

@@ -5,17 +5,9 @@ import com.badlogic.gdx.math.Circle;
 import com.badlogic.gdx.math.Rectangle;
 import com.badlogic.gdx.math.Vector2;
 
-/** Travels in a straight line at movementAngle and reflects off the play area's edges (screensaver-
- *  style) instead of exiting it - unlike StraightMovement, which just keeps going until the enemy
- *  drifts off-screen. Used for enemies meant to stay put and available - e.g. the tutorial's
- *  bullet-streaming drill, where the player needs its PowerCarrier targets to keep patrolling
- *  in view long enough to lead a sustained stream through them instead of drifting off and forcing
- *  a respawn.
- *
- *  Reflects a hair inside worldWidth/worldHeight (see MARGIN) rather than exactly at the edge, so
- *  the sprite never leaves BaseEnemy.isFullyOnScreen()'s bounds - takeDamage() refuses damage
- *  while that's false, so bouncing exactly on the boundary (or past it, on a fast-moving/large
- *  sprite) could otherwise make the enemy briefly untouchable right as it turns around. */
+/** Moves in a straight line and bounces off the play-area edges, keeping the enemy on screen (e.g.
+ *  the tutorial's streaming targets). Reflects slightly inside the edge (MARGIN) so the enemy never
+ *  becomes briefly undamageable by poking out of the play area. */
 public class BounceMovement implements MovementPattern {
     private static final float MARGIN = 0.05f;
 
@@ -32,9 +24,7 @@ public class BounceMovement implements MovementPattern {
 
     @Override
     public void update(float delta, Sprite sprite, Rectangle rectangle, float worldWidth, float worldHeight, Circle playerHitbox, boolean inverseMovement) {
-        // inverseMovement mirrors the starting heading for a formation - applied once (not
-        // re-derived every frame like StraightMovement does) so it doesn't fight with the bounces
-        // below, which already track the enemy's current real heading.
+        // inverseMovement mirrors the starting heading once, so it doesn't fight the bounces.
         if (!appliedInverse) {
             appliedInverse = true;
             if (inverseMovement) direction.scl(-1f);

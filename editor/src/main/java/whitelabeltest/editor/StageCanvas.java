@@ -31,183 +31,89 @@ import java.util.Set;
 import java.util.function.BiConsumer;
 import java.util.function.Consumer;
 
-/** The stage's editable surface - a vertical scrolling strip, per this session's plan: world-x maps
- *  left-right. The vertical axis is a trigger's `distance`, oriented bottom-to-top - distance 0
- *  (stage start) anchors to the BOTTOM of the canvas and later distances sit higher up, matching how
- *  the camera is meant to "scan up" through the level in-game (see this session's very first
- *  design discussion) rather than the arbitrary top-to-bottom reading order a plain data table
- *  would suggest. distanceToCanvasY()/canvasYToDistance() are the one place that mapping lives -
- *  TriggerNode goes through these rather than doing its own pixel math, so the flip only has to be
- *  right in one place.
+/** The stage editing surface. x is world x (with off-screen margins either side of the play
+ *  area); the vertical axis is trigger distance, with 0 at the bottom. All coordinate mapping goes
+ *  through distanceToCanvasY()/canvasYToDistance()/worldXToCanvasX()/canvasXToWorldX().
  *
- * The canvas is wider than just the play area - see MARGIN_UNITS - with the actual on-screen
- * WORLD_WIDTH strip drawn distinctly (drawPlayArea()) in the middle, so an enemy authored to enter
- * from off-screen (negative x, or x beyond WORLD_WIDTH - see stage1_triggers.json's own entrance
- * spawns) has real, visible canvas space on either side to sit in and can be dropped there directly.
- *
- * Accepts drags from EnemyPalette/ActionPalette (creating a new Trigger at the drop point) and
- * hosts one TriggerNode per placed Trigger (which handle their own repositioning-by-drag
- * internally). Also draws every enemy spawn's real, true-scale movement path (see
- * drawPathPreviews()/MovementPathPreview) directly on the canvas, anchored at each trigger's own
- * position - and, for whichever ONE enemy-spawn trigger is currently in path-edit mode (see
- * setPathEditTrigger(), driven by PropertiesPanel's "Movement Path" section), that same path is
- * also editable right here as draggable PathWaypointNode handles plus click-to-add on empty canvas
- * space (see handleCanvasClicked()) - deliberately in-place rather than in a separate small canvas,
- * since a placed spawn already has the real stage context (nearby triggers, background art) that a
- * standalone editor never had.
- *
- * Once EditorDocument.getStageDefinition() resolves a stage, this canvas also draws the stage's own
- * background art - a sequence of true-scale, real-formula snapshots stacked down the whole canvas
- * (see drawBackgroundArt()/BackgroundWindowRenderer), each one exactly what Player View would show
- * at that snapshot's own distance - so spacing can be judged against the real backdrop instead of a
- * flat fill, at the SAME scale sprites/paths already render at. */
+ *  Hosts one TriggerNode per trigger and accepts palette drops. Handles selection (click,
+ *  Ctrl/Cmd-click, rubber band), group drags, copy/paste and delete. Draws true-scale movement path
+ *  previews, wave member previews and the stage's background art. For one trigger at a time, its
+ *  waypoint path can be edited in place (drag handles, click to add). */
 public class StageCanvas extends Pane {
     public static final double PIXELS_PER_UNIT_X = 60;
-    // The distance axis's own pixels-per-unit scale - grid/TriggerNode/path-preview placement (see
-    // distanceToCanvasY()/canvasYToDistance()) - a single fixed constant for every stage, with NO tie
-    // to any background layer's own scroll rate (unlike this class's earlier "guide layer" approach -
-    // see drawBackgroundArt()'s own doc for why that had to go: background art no longer shares this
-    // axis's scale at all, so this is free to be whatever reads best on screen. Matching
-    // PIXELS_PER_UNIT_X exactly keeps the canvas isotropic (1 canvas pixel = 1 distance-unit = 1
-    // world-unit) and gives a reasonable ~12-distance-unit granularity per background snapshot band
-    // (see drawBackgroundArt()) - purely a UX tuning knob now, not a correctness requirement.
+    // Distance-axis scale. Equal to X so the canvas is isotropic; background art doesn't depend on it.
     private static final double PIXELS_PER_UNIT_Y = 60;
-    // Matches Main.PLAY_AREA_WIDTH - the fixed on-screen world width every stage's spawn
-    // coordinates are authored against (see GameController(worldWidth, ...)). Not read from the
-    // game module since it's a private constant there; keep this in sync if that ever changes.
+    // Keep in sync with Main.PLAY_AREA_WIDTH / PLAY_AREA_HEIGHT.
     private static final double WORLD_WIDTH = 9.0;
-    // Matches Main.PLAY_AREA_HEIGHT/PlayerPreviewView.WORLD_HEIGHT - the fixed viewport height every
-    // background layer's own scroll math (BackgroundWindowRenderer/ScrollingBackground.Layer) is
-    // computed against - see drawBackgroundArt()'s own doc. Not read from the game module, same
-    // reasoning as WORLD_WIDTH's own doc above.
     private static final double WORLD_HEIGHT = 12.0;
-    // Extra world-units of margin drawn on either side of the actual play area, so an enemy
-    // authored to enter from off-screen (e.g. stage1's x: -0.7 / x: 9.7 entrance spawns, or a
-    // formation's offsetX pushing a member further out still) has real canvas space to sit in,
-    // rather than landing outside the drawable/scrollable area or right at its edge. Covers every
-    // off-screen x value already in stage1_triggers.json with room to spare.
+    // Room either side of the play area for off-screen entrance spawns.
     private static final double MARGIN_UNITS = 2.5;
     private static final double TOTAL_WIDTH_UNITS = WORLD_WIDTH + 2 * MARGIN_UNITS;
     private static final double MIN_DISTANCE_UNITS = 160;
     private static final double GRID_STEP_UNITS = 10;
-    // How far into the stage a paste lands relative to what was copied - see pasteTriggers()'s own
-    // doc on why this scales by how many consecutive pastes have happened since the last copy.
+    // Each consecutive paste lands this much further into the stage.
     private static final float PASTE_DISTANCE_OFFSET = 2f;
-    // Default spawn-entrance position (see EnemyDefinition/Trigger's own x/y doc) for a
-    // freshly-dropped enemy - deliberately NOT tied to the canvas's own vertical axis (that's
-    // `distance`, a different quantity - see the drop handler's own comment), just a reasonable
-    // mid-screen starting point the properties panel can then be adjusted from.
-    // Also used by PropertiesPanel when linking a blank Trigger Event to an enemy/sprite action.
+    // Default spawn position for a dropped enemy/sprite (y is world y, not distance).
     public static final float DEFAULT_SPAWN_Y = 8f;
-    // Same reasoning as DEFAULT_SPAWN_Y, just for X: also used by effectiveX() below as the center
-    // point a positionless trigger (see that method's own doc) is displayed at.
     public static final float DEFAULT_SPAWN_X = (float) (WORLD_WIDTH / 2.0);
-    // World-x gap between synthesized markers when more than one positionless trigger (see
-    // effectiveX()) shares the exact same distance - just enough that they render as visibly
-    // separate, individually-clickable nodes side by side instead of stacked exactly on top of each
-    // other (which would leave every one but the topmost unselectable again).
+    // Spacing between position-less triggers at the same distance, so each stays clickable.
     private static final float NO_POSITION_X_SPACING = 0.6f;
 
     private final EditorDocument document;
     private final StageLibrary library;
-    // Used to resolve a placed enemy spawn's movement pattern for drawPathPreviews() below.
     private final MovementPatternLibrary patternLibrary = new MovementPatternLibrary();
     private final Group backgroundLayer = new Group();
     private final Group playAreaLayer = new Group();
     private final Group pathPreviewLayer = new Group();
-    // Small dot markers showing where each member of a Trigger.waveShape-enabled spawn would
-    // actually land - see drawWaveSpawnPreviews(), drawn/refreshed alongside pathPreviewLayer above
-    // (same call sites, piggybacked at the end of drawPathPreviews() - see that method's own doc).
     private final Group waveSpawnPreviewLayer = new Group();
     private final Group gridLayer = new Group();
     private final Group pathEditLayer = new Group();
     private final Group triggerLayer = new Group();
-    // Topmost - just the rubber-band rectangle while a select-drag is in progress (see
-    // handleSelectionPressed()/handleSelectionDragged()/handleSelectionReleased()), empty otherwise.
     private final Group selectionRectLayer = new Group();
     private final Map<Trigger, TriggerNode> nodesByTrigger = new IdentityHashMap<>();
-    // Synthesized world-x for a trigger with no real x of its own (see effectiveX()'s own doc) -
-    // recomputed every rebuild(), keyed by identity since two triggers can otherwise be
-    // field-for-field equal.
+    // Display x for triggers without an x (see effectiveX()), recomputed on rebuild().
     private final Map<Trigger, Float> noPositionFallbackX = new IdentityHashMap<>();
     private final List<PathWaypointNode> pathEditNodes = new ArrayList<>();
-    // Every currently-selected node - LinkedHashSet so iteration order matches click/toggle order
-    // (nothing depends on this beyond visual/debugging consistency). A plain click replaces this
-    // whole set with just the clicked node; Ctrl/Cmd-click (see TriggerNode.handlePressed()) toggles
-    // one node in/out of an existing multi-selection instead - see select()'s own doc.
     private final Set<TriggerNode> selectedNodes = new LinkedHashSet<>();
-    // Fired with the full current selection on every change (including empty, on deselect) - never
-    // null. PropertiesPanel's own doc covers how EditorApp routes 0/1/many through to the right
-    // right-dock view.
+    // Called with the full selection (possibly empty) on every change.
     private Consumer<List<Trigger>> selectionListener;
-    // Non-null only while a rubber-band select-drag is in progress - see
-    // handleSelectionPressed()/handleSelectionDragged()/handleSelectionReleased().
+    // Non-null only during a rubber-band drag.
     private Rectangle rubberBandRect;
     private double rubberBandStartX, rubberBandStartY;
-    // Non-empty only while a multi-node drag-move is in progress - each selected node's own
-    // layoutX/Y at the moment the drag started, so every OTHER selected node (the one actually
-    // under the cursor moves/updates itself the normal single-node way - see TriggerNode.
-    // handleDragged()) can be moved by the same delta the dragged node itself just was, regardless
-    // of when THEY were last individually pressed. See beginGroupDrag()/applyGroupDrag()/
-    // endGroupDrag().
+    // During a group drag: the start position of every selected node except the one under the cursor.
     private final Map<TriggerNode, double[]> groupDragStartPositions = new IdentityHashMap<>();
-    // Detached Trigger clones from the most recent copySelectedTriggers() - see that method's own
-    // doc. Empty until the first copy; survives a stage switch (this canvas instance is reused
-    // across "Open Stage" - see EditorApp), so copying from one stage and pasting into another works.
+    // Detached clones; survives opening another stage, so you can paste across stages.
     private final List<Trigger> clipboard = new ArrayList<>();
-    // How many consecutive pasteTriggers() calls have happened since clipboard was last replaced -
-    // see that method's own doc on why this fans repeated pastes out instead of stacking them.
     private int pasteCount = 0;
-    // The one enemy-spawn Trigger (if any) currently being edited point-by-point directly on this
-    // canvas - see setPathEditTrigger()/PropertiesPanel's "Movement Path" section, which is what
-    // turns this on/off. pathEditPattern is the actual MovementPatternDef loaded for it, cached
-    // rather than re-resolved on every interaction - see setPathEditTrigger()'s own doc on why
-    // re-resolving mid-edit would silently discard unsaved changes.
+    // The trigger whose path is being edited, and its pattern, cached because reloading from
+    // disk would discard unsaved edits.
     private Trigger pathEditTrigger;
     private MovementPatternDef pathEditPattern;
     private MovementPatternDef selectedPathPoint;
     private Consumer<MovementPatternDef> pathPointSelectionListener;
-    // Fired on any unsaved pattern-content edit (add/move/delete a point) - deliberately separate
-    // from EditorDocument.markDirty(): a movement pattern is its own file
-    // (data/movement_patterns/<id>.json), not part of the *_triggers.json this document owns, so
-    // marking the TRIGGER file dirty over a pattern-only edit would be misleading. PropertiesPanel
-    // uses this purely to drive its own "unsaved" status text next to the "Save Path" button.
+    // Unsaved path edits. Separate from markDirty(): patterns are their own files, not part of the
+    // trigger file.
     private Runnable pathEditChangeListener;
-    // The canvas's current total height in pixels - distance 0 always maps to this value (the
-    // bottom edge); see distanceToCanvasY(). Recomputed in rebuild() from the furthest trigger, so
-    // it only changes when a trigger further into the stage than anything seen so far is added.
+    // Canvas height; distance 0 maps here (the bottom edge).
     private double heightPixels = MIN_DISTANCE_UNITS * PIXELS_PER_UNIT_Y;
 
     public StageCanvas(EditorDocument document, StageLibrary library) {
         this.document = document;
         this.library = library;
         setPrefWidth(TOTAL_WIDTH_UNITS * PIXELS_PER_UNIT_X);
-        // The MARGIN_UNITS strips either side of the play area (see playAreaLayer's fill in
-        // drawPlayArea()) - this base color only shows through there.
+        // Shows only in the off-screen margins.
         setStyle("-fx-background-color: #17181c;");
-        // Background art sits at the very back; path previews sit above the play-area fill but
-        // below the grid/sprites, so the grid stays legible and a trigger's own sprite is never
-        // hidden behind its own path line. pathEditLayer's draggable handles sit just below the
-        // triggers themselves - same prominence as a TriggerNode - so they read as "part of the
-        // active editing", above the grid but not fighting a trigger's own icon for the top spot.
+        // Back to front: art, play area, path/wave previews, grid, path handles, triggers, rubber band.
         getChildren().addAll(backgroundLayer, playAreaLayer, pathPreviewLayer, waveSpawnPreviewLayer, gridLayer, pathEditLayer, triggerLayer, selectionRectLayer);
 
         setOnDragOver(this::handleDragOver);
         setOnDragDropped(this::handleDragDropped);
         setOnMouseClicked(this::handleCanvasClicked);
-        // Rubber-band select - a press+drag that STARTS on empty canvas space (a press landing on a
-        // TriggerNode/PathWaypointNode never reaches here at all, since both already consume their
-        // own MOUSE_PRESSED for the same reason handleCanvasClicked()'s own doc covers). Separate
-        // from the MOUSE_CLICKED handler above - JavaFX only synthesizes a click for a press+release
-        // pair with no real drag between them, so a genuine rubber-band drag never also triggers
-        // handleCanvasClicked()'s own empty-space "clear selection" - it's handled once, here.
+        // Presses on nodes are consumed by the nodes, so these only see empty-space presses.
         setOnMousePressed(this::handleSelectionPressed);
         setOnMouseDragged(this::handleSelectionDragged);
         setOnMouseReleased(this::handleSelectionReleased);
-        // Delete/Backspace deletes the current selection (see deleteSelectedTriggers()) - only
-        // reaches this handler while the canvas itself holds focus, which select() already
-        // requests on every selection change, so a click-then-Delete flow just works without the
-        // user needing to click some OTHER neutral part of the canvas first.
+        // Delete/Backspace, Ctrl+C, Ctrl+V. select() requests focus so these work right after a click.
         setFocusTraversable(true);
         setOnKeyPressed(this::handleKeyPressed);
 
@@ -223,8 +129,7 @@ public class StageCanvas extends Pane {
     public void setPathEditChangeListener(Runnable listener) { this.pathEditChangeListener = listener; }
     public void notifyPathEditChanged() { if (pathEditChangeListener != null) pathEditChangeListener.run(); }
 
-    // --- coordinate conversion - the one place the bottom-up flip (and the off-screen margin
-    // offset) lives ------------------------------------------------------------------------------
+    // --- coordinate conversion ---
 
     public double distanceToCanvasY(float distance) {
         return heightPixels - distance * PIXELS_PER_UNIT_Y;
@@ -234,8 +139,7 @@ public class StageCanvas extends Pane {
         return (float) ((heightPixels - canvasY) / PIXELS_PER_UNIT_Y);
     }
 
-    /** World x=0 (the play area's left edge) sits MARGIN_UNITS in from the canvas's own left edge,
-     *  leaving room to the left for an off-screen entrance spawn (negative x) - see MARGIN_UNITS. */
+    /** World x = 0 is MARGIN_UNITS in from the canvas's left edge. */
     public double worldXToCanvasX(float x) {
         return (x + MARGIN_UNITS) * PIXELS_PER_UNIT_X;
     }
@@ -244,25 +148,15 @@ public class StageCanvas extends Pane {
         return (float) (canvasX / PIXELS_PER_UNIT_X - MARGIN_UNITS);
     }
 
-    /** trigger.x if it has one, otherwise a synthesized position purely so this trigger has SOME
-     *  clickable spot on the canvas - see the class doc on TriggerNode's own use of this. A text cue
-     *  or a condition-only gate (see Trigger.x's own doc) is never authored with a real x at all,
-     *  since neither actually places anything at a location; loading one straight into
-     *  worldXToCanvasX(trigger.x) used to produce NaN, which renders (and hit-tests) nowhere -
-     *  invisible and unselectable, the tutorial stage's own trigger file being full of exactly this
-     *  (text/gate triggers vastly outnumber real spawns there, unlike stage1). Deliberately never
-     *  written back onto trigger.x here - see TriggerNode.updatePosition()'s own doc for why that's
-     *  the node's job, only once the user actually drags it. */
+    /** trigger.x, or a display-only x for triggers without one (text cues, gates). It is never
+     *  written back; dragging the node sets a real x. */
     public float effectiveX(Trigger trigger) {
         if (!Float.isNaN(trigger.x)) return trigger.x;
         Float fallback = noPositionFallbackX.get(trigger);
         return fallback != null ? fallback : DEFAULT_SPAWN_X;
     }
 
-    /** Populates noPositionFallbackX for every trigger with no real x - see effectiveX()'s own doc -
-     *  spreading ones that land on the exact same distance (the tutorial stage's gem-gate gauntlet
-     *  alone has one run of 4) symmetrically around DEFAULT_SPAWN_X rather than piling them all onto
-     *  that one point, where only the topmost would ever receive a click. */
+    /** Spreads position-less triggers that share a distance around DEFAULT_SPAWN_X. */
     private void computeNoPositionFallbackX() {
         noPositionFallbackX.clear();
         Map<Float, List<Trigger>> byDistance = new HashMap<>();
@@ -293,15 +187,9 @@ public class StageCanvas extends Pane {
         }
     }
 
-    // --- copy/paste - Ctrl/Cmd+C, Ctrl/Cmd+V (see handleKeyPressed() above), matching the same
-    // platform-primary-modifier convention Ctrl/Cmd-click multi-select already uses -------------
+    // --- copy/paste ---
 
-    /** Snapshots the current selection into `clipboard` as detached clones (a Json round-trip - see
-     *  cloneTrigger() - rather than hand-copying every field, so this can never silently drop a field
-     *  Trigger gains in the future) - independent of the live selected Triggers from this point on,
-     *  so editing/deleting/moving the originals afterward has no effect on what a later paste
-     *  produces. A no-op with nothing selected (leaves whatever was previously copied intact, rather
-     *  than clearing the clipboard on an accidental empty-selection Ctrl+C). */
+    /** Copies detached clones of the selection. An empty selection leaves the clipboard alone. */
     private void copySelectedTriggers() {
         if (selectedNodes.isEmpty()) return;
         clipboard.clear();
@@ -309,13 +197,8 @@ public class StageCanvas extends Pane {
         pasteCount = 0;
     }
 
-    /** Adds a fresh clone of every clipboard trigger (see copySelectedTriggers()) to the document,
-     *  offset further into the stage (see PASTE_DISTANCE_OFFSET) so a paste never lands exactly on
-     *  top of what it was copied from, and selects the newly-pasted set so it's immediately ready to
-     *  drag into place. Each consecutive paste (without an intervening copy) offsets one step further
-     *  than the last - pasteCount, reset by copySelectedTriggers() - so mashing Ctrl+V fans pasted
-     *  copies out instead of stacking them all on the exact same spot. A no-op with nothing copied
-     *  yet. */
+    /** Pastes clones offset further into the stage (one more step per consecutive paste) and
+     *  selects them. */
     private void pasteTriggers() {
         if (clipboard.isEmpty()) return;
         pasteCount++;
@@ -342,28 +225,14 @@ public class StageCanvas extends Pane {
         notifySelectionChanged();
     }
 
-    /** Deep-copies `source` via a Json round trip (same String-based technique EditorDocument/
-     *  MovementPatternLibrary already use - see either's own doc) rather than copying fields by hand,
-     *  so this can never drift out of sync with Trigger as new fields are added. Runtime-only fields
-     *  (armed/fired/confirmed/actionFired/liveTextCue) always read back at their untouched defaults
-     *  regardless, since nothing in the editor itself ever sets them on a Trigger sitting in a
-     *  document - only a live TriggerManager (never constructed here) does. */
+    /** Deep copy via a Json round trip, so new Trigger fields are always included. */
     private static Trigger cloneTrigger(Trigger source) {
         Json json = new Json();
         return json.fromJson(Trigger.class, json.toJson(source, Trigger.class));
     }
 
-    /** Gives a just-pasted trigger its own on-disk movement pattern file instead of leaving it
-     *  pointing at the same id `source` (the trigger it was copied from) still resolves to - see
-     *  MovementPatternLibrary.resolveForTrigger(): movementPattern is only ever a file id, so
-     *  cloneTrigger()'s deep copy above still leaves both triggers reading (and, worse, path-edit
-     *  mode WRITING - see savePathEditPattern()) the exact same waypoint file. Without this, dragging
-     *  a waypoint on the pasted enemy silently drags the original's path too, since there was only
-     *  ever one file backing both. Only forks when the id actually resolves to something on disk;
-     *  a blank/dangling movementPattern is left as-is (paste keeps whatever the source had, same as
-     *  every other field). Uses uniqueId() off the same id (rather than re-deriving PropertiesPanel's
-     *  stageId_enemyType hint) so the fork reads as "a copy of X" if the id is ever surfaced to a
-     *  user, and can never collide with the source file it's forked from. */
+    /** Gives a pasted trigger its own copy of its movement pattern file, so editing the copy's path
+     *  doesn't change the original's. */
     private void forkMovementPattern(Trigger copy) {
         String id = copy.movementPattern;
         if (id == null || id.isBlank() || !patternLibrary.exists(id)) return;
@@ -373,11 +242,7 @@ public class StageCanvas extends Pane {
         copy.movementPattern = forked.id;
     }
 
-    /** Starts a rubber-band select-drag - only reachable for a press that lands on genuinely empty
-     *  canvas space (see the constructor's own doc on why a TriggerNode/PathWaypointNode press never
-     *  gets here), and only outside path-edit mode (that mode's own empty-space interaction is
-     *  MOUSE_CLICKED's click-to-add-a-waypoint - see handleCanvasClicked() - conflating the two would
-     *  be confusing, so a drag started while editing a path simply does nothing here). */
+    /** Starts a rubber band on empty space (disabled in path-edit mode, where clicks add waypoints). */
     private void handleSelectionPressed(MouseEvent event) {
         if (pathEditTrigger != null) return;
         rubberBandStartX = event.getX();
@@ -400,14 +265,7 @@ public class StageCanvas extends Pane {
         rubberBandRect.setHeight(Math.abs(event.getY() - rubberBandStartY));
     }
 
-    /** Selects every TriggerNode the band actually overlaps - both Groups the two bounds are read
-     *  from (triggerLayer/selectionRectLayer) are direct, untransformed children of this Pane, so
-     *  getBoundsInParent() on a node from either one is already expressed in the same coordinate
-     *  space as the other with no extra reconciliation needed. Plain drag REPLACES the selection
-     *  (matching a plain click's own behavior - see select()); a Ctrl/Cmd-held drag ADDS the
-     *  enclosed nodes to whatever's already selected instead - a union, not select()'s own true
-     *  per-node toggle, since flipping each individually would be a much less predictable result for
-     *  a band that can enclose many nodes at once. */
+    /** Selects the nodes the band overlaps: replaces the selection, or adds to it with Ctrl/Cmd. */
     private void handleSelectionReleased(MouseEvent event) {
         if (rubberBandRect == null) return;
         boolean add = event.isShortcutDown();
@@ -453,9 +311,7 @@ public class StageCanvas extends Pane {
     private Trigger createTrigger(String paletteContent, float x, float distance) {
         Trigger trigger = new Trigger();
         trigger.distance = distance;
-        // Every action kind gets a real x (the drop point) even where the game itself never reads
-        // x/y for that action (sound/speed/event) - purely so this node has a stable, visible canvas
-        // position instead of TriggerNode.updatePosition() computing off Trigger's NaN default.
+        // Always set x (even where the game ignores it) so the node has a stable canvas position.
         trigger.x = x;
         String payload = paletteContent.substring(paletteContent.indexOf(':') + 1);
         switch (paletteContent.substring(0, paletteContent.indexOf(':'))) {
@@ -465,11 +321,7 @@ public class StageCanvas extends Pane {
             }
             case "action" -> {
                 switch (payload) {
-                    // A blank trigger - see ActionPalette's own doc - left with no action field set
-                    // at all, gated purely by whatever conditions get added in the properties panel,
-                    // which also carries the "Action" combo that links this to an actual effect
-                    // (enemy spawn, sound, sprite, camera speed, ...) once you're ready to configure
-                    // one.
+                    // Blank trigger: no action until one is picked in the properties panel.
                     case "event" -> { }
                     case "sound" -> trigger.sound = "audio/sfx/CHANGE_ME.mp3";
                     case "sprite" -> {
@@ -489,13 +341,8 @@ public class StageCanvas extends Pane {
         return Math.round(value * 100f) / 100f;
     }
 
-    /** Rebuilds every TriggerNode from the document's current trigger list - called on load/
-     *  add/remove (see EditorDocument.addChangeListener()). Property-panel edits to an already-
-     *  placed trigger's own fields go through TriggerNode.updatePosition()/refresh() instead of a
-     *  full rebuild, so editing doesn't fight with in-progress drags. heightPixels (and therefore
-     *  every node's flipped Y - see distanceToCanvasY()) is recomputed before any node is built, so
-     *  a rebuild triggered by a further-out trigger being added correctly repositions everything
-     *  already placed, not just the new one. */
+    /** Full rebuild on document changes (load/add/remove/markDirty). Field edits use
+     *  refreshTrigger() instead. The height is recomputed first because every Y depends on it. */
     private void rebuild() {
         double maxDistance = MIN_DISTANCE_UNITS;
         for (Trigger trigger : document.getTriggers()) {
@@ -507,9 +354,7 @@ public class StageCanvas extends Pane {
 
         triggerLayer.getChildren().clear();
         nodesByTrigger.clear();
-        // No unselect()/notify needed - every node (and its old selected border) is about to be
-        // discarded and rebuilt fresh anyway; a caller that just deleted the whole selection (see
-        // deleteSelectedTriggers()) already sends its own empty-selection notification afterward.
+        // The nodes are discarded; callers that need it notify the selection change themselves.
         selectedNodes.clear();
         for (Trigger trigger : document.getTriggers()) {
             TriggerNode node = new TriggerNode(trigger, this, this::select);
@@ -521,9 +366,7 @@ public class StageCanvas extends Pane {
         drawGrid(maxDistance);
         drawPathPreviews();
 
-        // A trigger being edited can be removed out from under us (Delete Trigger, or an Open Stage
-        // switching documents entirely) - drop the stale reference before rebuildPathEdit() runs
-        // rather than rendering handles for a Trigger no longer in the document.
+        // Drop path-edit state if its trigger was deleted or another stage was opened.
         if (pathEditTrigger != null && !document.getTriggers().contains(pathEditTrigger, true)) {
             pathEditTrigger = null;
             pathEditPattern = null;
@@ -532,30 +375,10 @@ public class StageCanvas extends Pane {
         rebuildPathEdit();
     }
 
-    /** Draws the stage's own background-layer art as a sequence of true-scale, real-formula
-     *  snapshots (see BackgroundWindowRenderer) stacked bottom-up from distance 0, one WORLD_HEIGHT-
-     *  tall "band" at a time - each band is exactly what Player View would show at that band's own
-     *  distance, so background art always renders at the SAME scale sprites/paths already do.
-     *
-     * This replaced an earlier "one stretched panorama per layer" approach that picked a single
-     * "guide" background layer and stretched every OTHER layer's texture height by
-     * guideSpeed/thisLayerSpeed so all layers could share one canvas-wide distance axis. That was
-     * mathematically self-consistent for the guide layer alone, but any OTHER layer (a different
-     * scrollSpeed - the whole point of parallax) ended up rendered at the WRONG visual scale relative
-     * to enemy sprites and movement-path previews, which always render at true PIXELS_PER_UNIT_X
-     * scale - stage1's own second background layer, at 2x the guide's scroll speed, was drawn at HALF
-     * true size. There's no scale-tweak fix for this: one shared "distance -> canvas pixel" axis can
-     * only be true-scale for ONE layer's own scroll rate at a time. The only way to keep both a
-     * distance-navigable canvas AND every layer at its real, gameplay-matching scale is what this
-     * method does now - resample the exact per-instant Player-View formula repeatedly instead of
-     * drawing one static, stretched image per layer. This also fixes a second, smaller bug for free:
-     * the old approach re-tiled a layer's last texture indefinitely once its sequence was exhausted,
-     * where the real game just freezes on the final frame (see ScrollingBackground.Layer) - each band
-     * here independently computes its own correctly-clamped snapshot, so bands past a layer's own
-     * exhaustion point all show that identical frozen frame rather than repeating.
-     *
-     * Returns true if anything was actually drawn (no stage/backgroundLayers resolved yet draws
-     * nothing), so drawPlayArea() knows whether to fall back to its own flat fill. */
+    /** Draws the background as a stack of screen-height bands, each a snapshot of what the game
+     *  shows at that band's distance. Layers scroll at different rates, so one stretched image per
+     *  layer can't be true scale for all of them; sampling per band keeps every layer true scale.
+     *  Returns whether anything was drawn. */
     private boolean drawBackgroundArt() {
         backgroundLayer.getChildren().clear();
         StageDefinition stageDef = document.getStageDefinition();
@@ -572,9 +395,7 @@ public class StageCanvas extends Pane {
             double topCanvasY = bottomCanvasY - bandPixels;
             float elapsedSinceStart = canvasYToDistance(bottomCanvasY) / cameraSpeed;
 
-            // Declaration order is far-to-near (see ScrollingBackground.drawBaseContent()'s own doc)
-            // - drawing in that same order here means a nearer layer naturally paints over a farther
-            // one, same as real gameplay.
+            // Layers are declared far to near.
             for (StageDefinition.BackgroundLayerDef layerDef : stageDef.backgroundLayers) {
                 List<ImageView> views = BackgroundWindowRenderer.buildWindow(layerDef, elapsedSinceStart, WORLD_WIDTH, WORLD_HEIGHT, PIXELS_PER_UNIT_X);
                 for (ImageView view : views) {
@@ -585,22 +406,13 @@ public class StageCanvas extends Pane {
                 if (!views.isEmpty()) drewAny = true;
             }
         }
-        // bandCount is rounded UP to fully cover heightPixels, so the topmost band can overhang past
-        // canvas-Y 0 - clip it off rather than let it draw above the canvas's own top.
+        // Clip the top band's overhang.
         backgroundLayer.setClip(new Rectangle(0, 0, TOTAL_WIDTH_UNITS * PIXELS_PER_UNIT_X, heightPixels));
         return drewAny;
     }
 
-    /** Draws every enemy spawn's actual movement path at TRUE scale (PIXELS_PER_UNIT_X - the same
-     *  real-world-unit conversion a sprite's own width/height already uses, so the path's length and
-     *  shape genuinely match how far/which way the enemy travels in-game, not a normalized
-     *  thumbnail) - see MovementPathPreview. Anchored at the trigger's own canvas position
-     *  (worldXToCanvasX(trigger.x), distanceToCanvasY(trigger.distance)): the horizontal axis is
-     *  exactly right since world-x is shared with the rest of this canvas, but the vertical
-     *  placement is necessarily an anchor of convenience, not a literal mapping - `distance` (this
-     *  canvas's real vertical axis) and a movement pattern's real world-y are unrelated quantities,
-     *  so "one for one" here means true scale/shape relative to the spawn point, not that the whole
-     *  canvas becomes spatially accurate in both axes at once. */
+    /** Draws each spawn's movement path at true scale, anchored at its trigger node. World y and
+     *  distance are different axes, so only the path's shape relative to the spawn is literal. */
     private void drawPathPreviews() {
         pathPreviewLayer.getChildren().clear();
         for (Trigger trigger : document.getTriggers()) {
@@ -632,16 +444,8 @@ public class StageCanvas extends Pane {
         drawWaveSpawnPreviews();
     }
 
-    /** Small orange dot at every member WaveSpawnPlanner.plan() computes for each Trigger.waveShape-
-     *  enabled spawn in the document - piggybacked onto drawPathPreviews()'s own call sites (see that
-     *  method's own doc) rather than wired up separately, so this can never go stale relative to it.
-     *  Same relative-offset-from-the-trigger's-own-canvas-anchor transform drawPathPreviews() itself
-     *  uses (world-x shares this canvas's real horizontal axis; the vertical placement is an anchor
-     *  of convenience against `distance`, not a literal mapping - see that method's own doc), and the
-     *  SAME nominal "player" reference point (worldWidth/2, 1 - PlayerPreviewView's own dummy player
-     *  hitbox convention) TriggerManager.fireWave() itself passes to WaveSpawnPlanner.plan(), so a
-     *  "to the player" wave previews identically to how it actually spawns - NOT DEFAULT_SPAWN_X/Y,
-     *  which is a completely unrelated "where a newly-dropped enemy trigger defaults to" constant. */
+    /** A dot and direction arrow for each wave member (WaveSpawnPlanner), anchored like the path
+     *  previews. Uses a nominal player at (worldWidth / 2, 1), as the game's wave preview does. */
     private void drawWaveSpawnPreviews() {
         waveSpawnPreviewLayer.getChildren().clear();
         for (Trigger trigger : document.getTriggers()) {
@@ -667,26 +471,15 @@ public class StageCanvas extends Pane {
         }
     }
 
-    /** Re-draws just the static path-preview lines/dots (see drawPathPreviews()) without touching
-     *  trigger nodes, background art, or the grid - called live from PathWaypointNode's own drag
-     *  handler so the preview line follows a dragged point immediately, the same
-     *  dirty-on-release-only pattern TriggerNode's own drag already uses. */
+    /** Redraws only the previews (live during waypoint drags). */
     public void refreshPathPreviews() {
         drawPathPreviews();
     }
 
-    // --- movement-path editing directly on this canvas - see PropertiesPanel's "Movement Path"
-    // section, which is what actually turns this on/off per selected trigger --------------------
+    // --- in-place path editing (toggled from PropertiesPanel's Movement Path section) ---
 
-    /** Scopes in-place waypoint editing to `trigger` (null to turn it off) - see the class-level
-     *  fields' own doc. Resolves and caches that trigger's pattern HERE, once, rather than in every
-     *  interaction that follows: MovementPatternLibrary.resolveForTrigger()/load() always re-reads
-     *  the file from disk, so calling it again mid-edit (e.g. from handleCanvasClicked() or a drag)
-     *  would silently throw away whatever points had already been added/moved but not yet saved via
-     *  savePathEditPattern(). Only a pattern that's a clean waypoint sequence (see
-     *  MovementPatternLibrary.isWaypointSequence()) is ever entered into edit mode - anything else
-     *  resolves to null here, same as "nothing to edit" - PropertiesPanel is responsible for
-     *  offering "Convert to Waypoints" first in that case. */
+    /** Starts (or with null, stops) path editing for a trigger. Loads and caches its pattern once;
+     *  only pure waypoint sequences can be edited. */
     public void setPathEditTrigger(Trigger trigger) {
         this.pathEditTrigger = trigger;
         MovementPatternDef resolved = trigger != null ? patternLibrary.resolveForTrigger(trigger) : null;
@@ -703,20 +496,11 @@ public class StageCanvas extends Pane {
 
     public MovementPatternDef getSelectedPathPoint() { return selectedPathPoint; }
 
-    /** The SAME cached pattern object this canvas is actually drawing/mutating/saving for the
-     *  trigger currently in path-edit mode (null if none is) - see setPathEditTrigger()'s own doc on
-     *  why this is cached here rather than re-resolved. PropertiesPanel's "Path Options" and
-     *  "Waypoints" sections must edit THIS object, not a fresh MovementPatternLibrary.resolveForTrigger()
-     *  reload of their own - that method reloads from disk on every call (see its own doc), so editing
-     *  a separately-reloaded copy would silently discard the edit the moment the next UI refresh
-     *  re-reloads the still-unsaved-on-disk original value right back over it - which is exactly what
-     *  made every field except the canvas-click-driven "Selected Waypoint" section look like it
-     *  required first clicking a point on the canvas before edits would actually stick. */
+    /** The cached pattern being edited. The panel must edit this object, not a fresh load from
+     *  disk, or its edits would be lost. */
     public MovementPatternDef getPathEditPattern() { return pathEditPattern; }
 
-    /** Call after a PropertiesPanel field edit changes the selected point's targetX/targetY/speed/
-     *  duration directly - re-renders the handle's position and the preview line from the (already
-     *  mutated) cached pattern, without re-resolving it from disk. */
+    /** Redraws handles and previews after a panel edit to the cached pattern. */
     public void refreshPathEditPositions() {
         rebuildPathEdit();
         drawPathPreviews();
@@ -736,9 +520,7 @@ public class StageCanvas extends Pane {
         if (pathEditPattern != null) patternLibrary.save(pathEditPattern);
     }
 
-    /** Rebuilds the draggable handles for pathEditTrigger's cached pattern - called whenever that
-     *  pattern's point list or a point's own position changes, and from rebuild() so a trigger drag
-     *  (which recomputes this trigger's own canvas anchor) keeps its handles in sync. */
+    /** Rebuilds the waypoint handles (after point changes, and on rebuild() since the anchor may move). */
     private void rebuildPathEdit() {
         pathEditLayer.getChildren().clear();
         pathEditNodes.clear();
@@ -765,37 +547,16 @@ public class StageCanvas extends Pane {
         if (pathPointSelectionListener != null) pathPointSelectionListener.accept(selectedPathPoint);
     }
 
-    /** Same selection as clicking `waypoint`'s handle directly on the canvas - lets PropertiesPanel's
-     *  sidebar waypoint list (which edits every point, not just the canvas-clicked one) also drive
-     *  the "Selected Waypoint" detail section/highlight when a row there is picked instead. A no-op
-     *  if `waypoint` isn't one of pathEditNodes' own handles (e.g. stale reference after a rebuild). */
+    /** Selects a waypoint as if its handle were clicked (used by the panel's waypoint list). */
     public void selectPathPoint(MovementPatternDef waypoint) {
         for (PathWaypointNode node : pathEditNodes) {
             if (node.getWaypoint() == waypoint) { selectPathPoint(node); return; }
         }
     }
 
-    /** Click-to-add for whichever trigger is currently in path-edit mode (see setPathEditTrigger()) -
-     *  a no-op otherwise, so this coexists harmlessly with the normal palette drag-drop/trigger-drag
-     *  interactions when nothing is being edited. A click that lands on an existing TriggerNode or
-     *  PathWaypointNode never reaches here - both consume their own MOUSE_CLICKED for exactly this
-     *  reason (see their own docs) - so this only ever fires for a genuine click on empty canvas
-     *  space. Inverts the same anchor+offset transform drawPathPreviews()/PathWaypointNode use to
-     *  turn the click back into a world point, appends a fresh "MoveToPoint" leg (matching the old
-     *  WaypointCanvas's own click-to-add defaults), and selects it immediately so it's one click away
-     *  from being deleted if it was a mis-click. Outside path-edit mode, this same "genuine click on
-     *  empty canvas space" case instead just clears the current trigger selection (a plain click on
-     *  a TriggerNode already replaces the selection itself - see select() - so this only ever needs
-     *  to handle the "clicked nothing" case). */
+    /** In path-edit mode, a click on empty space appends a MoveToPoint waypoint there and selects
+     *  it. Selection clicks are handled by the press/release handlers. */
     private void handleCanvasClicked(MouseEvent event) {
-        // Selection itself - including "clicked empty space -> nothing selected" - is now fully
-        // owned by handleSelectionPressed()/handleSelectionDragged()/handleSelectionReleased() above,
-        // which already run for this same gesture before this synthesized MOUSE_CLICKED fires.
-        // Consuming MOUSE_RELEASED there does NOT suppress this event (same reason TriggerNode itself
-        // needs its own explicit MOUSE_CLICKED consumer - see its constructor's doc), so this used to
-        // also call clearSelection() here - which, on a plain click, ran AFTER handleSelectionReleased
-        // had already set the real selection and immediately wiped it back out again. This only still
-        // has a job in path-edit mode (adding a waypoint at the click location).
         if (pathEditTrigger == null || pathEditPattern == null || pathEditPattern.patterns == null) {
             return;
         }
@@ -822,12 +583,7 @@ public class StageCanvas extends Pane {
         event.consume();
     }
 
-    /** Marks the actual on-screen play area (world x in [0, WORLD_WIDTH]) with a border, so it reads
-     *  as "the screen" with off-screen approach lanes around it, the same distinction the game
-     *  itself draws (see Main.drawGame()'s side panels either side of the scissored play area),
-     *  rather than one undifferentiated canvas. Filled with a plain lighter shade when there's no
-     *  background art to show through (hasBackgroundArt - see drawBackgroundArt()); otherwise left
-     *  transparent so that art is what actually reads as "the screen". */
+    /** Outlines the play area; filled only when there's no background art. */
     private void drawPlayArea(boolean hasBackgroundArt) {
         playAreaLayer.getChildren().clear();
         double left = worldXToCanvasX(0f);
@@ -858,26 +614,13 @@ public class StageCanvas extends Pane {
         }
     }
 
-    /** @param toggle true for a Ctrl/Cmd-click (see TriggerNode.handlePressed()'s own
-     *  event.isShortcutDown()) - adds/removes just this ONE node to/from whatever's already
-     *  selected, instead of a plain click's usual "replace the whole selection with just this node"
-     *  - the standard multi-select convention most editors use, so several triggers can be
-     *  selected and bulk-deleted together (see deleteSelectedTriggers()/PropertiesPanel's
-     *  multi-selection view). */
-    /** Whether `node` is currently part of the selection - see TriggerNode.handlePressed()'s own use
-     *  (deferring a plain press's usual "replace selection with just this node" collapse when the
-     *  pressed node is already selected, so an existing multi-selection survives long enough to be
-     *  group-dragged). */
     public boolean isSelected(TriggerNode node) {
         return selectedNodes.contains(node);
     }
 
+    /** @param toggle Ctrl/Cmd-click: add/remove this node instead of replacing the selection */
     private void select(TriggerNode node, boolean toggle) {
-        // So an immediate Delete/Backspace keypress right after clicking a trigger reaches
-        // handleKeyPressed() below without the user needing to click some neutral part of the
-        // canvas first - a click on a TriggerNode itself doesn't grant focus to anything on its own,
-        // since TriggerNode isn't focusTraversable (there'd be no point - selection state already
-        // lives here on the canvas, not per-node).
+        // So keyboard shortcuts work right after clicking a node.
         requestFocus();
         if (toggle) {
             if (selectedNodes.remove(node)) {
@@ -893,18 +636,13 @@ public class StageCanvas extends Pane {
             node.setSelected();
         }
 
-        // Path-edit mode is scoped to exactly one trigger - any selection change that leaves it not
-        // exactly that same single trigger selected exits it (re-selecting/dragging the SAME lone
-        // trigger, e.g. repositioning its spawn point while editing its path, deliberately leaves
-        // edit mode alone).
+        // Leave path-edit mode unless its trigger is still the only one selected.
         if (pathEditTrigger != null && !(selectedNodes.size() == 1 && pathEditTrigger == node.getTrigger() && selectedNodes.contains(node))) {
             setPathEditTrigger(null);
         }
         notifySelectionChanged();
     }
 
-    /** Deselects everything - a plain click on empty canvas space (see handleCanvasClicked()) or
-     *  after deleteSelectedTriggers() removes the whole current selection. */
     private void clearSelection() {
         if (selectedNodes.isEmpty()) return;
         for (TriggerNode n : selectedNodes) n.setUnselected();
@@ -919,13 +657,7 @@ public class StageCanvas extends Pane {
         selectionListener.accept(triggers);
     }
 
-    /** Deletes every currently-selected trigger - the Delete/Backspace key (see the constructor's
-     *  own key-handler wiring) and PropertiesPanel's multi-selection "Delete N Triggers" button both
-     *  just call this. Each EditorDocument.removeTrigger() call fires a full StageCanvas.rebuild()
-     *  (see EditorDocument.markDirty()'s own doc), which already clears selectedNodes as a side
-     *  effect - re-notifying with the now-empty selection afterward is still this method's own job
-     *  (rebuild() deliberately doesn't, since a rebuild triggered by something else entirely, e.g.
-     *  loading a different stage, shouldn't imply "selection was just cleared by a delete"). */
+    /** Delete key / the panel's "Delete N Triggers" button. */
     public void deleteSelectedTriggers() {
         if (selectedNodes.isEmpty()) return;
         List<Trigger> toDelete = new ArrayList<>();
@@ -934,15 +666,9 @@ public class StageCanvas extends Pane {
         notifySelectionChanged();
     }
 
-    // --- multi-node drag-move - see TriggerNode.handlePressed()/handleDragged()/handleReleased(),
-    // which call these three in lockstep with its own single-node drag handling --------------------
+    // --- group drag (driven by TriggerNode's press/drag/release handlers) ---
 
-    /** Called from `pressedNode`'s own handlePressed() - snapshots every OTHER selected node's
-     *  current layout position (pressedNode keeps tracking its own via its existing dragStartLayoutX/
-     *  Y fields, unchanged) so applyGroupDrag() below can move them by the same delta later, without
-     *  needing their own MOUSE_PRESSED to have just fired (it didn't - only the actually-clicked
-     *  node gets one for this gesture). A no-op (empty map) when pressedNode isn't part of a 2+
-     *  multi-selection, so a plain single-node drag stays exactly as cheap as it already was. */
+    /** Records the start positions of the other selected nodes (if 2+ are selected). */
     public void beginGroupDrag(TriggerNode pressedNode) {
         groupDragStartPositions.clear();
         if (selectedNodes.size() > 1 && selectedNodes.contains(pressedNode)) {
@@ -952,10 +678,7 @@ public class StageCanvas extends Pane {
         }
     }
 
-    /** Moves every OTHER selected node by the same (dx, dy) scene-pixel delta `pressedNode` itself
-     *  just moved by - called from its handleDragged() right after it repositions itself the normal
-     *  single-node way. Same "clamp to 0, sync trigger.x/distance from the new layout" logic
-     *  TriggerNode.handleDragged() already applies to itself - see TriggerNode.syncTriggerFromLayout(). */
+    /** Moves the other selected nodes by the dragged node's delta and syncs their triggers. */
     public void applyGroupDrag(double dx, double dy) {
         for (Map.Entry<TriggerNode, double[]> entry : groupDragStartPositions.entrySet()) {
             TriggerNode n = entry.getKey();
@@ -966,21 +689,13 @@ public class StageCanvas extends Pane {
         }
     }
 
-    /** Called from handleReleased() - no markDirty() needed here specifically: every OTHER selected
-     *  node's trigger.x/distance was already kept live-synced during the drag (see
-     *  applyGroupDrag()'s own syncTriggerFromLayout() call), same as the pressed node's own fields
-     *  already are by the time ITS handleReleased() fires its own (single) markDirty() - one
-     *  document-wide dirty+rebuild already covers the whole group. */
+    /** The dragged node's own markDirty() covers the whole group. */
     public void endGroupDrag() {
         groupDragStartPositions.clear();
     }
 
-    /** Called by PropertiesPanel after a field edit or delete - repositions/relabels the affected
-     *  node without disturbing everything else (a full rebuild() would also work but drops the
-     *  current scroll position/selection unnecessarily). refresh() runs FIRST - see its own doc - so
-     *  a label-text edit that resizes the node's box is already reflected in it before
-     *  updatePosition() reads that size to re-center; the other order around would center on the
-     *  box's size from BEFORE this edit. */
+    /** After a panel field edit: relabels then repositions one node (refresh() first, since the
+     *  label changes the box size used for centering). */
     public void refreshTrigger(Trigger trigger) {
         TriggerNode node = nodesByTrigger.get(trigger);
         if (node != null) {
@@ -988,10 +703,7 @@ public class StageCanvas extends Pane {
             node.updatePosition();
         }
         document.markDirty();
-        // Keeps the wave-formation preview (see drawWaveSpawnPreviews()) live as PropertiesPanel's
-        // "Wave" section fields are edited - every other drawPathPreviews() call site already runs
-        // after a structural change (rebuild()/path-edit), but a plain field edit via
-        // PropertiesPanel.onEdited() only ever reached this method before, never that one.
+        // Keeps path/wave previews live while editing fields.
         drawPathPreviews();
     }
 

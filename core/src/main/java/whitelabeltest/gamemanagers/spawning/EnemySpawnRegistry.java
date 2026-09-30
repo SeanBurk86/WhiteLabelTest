@@ -8,8 +8,8 @@ import whitelabeltest.enemy.Enemy;
 import whitelabeltest.enemy.EnemyDefinition;
 import whitelabeltest.enemy.GenericEnemy;
 
-/** Lets a firing pattern (e.g. SpawnEnemyFiring) spawn other enemies by type id,
- * without threading AssetManager/enemies references through every FiringPattern implementation. */
+/** Static access for firing patterns (e.g. SpawnEnemyFiring) to spawn enemies by id, without
+ *  passing AssetManager and the enemy list through every FiringPattern. */
 public final class EnemySpawnRegistry {
     private static AssetManager assets;
     private static Array<Enemy> enemies;
@@ -25,8 +25,7 @@ public final class EnemySpawnRegistry {
         EnemySpawnRegistry.worldHeight = worldHeight;
     }
 
-    /** Resolves a texture by asset path, for firing patterns that want a sprite other than
-     * their enemy's default bullet texture (e.g. a per-pattern override in FiringPatternDef). */
+    /** Texture lookup for firing patterns that override their enemy's bullet texture. */
     public static Texture getTexture(String path) {
         return (assets != null && path != null) ? assets.getTexture(path) : null;
     }
@@ -35,12 +34,8 @@ public final class EnemySpawnRegistry {
         return spawn(enemyTypeId, x, y, null);
     }
 
-    /** @param movementPatternId this spawn's own movement pattern - see
-     *  GenericEnemy.initWithDefinition()'s own doc (movement isn't part of EnemyDefinition, so this
-     *  is the only way a caller here can give the spawned enemy any motion at all). Used by
-     *  PatternPreviewer.respawnPreview() so its live preview enemy actually reflects whichever
-     *  movement pattern is currently being edited; every other caller (e.g. SpawnEnemyFiring, via
-     *  the null-defaulting overload above) doesn't need one. */
+    /** @param movementPatternId optional. Movement isn't part of EnemyDefinition, so this is the only
+     *  way to give the spawn motion (used by PatternPreviewer). */
     public static GenericEnemy spawn(String enemyTypeId, float x, float y, String movementPatternId) {
         if (assets == null || enemies == null || enemyTypeId == null) return null;
 

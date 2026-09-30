@@ -15,100 +15,46 @@ import com.badlogic.gdx.utils.Disposable;
 
 import java.nio.IntBuffer;
 
-/** An analog "video feedback" OVERLAY - the classic look of pointing a camera at the monitor it's
- *  plugged into: the player's own sprite AND halo (see updatePlayer()/updateHalo()) endlessly
- *  re-drawn into a slowly zooming, fading accumulation buffer, so every past position/frame recedes
- *  outward from the player's current position as a trail of echoes of themselves. The trail also
- *  drifts downward each frame in step with the background's own scroll speed (see update()/SCROLL_
- *  VISUAL_SCALE/u_scroll in player_feedback.frag), so it reads as riding along with the scrolling
- *  backdrop rather than hovering in a fixed spot, and cycles hue a little further each generation it
- *  recirculates (u_hueStep), so older/farther-out echoes are visibly more rainbow-shifted than fresh
- *  ones - only the recirculating trail rainbow-cycles, the real player/halo drawn fresh each frame
- *  keep their true colors.
+/** "Video feedback" overlay (StageDefinition.playerFeedbackBackground): the player and halo are
+ *  redrawn every frame into a ping-pong accumulation buffer that slowly zooms out from the player,
+ *  fades, drifts with the background scroll and hue-shifts each generation, leaving a trail of
+ *  echoes. It's alpha-blended on top of whatever background was already drawn (the buffer's alpha
+ *  decays with its color).
  *
- *  Unlike Stage2KaleidoscopeShader/TutorialBoxTunnelShader (BackgroundShader implementations that
- *  REPLACE a stage's background outright), this is composited ON TOP of whatever background content
- *  a stage already draws - ordinary scrolling backgroundLayers, a boss/background video frame, or
- *  even one of those other shaderBackground effects - see ScrollingBackground.drawPlayerFeedbackOverlay()/
- *  StageDefinition.playerFeedbackBackground, which is an independent opt-in (like hueCycleBackground),
- *  not a shaderBackground choice. The accumulation buffer's own alpha channel decays alongside its
- *  color each generation (see player_feedback.frag), so renderOverlay()'s final draw - a plain
- *  alpha-blended full-screen blit - lets whatever was drawn just before it show through in proportion
- *  to how faded each part of the trail is, rather than painting over it.
- *
- *  Deliberately does NOT capture/re-render whatever background content came before it into its own
- *  FrameBuffer first - only the persistent accum ping-pong buffers need to survive across frames, and
- *  the plain player sprite drawn fresh into them each frame is a normal draw call, not itself an FBO
- *  consumer - so unlike an attempt to nest this inside another shaderBackground's own FBO passes
- *  (which would break: libGDX FrameBuffer binding doesn't stack, so a nested begin()/end() leaves the
- *  outer capture pointing at nothing once the inner one unbinds), running this AFTER that content has
- *  already finished drawing (to whatever target - screen or an already-restored viewport) is both
- *  simpler and safe regardless of how that content was produced.
- *
- *  Same viewport/scissor/projection handling as Stage2KaleidoscopeShader's own render() - see its
- *  class doc - since this still runs its own tight-projection FBO pass for the accumulate step even
- *  though there's no base content to capture. Every FrameBuffer read is Y-flipped in-shader, and the
- *  final on-screen draw uses flipY=true, for the same reason: FBO color textures come out of the GPU
- *  bottom-row-first, unlike a normally-loaded Texture. */
+ *  It runs after the background has finished drawing rather than nesting inside another FBO pass,
+ *  because libGDX FrameBuffer binding doesn't stack. The scissor and viewport are saved and restored
+ *  around the off-screen pass, and FBO textures are read Y-flipped. */
 public class PlayerFeedbackShader implements Disposable {
-    // Zoom > 1 shrinks the sampled "rel" vector each frame, so content that was near the player's
-    // position in the previous frame gets displayed further away this frame - the outward-expanding
-    // "flying through a tunnel of yourself" look. See player_feedback.frag's own comment. Boosted from
-    // an earlier, barely-noticeable 1.015 for a much more dramatic, faster-expanding tunnel.
+    // > 1: last frame's content is sampled closer to the player, so echoes expand outward.
     private static final float ZOOM = 1.035f;
-    // Multiplicative fade applied to the warped previous frame each pass (color AND alpha together -
-    // see the class doc's compositing note) - how many frames of trail survive before fading to
-    // nothing (roughly 1/(1-DECAY) frames to fully vanish). Needs to be high enough that the trail
-    // lives long enough for the downward scroll drift below to actually accumulate into something
-    // visible - see SCROLL_VISUAL_SCALE's own doc. Boosted from an earlier 0.97 for a longer, more
-    // visible stack of echoes.
+    // Per-generation fade of color and alpha; the trail lasts about 1/(1-DECAY) frames.
     private static final float DECAY = 0.975f;
-    // Per-channel radial sample offset, in texels, for the chromatic-aberration fringing on the
-    // receding echoes - see player_feedback.frag. Boosted from an earlier 2.5 for a more pronounced
-    // color-fringed look on the receding trail.
+    // Chromatic-aberration offset in texels on the echoes.
     private static final float CHROMA_TEXELS = 4f;
-    // A background layer's real scrollSpeed (world units/second) divided by worldHeight (world
-    // units, e.g. 12 - see PLAY_AREA_HEIGHT) is only a few percent of screen height per second - at
-    // DECAY's ~1-second trail life, matching that literally reads as static, not "drifting". This
-    // exaggerates the SAME real per-frame scroll delta (still proportional to and signed with the
-    // stage's actual scrollSpeed, so a faster/slower/reversed background still drifts faster/slower/
-    // reversed in step) up to something that actually reads as riding the scroll on screen.
+    // Exaggerates the real per-frame scroll so the trail visibly rides the background (still signed
+    // and proportional to the stage's scroll speed).
     private static final float SCROLL_VISUAL_SCALE = 6f;
-    // Hue-rotation fraction (of a full 0..1 cycle) applied EVERY generation - see player_feedback.frag.
-    // Compounds each frame a given echo recirculates, so older/farther-out copies have visibly cycled
-    // further through the rainbow than fresher ones. Boosted from an earlier 0.02 - together with
-    // DECAY's now-longer trail life, this sweeps multiple full hue cycles by the time a copy fades out.
+    // Hue rotation (fraction of a cycle) per generation, so older echoes are more shifted.
     private static final float HUE_STEP = 0.035f;
-    // Floors HSV saturation on the recirculating trail before converting back to RGB - see
-    // player_feedback.frag's own comment. Without this, a pale/near-white sprite (a common look for a
-    // halo glow or sprite highlights) barely shows the hue rotation at all, since there's almost no
-    // saturation for the rotated hue to express. Boosted from an earlier 0.55 for more vivid color.
+    // Minimum saturation on the trail, so pale sprites still show the hue shift.
     private static final float HUE_SATURATION_FLOOR = 0.75f;
-    // Matches Stage2KaleidoscopeShader's own warm-up guard - accumA/accumB start out with undefined
-    // GPU garbage, so the first few frames skip reading them entirely.
+    // The accumulation buffers start with undefined contents; skip reading them for a few frames.
     private static final int WARMUP_FRAMES = 3;
 
     private final ShaderProgram feedbackShader;
 
-    // This frame's downward scroll movement, in world units - set by update(), consumed by
-    // renderAccumulatePass() (converted to uv space there, since worldHeight isn't known until
-    // renderOverlay() is called). See update()'s own doc.
+    // This frame's scroll in world units (converted to UV in renderAccumulatePass()).
     private float scrollDeltaWorld;
     private int warmupFramesRemaining = WARMUP_FRAMES;
 
-    // Lazily allocated on first renderOverlay() - see prewarmFrameBuffers().
+    // Created on first render.
     private FrameBuffer accumA;
     private FrameBuffer accumB;
     private boolean accumAIsCurrent;
 
-    // This frame's player sprite/position - set by updatePlayer(), consumed (then left in place,
-    // harmless to redraw) by renderOverlay(). Null until the first updatePlayer() call, e.g. before a
-    // stage's player has spawned; renderOverlay() just skips the fresh-player draw until then.
+    // This frame's player and halo sprites (null until first set).
     private TextureRegion playerFrame;
     private float playerX, playerY, playerWidth, playerHeight;
-    // The player's halo, drawn UNDER the player sprite - same layering Player.draw() itself uses -
-    // set by updateHalo(). Independently nullable from playerFrame (though in practice Player always
-    // has some halo visual once it's spawned - see Player.getHaloFrame()).
     private TextureRegion haloFrame;
     private float haloX, haloY, haloWidth, haloHeight;
 
@@ -118,9 +64,7 @@ public class PlayerFeedbackShader implements Disposable {
         feedbackShader = ShaderLoader.compile("PlayerFeedbackShader accumulate pass", "background.vert", "player_feedback.frag");
     }
 
-    /** scrollSpeed is the same world-units/second value driving this stage's ordinary background
-     *  scroll (see ScrollingBackground's own per-frame call site) - negative moves the background
-     *  (and so the trail) downward, matching Layer.scrollSpeed's own sign convention. */
+    /** @param scrollSpeed the background's scroll speed (world units/sec; negative = downward). */
     public void update(float delta, float scrollSpeed) {
         scrollDeltaWorld = scrollSpeed * delta;
     }
@@ -129,7 +73,7 @@ public class PlayerFeedbackShader implements Disposable {
         scrollDeltaWorld = 0f;
         warmupFramesRemaining = WARMUP_FRAMES;
         accumAIsCurrent = false;
-        // Drop any stale sprite from before the reset/seek - see the fields' own doc.
+        // Drop stale sprites from before the reset/seek.
         playerFrame = null;
         haloFrame = null;
     }
@@ -150,10 +94,8 @@ public class PlayerFeedbackShader implements Disposable {
         haloHeight = height;
     }
 
-    /** Draws this frame's feedback trail on top of whatever background content was just drawn - see
-     *  the class doc. quadTexture is a harmless dummy (assets.pixelTexture) purely to trigger the
-     *  accumulate pass's draw call; its actual pixel content is never read by feedbackShader, which
-     *  samples u_previous instead. */
+    /** Updates the trail and draws it over the current target. quadTexture is only a dummy for the
+     *  accumulate draw call. Expects and leaves the batch begun. */
     public void renderOverlay(SpriteBatch batch, Texture quadTexture, float worldWidth, float worldHeight) {
         prewarmFrameBuffers();
 
@@ -161,15 +103,11 @@ public class PlayerFeedbackShader implements Disposable {
         float previousPackedColor = batch.getPackedColor();
         Matrix4 previousProjection = batch.getProjectionMatrix().cpy();
 
-        // See Stage2KaleidoscopeShader's own scissor note - Main.java clips to the play-area rect in
-        // real screen pixels for the whole outer game.draw() call this runs inside of, which would
-        // wrongly clip these off-screen, differently-sized FBO passes.
+        // Main.java's play-area scissor would clip the off-screen pass.
         boolean scissorWasEnabled = Gdx.gl.glIsEnabled(GL20.GL_SCISSOR_TEST);
         if (scissorWasEnabled) Gdx.gl.glDisable(GL20.GL_SCISSOR_TEST);
 
-        // FrameBuffer.end() always resets the GL viewport to the full back buffer - captured here and
-        // restored after, same as Stage2KaleidoscopeShader, so the rest of this frame's draws (the
-        // real player, enemies, bullets, UI, HUD) still use the game's real (narrower) play-area viewport.
+        // FrameBuffer.end() resets the viewport to the whole back buffer; save it to restore after.
         viewportQuery.clear();
         Gdx.gl.glGetIntegerv(GL20.GL_VIEWPORT, viewportQuery);
         int viewportX = viewportQuery.get(0);
@@ -179,8 +117,7 @@ public class PlayerFeedbackShader implements Disposable {
 
         batch.end();
 
-        // Tight world-space projection so the FBO pass fills the buffer edge-to-edge instead of the
-        // caller's wider ExtendViewport-extended projection - see Stage2KaleidoscopeShader's own note.
+        // Tight world-space projection so the pass fills the buffer edge to edge.
         Matrix4 tightProjection = new Matrix4().setToOrtho2D(0, 0, worldWidth, worldHeight);
         batch.setProjectionMatrix(tightProjection);
 
@@ -193,10 +130,7 @@ public class PlayerFeedbackShader implements Disposable {
         Gdx.gl.glViewport(viewportX, viewportY, viewportW, viewportH);
         if (scissorWasEnabled) Gdx.gl.glEnable(GL20.GL_SCISSOR_TEST);
 
-        // Plain alpha-blended blit on top of whatever's already at this target (screen, or whatever
-        // viewport/framebuffer was active when the caller invoked us) - the accum buffer's own alpha
-        // (fresh player = opaque, decaying trail = increasingly transparent - see the class doc) is
-        // what makes the background underneath show through, not any special blend setup here.
+        // Plain alpha-blended blit; the buffer's own alpha lets the background show through.
         batch.begin();
         batch.setShader(null);
         batch.setColor(Color.WHITE);
@@ -206,8 +140,7 @@ public class PlayerFeedbackShader implements Disposable {
         batch.setPackedColor(previousPackedColor);
         batch.end();
 
-        // Leave the batch "began" - the caller (ScrollingBackground, itself called from within
-        // Main.java's own spriteBatch.begin()/end()) expects it in the same state it was handed to us in.
+        // Leave the batch begun, as the caller handed it over.
         batch.begin();
     }
 
@@ -255,11 +188,7 @@ public class PlayerFeedbackShader implements Disposable {
         batch.draw(quadTexture, 0, 0, worldWidth, worldHeight);
         batch.end();
 
-        // The fresh player sprite (and its halo, drawn under it - same order Player.draw() itself
-        // uses) layers on top, at its real world position, with a plain draw - no flip needed here
-        // (only reading an FBO's texture back out needs that correction, not writing a normal draw
-        // into one - see the class doc). Each is left out entirely until its first update*() call
-        // (e.g. before this stage's player has spawned).
+        // The fresh halo then player on top, at their real positions and colors.
         if (haloFrame != null || playerFrame != null) {
             batch.begin();
             batch.setShader(null);

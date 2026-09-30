@@ -5,6 +5,7 @@ import com.badlogic.gdx.graphics.g2d.Animation;
 import com.badlogic.gdx.graphics.g2d.TextureRegion;
 import com.badlogic.gdx.utils.ObjectMap;
 
+/** Shares Animations built from the same texture, grid layout and timing. */
 public final class AnimationCache {
     private static final ObjectMap<Texture, ObjectMap<String, Animation<TextureRegion>>> cache = new ObjectMap<>();
 
@@ -21,8 +22,7 @@ public final class AnimationCache {
             cache.put(texture, byLayout);
         }
 
-        // frameDuration/playMode are part of the key too, since two patterns can share the same
-        // texture and grid layout but animate at different speeds (or loop differently).
+        // Timing and play mode are part of the key: the same sheet can animate differently.
         String key = columns + "x" + rows + ":" + frameCount + ":" + frameDuration + ":" + playMode;
         Animation<TextureRegion> animation = byLayout.get(key);
         if (animation == null) {

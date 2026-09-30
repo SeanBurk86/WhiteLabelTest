@@ -5,8 +5,7 @@ import com.badlogic.gdx.math.Circle;
 import com.badlogic.gdx.math.Rectangle;
 import com.badlogic.gdx.math.Vector2;
 
-/** Moves straight toward a fixed point in the gameplay area (world units, same space as
- *  worldWidth/worldHeight) and reports isFinished() once within stopDistance of it. */
+/** Moves straight toward a fixed world point and finishes (enemy removed) within stopDistance. */
 public class MoveToPointMovement implements MovementPattern {
     public static final float DEFAULT_STOP_DISTANCE = 0.1f;
 

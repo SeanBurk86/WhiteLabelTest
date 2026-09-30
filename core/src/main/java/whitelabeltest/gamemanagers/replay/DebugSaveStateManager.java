@@ -6,8 +6,7 @@ import com.badlogic.gdx.utils.Array;
 import com.badlogic.gdx.utils.Json;
 import com.badlogic.gdx.utils.SerializationException;
 
-/** Debug-only: persists named spawn-schedule time bookmarks across runs so testers can jump
- *  straight back to a wave they were tuning instead of waiting through the whole level again. */
+/** Debug-only: stage time/distance bookmarks persisted in data/debug_savestates.json. */
 public class DebugSaveStateManager {
     private static final String SAVE_FILE = "data/debug_savestates.json";
 

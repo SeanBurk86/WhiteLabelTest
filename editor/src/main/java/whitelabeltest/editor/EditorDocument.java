@@ -14,23 +14,14 @@ import java.io.UncheckedIOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 
-/** Owns the trigger file currently open in the editor - the exact same
- *  TriggerManager.TriggerFile shape (cameraSpeed + triggers[]) the game's TriggerManager parses, so
- *  save()/load() are a straight read/write of that one format, no translation. Never touches
- *  Gdx.files (no live LibGDX Application exists in this JavaFX app) - reads/writes plain text via
- *  java.nio.file.Files and hands it to Json's String-based overloads instead, same technique
- *  StageLibrary uses. */
+/** The open trigger file (TriggerManager.TriggerFile: cameraSpeed + triggers), with dirty
+ *  tracking and change listeners. Uses plain file I/O. */
 public class EditorDocument {
     private TriggerManager.TriggerFile file;
     private Path path;
     private boolean dirty;
-    // Which stage this trigger file belongs to - set by OpenStageDialog right after load/create,
-    // purely so StageCanvas can look up its backgroundLayers/music/etc. for context (background-art
-    // preview - see StageCanvas.drawBackgroundArt()). Not persisted - this is derived from
-    // data/stages.json, not part of the trigger file itself.
+    // The stage this file belongs to (for background art). Not saved in the trigger file.
     private StageDefinition stageDefinition;
-    // Several parts of the UI (canvas, status bar, properties panel) each need to react to a
-    // load/save/mutation independently, so this is a list rather than a single Runnable slot.
     private final java.util.List<Runnable> changeListeners = new java.util.ArrayList<>();
 
     public EditorDocument() {
@@ -51,9 +42,7 @@ public class EditorDocument {
     public boolean isDirty() { return dirty; }
     public StageDefinition getStageDefinition() { return stageDefinition; }
 
-    /** See stageDefinition's own field doc - call right after load()/newTriggerFile(). Fires the
-     *  same change listeners so StageCanvas re-renders its background-art preview for the newly
-     *  associated stage. */
+    /** Call after load()/newTriggerFile(); notifies listeners. */
     public void setStageDefinition(StageDefinition stageDefinition) {
         this.stageDefinition = stageDefinition;
         fireChanged();
@@ -74,10 +63,7 @@ public class EditorDocument {
         }
     }
 
-    /** Starts a brand-new, empty trigger file in memory (cameraSpeed 1.0, no triggers) at the given
-     *  path - the caller (StageLibrary, for a stage with no triggerFile yet) is responsible for
-     *  actually creating the file/stages.json entry on disk; this just points the open document at
-     *  it and marks it dirty so the first Save writes it for real. */
+    /** An empty, dirty document at `p` (the caller creates the file entry). */
     public void newTriggerFile(Path p) {
         file = new TriggerManager.TriggerFile();
         file.cameraSpeed = 1f;
@@ -97,8 +83,7 @@ public class EditorDocument {
         markDirty();
     }
 
-    /** Call after mutating a Trigger's fields in place (e.g. from PropertiesPanel or a drag
-     *  reposition) - there's nothing to re-add, just marks the document unsaved. */
+    /** Call after changing a trigger in place; notifies listeners. */
     public void markDirty() {
         dirty = true;
         fireChanged();
@@ -128,8 +113,7 @@ public class EditorDocument {
         if (chosen != null) saveAs(chosen.toPath());
     }
 
-    /** Same OutputType.json + prettyPrint technique SpawnScheduleEditor.saveToDisk() already uses
-     *  for the equivalent schedule-file round trip - see that class's doc. */
+    /** Pretty-printed standard JSON. */
     private void writeToDisk(Path p) {
         Json json = new Json();
         json.setOutputType(JsonWriter.OutputType.json);

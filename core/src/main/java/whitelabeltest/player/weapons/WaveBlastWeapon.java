@@ -19,12 +19,8 @@ public class WaveBlastWeapon extends BaseWeapon {
     private static final float SPLINTER_DAMAGE_SCALE = 0.5f;
     private static final float SPLINTER_ANGLE = 45f;
 
-    // WaveBlastWeapon's Hyper Attack: three homing bolts fired out the back (down-left,
-    // straight down, down-right - standard math angles, not the up-is-zero convention the spread
-    // patterns above use), each carrying the weapon's current level damage. Gated by its own
-    // cooldown, independent of the normal fire-rate cooldown. Launched well below the weapon's
-    // own bullet speed - at full speed they'd cover most of the play field before HomingBolt's
-    // turn rate could pull them back around toward anything.
+    // Hyper Attack: three homing bolts out the back (standard math angles). Slow, so they can
+    // turn around before leaving the field.
     private static final float[] HYPER_ATTACK_ANGLES_DEG = {225f, 270f, 315f};
     private static final float HYPER_ATTACK_SPEED = 5f;
     private static final float HYPER_ATTACK_COOLDOWN = 4f;
@@ -136,9 +132,7 @@ public class WaveBlastWeapon extends BaseWeapon {
         audio.playWaveBlastWeaponSound(level);
     }
 
-    /** WaveBlastWeapon's Hyper Attack: launches three homing bolts out the back at fixed angles,
-     *  each dealing this weapon's current-level damage - silently does nothing while on its own
-     *  4-second cooldown (see addShootTimer()). */
+    /** Three homing bolts at the current level's damage; ignored while on cooldown. */
     @Override
     public void hyperAttack(Player player, Array<Weapon> activeWeapons, Array<Enemy> enemies, AssetManager assets, AudioManager audio) {
         if (hyperAttackCooldownTimer > 0f) return;
@@ -157,9 +151,7 @@ public class WaveBlastWeapon extends BaseWeapon {
         playFireSound(audio, level);
     }
 
-    // Ticks down regardless of which slot is active, matching every other weapon's own cooldown
-    // convention (see Player.advanceWeaponTimers) - not reset or fast-forwarded by switching away
-    // from WaveBlastWeapon and back.
+    // Also ticks the Hyper Attack cooldown.
     @Override
     public void addShootTimer(float delta) {
         super.addShootTimer(delta);

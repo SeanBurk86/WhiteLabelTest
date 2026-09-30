@@ -7,22 +7,12 @@ import com.badlogic.gdx.math.Rectangle;
 import com.badlogic.gdx.math.Vector2;
 import com.badlogic.gdx.utils.Array;
 
-/** Follows a Cardinal-spline curve (see WaypointSpline) through an ordered list of waypoints,
- *  starting from wherever the sprite actually is the first time update() runs (the enemy's real
- *  spawn position - not baked in at construction, same "read the sprite fresh" idiom
- *  MoveToPointMovement already uses) - see PatternFactory's "WaypointPath" case, which builds the
- *  Leg list from a MovementPatternDef's `patterns` (each a "MoveToPoint" leg carrying the new
- *  per-waypoint fields - see that class's own doc) with flipX/flipY already applied.
- *
- * Each segment is walked at ITS OWN destination waypoint's speed (matching how "speed at waypoint"
- * reads in the reference tool this was modeled on - see this session's design discussion), scaled
- * by the whole path's globalSpeed. Progress within a segment is driven by the curve's own local
- * tangent magnitude (an arc-length-rate approximation, not exact reparameterization - accurate
- * enough at this game's scale/tension range) so a sharp corner (tension near 1) doesn't get walked
- * unnaturally fast or slow relative to a smooth stretch. */
+/** Follows a Cardinal spline (WaypointSpline) through the waypoints, starting from wherever the
+ *  sprite is on its first update. Each segment moves at its destination waypoint's speed times
+ *  globalSpeed, with progress scaled by the local tangent length (an arc-length approximation) so
+ *  corners and straights move at similar speeds. A non-looping path holds at its last waypoint. */
 public class WaypointPathMovement implements MovementPattern {
-    /** One waypoint's full authored field set, extracted (with flip already applied) from its
-     *  MovementPatternDef leg by PatternFactory - see that class's "WaypointPath" case. */
+    /** One waypoint's fields (flips already applied by PatternFactory). */
     public static class Leg {
         public final float targetX, targetY;
         public final float tension;
@@ -57,11 +47,9 @@ public class WaypointPathMovement implements MovementPattern {
         }
     }
 
-    // Minimum tangent magnitude used when converting "world units/sec" into "curve-parameter/sec" -
-    // guards against a near-zero local tangent (a very high-tension corner) making progress blow up.
+    // Floor on the tangent length when converting speed to curve progress (sharp corners).
     private static final float MIN_TANGENT_MAGNITUDE = 0.5f;
-    // Longest distance (world units) the path advances between re-reading the curve's local speed -
-    // see update().
+    // Longest step (world units) between re-reading the curve's local speed.
     private static final float MAX_SUBSTEP_DISTANCE = 0.02f;
 
     private final Array<Leg> legs;
@@ -84,10 +72,7 @@ public class WaypointPathMovement implements MovementPattern {
 
     private WaypointCue pendingCue;
 
-    // Accumulated MovementPattern.applyGroundScroll() offset - see that method's own doc on why a
-    // ground enemy on this pattern needs it added into finalY below rather than relying on
-    // BaseEnemy's own sprite.translate(), which this class's own setCenterY() call would otherwise
-    // silently overwrite (and thus discard) the very next update().
+    // Accumulated ground scroll (see MovementPattern.applyGroundScroll()).
     private float groundScrollOffsetY = 0f;
 
     public WaypointPathMovement(Array<Leg> legs, boolean closePath, float globalSpeed) {
@@ -96,14 +81,7 @@ public class WaypointPathMovement implements MovementPattern {
         this.globalSpeed = globalSpeed > 0 ? globalSpeed : 1f;
     }
 
-    /** This path's own authored legs, in order - see EnemyEntranceMovement.spawnY()'s own doc on why
-     *  it needs legs.first().targetY: this pattern's initFrom() starts from wherever the sprite
-     *  actually spawns and curves straight to that first leg's own absolute target, so the off-screen
-     *  entrance spawn point has to sit safely above THAT target specifically, not just above
-     *  trigger.y/worldHeight - a target already authored close to worldHeight (or pushed there by a
-     *  wave's own rotation - see TriggerManager.fireWave()'s own doc) can otherwise land AT OR ABOVE
-     *  the spawn point computed from trigger.y alone, sending the entrance climbing further off-screen
-     *  instead of descending onto it. */
+    /** The waypoints in order (EnemyEntranceMovement reads the first target). */
     public Array<Leg> getLegs() { return legs; }
 
     private void initFrom(Sprite sprite) {
@@ -134,12 +112,8 @@ public class WaypointPathMovement implements MovementPattern {
         if (waitTimer > 0f) {
             waitTimer -= delta;
         } else {
-            // Advance in short distance-steps, re-reading the curve's local speed each time, rather than
-            // one big step sized from the tangent at the START of the frame: a segment whose end
-            // tangent is tiny (a sharp reversal, e.g. a back-and-forth path, where the neighbouring
-            // waypoints on either side sit on nearly the same spot) has a derivative that grows
-            // several-fold within a single frame, so the one-shot version overshot by 3-6x there - the
-            // enemy visibly snapped forward at every turnaround instead of easing through it.
+            // Advance in short sub-steps, re-reading the local tangent each time. One big step sized
+            // from the frame's starting tangent overshoots badly near sharp reversals.
             float remaining = destination.speed * globalSpeed * delta;
             while (remaining > 0f && localT < 1f) {
                 float step = Math.min(remaining, MAX_SUBSTEP_DISTANCE);
@@ -149,16 +123,8 @@ public class WaypointPathMovement implements MovementPattern {
             }
         }
 
-        // Evaluated BEFORE onArrive() below touches segmentIndex/localT, using localT clamped (not
-        // yet reset) to 1 - the arrival frame's own position/orientation must land exactly on the
-        // waypoint it just reached. Evaluating AFTER onArrive() (this method's original, wrong shape)
-        // used the OLD segmentIndex together with the ALREADY-RESET localT=0, i.e. the START of the
-        // segment just finished, not its end - visually snapping the sprite backward for one frame at
-        // every intermediate waypoint, and PERMANENTLY freezing it there on a path's LAST waypoint,
-        // since pathComplete's own top-of-method early return then skips this block on every
-        // subsequent frame - it never got a second chance to land on the real target. That's what
-        // "reaching the end of the path" actually looked like: not a despawn, a silent teleport back
-        // to the start of the final leg that was never corrected afterward.
+        // Evaluate before onArrive() advances the segment, so the arrival frame lands exactly on the
+        // waypoint (and the final waypoint is where the path holds).
         float evalT = segmentIndex + Math.min(localT, 1f);
         WaypointSpline.evaluate(tempPos, points, tensions, closePath, evalT);
         float finalX = tempPos.x;
@@ -190,13 +156,8 @@ public class WaypointPathMovement implements MovementPattern {
         }
         if (closePath) {
             segmentIndex = (segmentIndex + 1) % legs.size;
-            // Wrapping back to segment 0 means "start the next lap", but segment 0 begins at
-            // points[0] - the enemy's SPAWN position, captured once by initFrom() - so without this
-            // the sprite teleports back there at the end of every lap (the last leg's target sits at
-            // points[points.length-1], and the closed-curve evaluate() never actually walks the
-            // final "last waypoint -> points[0]" segment, since segmentIndex only spans legs.size
-            // segments). Re-anchoring points[0] onto the last waypoint makes every lap after the
-            // first start exactly where the previous one ended.
+            // points[0] is the spawn position; move it to the last waypoint so the next lap starts
+            // where this one ended instead of teleporting back to the spawn point.
             if (segmentIndex == 0) {
                 int last = points.length - 1;
                 points[0].set(points[last]);
@@ -232,37 +193,21 @@ public class WaypointPathMovement implements MovementPattern {
         }
     }
 
-    /** Turns `current` toward `target` (both degrees) by at most `maxDelta` degrees, going whichever
-     *  way (cw/ccw) is shorter - libGDX's MathUtils only offers a progress-based lerpAngleDeg, not a
-     *  fixed-rate-per-frame one, so this is the fixed-rate equivalent "player" orientation needs. */
+    /** Turns toward `target` by at most maxDelta degrees the shorter way (a fixed-rate lerpAngleDeg). */
     private static float turnToward(float current, float target, float maxDelta) {
         float diff = ((target - current + 180f) % 360f + 360f) % 360f - 180f;
         if (Math.abs(diff) <= maxDelta) return current + diff;
         return current + Math.signum(diff) * maxDelta;
     }
 
-    /** Always false - reaching the end of a (non-looping) path holds the enemy at its final waypoint
-     *  rather than ending it. `pathComplete` above only ever short-circuits update() internally (so the
-     *  sprite settles and stays put once the last leg is reached, instead of continuing to re-evaluate
-     *  curve math past the authored points) - it was ALSO being returned here until this fix, which
-     *  is wrong: GenericEnemy.isOffScreen() (and PlayerPreviewView's own mirrored simulation) treats
-     *  isFinished()==true as an immediate "remove this entity" signal, the same as a MoveToPoint
-     *  enemy that's truly meant to vanish on arrival - but a waypoint path finishing usually means the
-     *  opposite (an enemy parked at its last waypoint to keep fighting/holding until an explicit
-     *  despawn trigger, a kill, or the ordinary off-screen bounds check actually removes it), not an
-     *  instant unconditional despawn the moment its scripted flight-in completes. This was also the
-     *  root cause of enemies' apparent timing drifting from the editor's own Player View preview: that
-     *  preview runs the exact same MovementPattern.isFinished() check to decide when to stop drawing
-     *  an enemy, so it was silently reproducing the same premature-disappearance bug it was supposed
-     *  to be an accurate preview of. */
+    /** Always false: finishing the path parks the enemy at its last waypoint (until killed,
+     *  despawned or it leaves the screen) rather than removing it. */
     @Override
     public boolean isFinished() {
         return false;
     }
 
-    /** True once this (non-looping) path has reached its last waypoint - see MovementPattern.
-     *  isSettled()'s own doc for why this is exposed separately from isFinished() above. Always false
-     *  for a closePath loop, which by construction never stops moving on its own. */
+    /** True once a non-looping path reaches its last waypoint. */
     @Override
     public boolean isSettled() {
         return pathComplete;

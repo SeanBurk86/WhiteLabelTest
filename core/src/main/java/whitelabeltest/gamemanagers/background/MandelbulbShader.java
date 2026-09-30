@@ -6,33 +6,24 @@ import com.badlogic.gdx.graphics.g2d.SpriteBatch;
 import com.badlogic.gdx.graphics.glutils.ShaderProgram;
 import com.badlogic.gdx.math.MathUtils;
 
-/** Stage 3's background - a raymarched Mandelbulb the camera flies around and, later in the stage, into,
- *  while the fractal's power/twist and its colours drift over time.
- *
- *  The camera starts out orbiting the bulb from outside, then - once the stage's camera distance passes
- *  setDiveDistance() (GameController sets that to a little before the boss trigger) - bursts through the
- *  fractal's skin into the hollow chamber inside it and flies around in there for the rest of the stage.
- *  Where the camera is comes from MandelbulbCamera (see its doc for why that's an autopilot rather than a
- *  path); this class just runs the clocks, feeds it, and hands the result to mandelbulb.frag.
- *
- *  The dive is driven by camera DISTANCE rather than this shader's own clock for the same reason
- *  Stage2KaleidoscopeShader's fade is: the clock restarts on every seek/checkpoint/quick-start (see
- *  resetTime()), which would otherwise throw the camera back outside the bulb wherever you jumped to. */
+/** Stage 3's "mandelbulb" background (mandelbulb.frag): a ray-marched Mandelbulb whose power, twist
+ *  and colors drift. The camera orbits it, then from setDiveDistance() (a little before the boss)
+ *  bursts through into the hollow interior. MandelbulbCamera flies the camera; this class runs the
+ *  clocks. The dive follows camera distance, not the shader clock, because the clock restarts on
+ *  every seek. */
 public class MandelbulbShader implements BackgroundShader {
-    /** How many distance units the outside -> inside blend takes, starting at setDiveDistance(). */
+    /** Distance units the outside-to-inside blend takes. */
     public static final float DIVE_BLEND_DISTANCE = 6f;
-    // Camera clock rate (shader seconds per real second) for the outside orbit.
+    // Orbit clock rate (shader seconds per real second).
     private static final float ORBIT_RATE = 0.3f;
-    // How fast the fractal's parameters drift once the camera is inside, relative to outside. Slowed
-    // down because the chamber's walls ARE the fractal surface: morphing it at full speed would sweep
-    // walls over the camera faster than it can steer clear.
+    // Slower fractal morphing inside, where the walls are the fractal surface and the camera must
+    // be able to steer clear of them.
     private static final float INSIDE_PARAM_RATE = 0.25f;
 
     private final ShaderProgram shader;
     private final GraphicsSettings.ShaderQuality quality;
     private float time;
-    // The clocks below are integrated (not derived from `time`) because their rates change with the dive
-    // - deriving them would make the value jump whenever the rate does.
+    // Integrated clocks (their rates change during the dive, so deriving them from time would jump).
     private float orbitTime;
     private float diveTime;
     private float paramTime;
@@ -43,15 +34,14 @@ public class MandelbulbShader implements BackgroundShader {
     private float diveDistance = -1f;
 
     public MandelbulbShader() {
-        // See GraphicsSettings.ShaderQuality - lower levels march fewer, longer steps (the define), and
-        // ReducedResolutionRenderer renders them smaller and, at LOW, less often.
+        // Lower quality levels compile with fewer march steps.
         quality = GraphicsSettings.getShaderQuality();
         shader = quality.define != null
             ? ShaderLoader.compile("MandelbulbShader", "background.vert", "mandelbulb.frag", quality.define)
             : ShaderLoader.compile("MandelbulbShader", "background.vert", "mandelbulb.frag");
     }
 
-    /** The camera's current distance into the stage - see the class doc. */
+    /** The stage camera's current distance. */
     public void setStageDistance(float distance) {
         this.stageDistance = distance;
     }
@@ -79,8 +69,7 @@ public class MandelbulbShader implements BackgroundShader {
         camera.update(delta, orbitTime, diveTime, inside, power(), twist());
     }
 
-    // Same functions the shader used to compute from u_time itself; they live here now because the camera
-    // needs the identical values to steer around the identical surface.
+    // Computed here (not in the shader) so the camera steers around exactly the rendered surface.
     private float power() {
         return 6.5f + 2f * MathUtils.sin(paramTime * 0.11f) + 0.5f * MathUtils.sin(paramTime * 0.29f + 1.7f);
     }
@@ -114,7 +103,7 @@ public class MandelbulbShader implements BackgroundShader {
         shader.setUniformf("u_twist", twist());
         shader.setUniformf("u_resolution", worldWidth, worldHeight);
 
-        // quadTexture is a dummy that only triggers the draw call - the shader computes every pixel.
+        // quadTexture is only a dummy for the draw call.
         batch.draw(quadTexture, 0, 0, worldWidth, worldHeight);
 
         batch.setShader(previousShader);

@@ -4,12 +4,13 @@ import com.badlogic.gdx.utils.Array;
 import com.badlogic.gdx.utils.Json;
 import com.badlogic.gdx.utils.JsonValue;
 
+/** A firing pattern from data/firing_patterns/<id>.json, or a nested sub-pattern. Most fields are
+ *  "unset" at -1/NaN and fall back to the referenced BulletDef or the pattern's own default; a
+ *  pattern's own value always wins. Custom serialization writes only set fields. See the README's
+ *  "Firing patterns" table for which type reads which fields. */
 public class FiringPatternDef implements Json.Serializable {
-    // A bullet's sprite-sheet layout and animation speed are purely per-pattern settings (the
-    // bulletFrame*/bulletColumns/bulletRows fields below) — these are their fallbacks when a
-    // pattern doesn't specify its own. Every pattern builds its own bullet animation (reusing the
-    // enemy's default bulletTexture if the pattern doesn't set its own texture), so two patterns
-    // sharing the same default texture must each repeat its layout if they both fire bullets.
+    // Bullet sheet layout fallbacks. Each pattern builds its own bullet animation, so patterns sharing
+    // a texture must each repeat its layout.
     public static final float DEFAULT_BULLET_FRAME_DURATION = 0.1f;
     public static final int DEFAULT_BULLET_FRAME_COUNT = 1;
     public static final int DEFAULT_BULLET_COLUMNS = 0;
@@ -23,18 +24,13 @@ public class FiringPatternDef implements Json.Serializable {
     public String bulletId;
     public float bulletSize = -1f;
     public float bulletSpeed = -1f;
-    // See BulletDef's matching fields for the full explanation - this pattern's own value always
-    // wins over its referenced BulletDef's, same as bulletSpeed above.
+    // Speed profile (see BulletDef). A pattern's phase list replaces the BulletDef's entirely.
     public float bulletAcceleration = 0f;
     public float bulletMinSpeed = -1f;
     public float bulletMaxSpeed = -1f;
-    // See BulletDef.bulletSpeedPhases for the full explanation - this pattern's own list always
-    // wins wholesale over its referenced BulletDef's (the two are never merged), same as
-    // bulletAcceleration above.
     public Array<BulletSpeedPhase> bulletSpeedPhases;
     public boolean bulletSpeedPhasesLoop = true;
-    // See BulletDef's matching fields for the full explanation - each resolved independently
-    // against the referenced BulletDef's, same as bulletSize/bulletSpeed above.
+    // Hitbox overrides (see BulletDef), each resolved independently.
     public String hitboxShape;
     public float hitboxScale = -1f;
     public float hitboxOffsetX = 0f;
@@ -52,13 +48,8 @@ public class FiringPatternDef implements Json.Serializable {
     public float length = -1f;
     public float angularSpeed = 0f;
     public float fireAngle = Float.NaN;
-    // QuarterCircle's optional fixed aim override - see QuarterCircleFiring.fixedAimAngleDeg. A
-    // separate field from fireAngle (Laser's own fixed angle) rather than reusing it: this data
-    // file is machine-exported by an editor that dumps every field on every pattern regardless of
-    // whether that pattern type reads it, so countless existing QuarterCircle entries already carry
-    // a harmless-until-now "fireAngle": 0 left over from that dump - wiring QuarterCircle to read
-    // fireAngle would have silently switched every one of them from tracking the player to firing
-    // fixed at 0 degrees.
+    // QuarterCircle's optional fixed aim. Separate from fireAngle because many existing QuarterCircle
+    // entries carry a stray "fireAngle": 0 that would otherwise stop them tracking the player.
     public float quarterCircleFixedAngle = Float.NaN;
     public float targetX = Float.NaN;
     public float targetY = Float.NaN;
@@ -67,53 +58,33 @@ public class FiringPatternDef implements Json.Serializable {
     public float sweepDuration = -1f;
     public float sweepStartAngle = Float.NaN;
     public float sweepEndAngle = Float.NaN;
-    // SineWave's wave shape - see SineWaveFiring.DEFAULT_AMPLITUDE/DEFAULT_FREQUENCY.
+    // SineWave / Feather wave shape.
     public float amplitude = -1f;
     public float frequency = -1f;
-    // Orbiting's per-bullet spin around its own drifting center - see
-    // OrbitingFiring.DEFAULT_ORBIT_RADIUS/DEFAULT_ORBIT_SPEED (radians/second).
+    // Orbiting: each bullet's spin radius and speed (rad/s) around its drifting center.
     public float orbitRadius = -1f;
     public float orbitSpeed = -1f;
-    // Wall's full-width bullet curtain - see WallFiring. wallMarginX/wallSpacing lay bullets out in
-    // world-space X (not relative to the firing enemy); gapLaneStart/gapLaneCount carve the hole
-    // out of that curtain by lane INDEX rather than a raw X-distance window, so the gap is always
-    // exactly gapLaneCount lanes wide no matter what gapLaneStart is set to.
+    // Wall: a full-width curtain laid out in world X; the gap is gapLaneCount lanes starting at lane
+    // index gapLaneStart.
     public float wallMarginX = -1f;
     public float wallSpacing = -1f;
     public int gapLaneStart = -1;
     public int gapLaneCount = -1;
-    // Optional - one Wall volley per entry, fireRate seconds apart, each entry becoming that
-    // volley's gapLaneStart. Null/absent keeps Wall's original single-volley behavior. See
-    // WallFiring's class doc for why this is how a smoothly weaving, vertically dense column of
-    // walls is built instead of authoring several near-duplicate patterns/spawn events.
+    // Wall: optional, one volley per entry (fireRate apart), each entry that volley's gapLaneStart.
     public int[] gapLaneSequence;
-    // RadialNearMiss's "surround but don't touch" volleys - see RadialNearMissFiring. numBullets is
-    // per volley, fireRate is seconds between volleys, volleyCount caps how many volleys fire
-    // before the pattern goes idle. Each bullet spawns projected onto the play area's edge (using
-    // the worldWidth/worldHeight PatternFactory.createFiring is called with, not a config field
-    // here) so it never spawns already past AimedEnemyBullet's own off-screen cull bounds.
-    // nearMissDistance is how far each bullet's straight path passes from the player's hitbox -
-    // larger than the hitbox radius but small enough to still read as "just barely missed" against
-    // the player's much bigger sprite.
+    // RadialNearMiss: volleys of numBullets from the play-area edge whose paths pass
+    // nearMissDistance from the player's hitbox; volleyCount volleys, fireRate apart.
     public float nearMissDistance = -1f;
     public int volleyCount = -1;
-    // BurstAimed's idle-vs-burst phase - see BurstAimedFiring's phaseOffset constructor param. 0
-    // (the default) is the original single-emitter behavior; two BurstAimed patterns fired from
-    // side-by-side emitters can set this to land in opposite phase instead of bursting in lockstep.
+    // BurstAimed: phase offset (so paired emitters alternate) and seconds between shots in a burst.
     public float phaseOffset = 0f;
-    // BurstAimed's seconds-between-shots-within-a-burst - see BurstAimedFiring's burstInterval
-    // constructor param. -1 (the default) falls back to BurstAimedFiring's own 0.15s default.
     public float burstInterval = -1f;
-    // SpawnEnemy's movement for every enemy it spawns - a movement-pattern id (null = spawns don't move),
-    // the only way to give a spawned enemy any motion since movement isn't part of an EnemyDefinition.
+    // SpawnEnemy: movement pattern id for spawned enemies (null = they don't move).
     public String spawnMovementPattern;
-    // Shape's bullet picture - see ShapeFiring/ShapeBullet. shapePoints is a flat x0,y0,x1,y1...
-    // list of dot positions (world units at scale 1, drawn as the shape looks travelling straight
-    // down); numBullets is the number of shapes per volley (fanned over spreadDegrees) and fireAngle
-    // their fixed center direction (NaN = aimed at the player). Every dot of a picture leaves the
-    // emitter together; shapeFormTime is how many seconds later they line up into the picture at
-    // shapeScale (non-positive = formed and rigid from the start), shapeDriftRatio how fast they then
-    // drift apart relative to their average forming speed (1 = no acceleration) - see ShapeBullet.
+    // Shape: shapePoints is a flat x,y list of dots (world units at scale 1, as seen travelling
+    // down). numBullets shapes per volley fanned over spreadDegrees, centered on fireAngle (NaN =
+    // aimed). The dots form the picture at shapeScale after shapeFormTime seconds (<= 0 = formed
+    // from the start), then drift apart at shapeDriftRatio (1 = no acceleration). See ShapeBullet.
     public float[] shapePoints;
     public float shapeScale = -1f;
     public float shapeFormTime = 1f;

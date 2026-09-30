@@ -11,10 +11,9 @@ import java.text.SimpleDateFormat;
 import java.util.Comparator;
 import java.util.Date;
 
+/** Paged list of saved replay files, newest first; shared by ReplaySelectScreen and the debug menu. */
 public class ReplayBrowser {
-    // How many rows one screenful shows - see setPageSize(). Each consumer (ReplaySelectScreen,
-    // UIManager's debug overlay) sets this to whatever actually fits its own layout; this default
-    // matches the debug overlay's tighter line spacing, so it stays sane even if a caller forgets.
+    // Rows per page unless the caller sets its own (see setPageSize()).
     private static final int DEFAULT_PAGE_SIZE = 10;
 
     private boolean active;
@@ -28,15 +27,12 @@ public class ReplayBrowser {
     public int getSelectedIndex() { return selectedIndex; }
     public String getStatusMessage() { return statusMessage; }
 
-    /** How many rows getDisplayNames() returns at once - call this once after open() if the
-     *  caller's layout needs something other than DEFAULT_PAGE_SIZE (e.g. ReplaySelectScreen's
-     *  bigger font fits fewer rows than the debug overlay). */
+    /** Rows per page, to fit the caller's layout. */
     public void setPageSize(int pageSize) { this.pageSize = Math.max(1, pageSize); }
 
     public int getPageCount() { return files.size == 0 ? 1 : (files.size + pageSize - 1) / pageSize; }
     public int getCurrentPage() { return files.size == 0 ? 0 : selectedIndex / pageSize; }
-    /** Row index of the current selection *within* the page getDisplayNames() just returned - use
-     *  this instead of getSelectedIndex() to highlight the right row once the list is paged. */
+    /** The selection's row within the current page (for highlighting). */
     public int getSelectedIndexInPage() { return files.size == 0 ? 0 : selectedIndex % pageSize; }
 
     public void open() {
@@ -59,8 +55,7 @@ public class ReplayBrowser {
         if (dir.exists()) {
             for (FileHandle f : dir.list(".json")) files.add(f);
         }
-        // Filenames embed epoch millis (replay_<epochMillis>.json), so a reverse string sort is
-        // also a reverse chronological sort - newest recordings first.
+        // Names are replay_<epochMillis>.json, so reverse name order = newest first.
         files.sort(new Comparator<FileHandle>() {
             @Override
             public int compare(FileHandle a, FileHandle b) {
@@ -70,8 +65,7 @@ public class ReplayBrowser {
         selectedIndex = 0;
     }
 
-    /** Labels for just the current page (see getCurrentPage()/setPageSize()), not the whole list -
-     *  pair with getSelectedIndexInPage() to highlight the right row. */
+    /** Labels for the current page only. */
     public Array<String> getDisplayNames() {
         int start = getCurrentPage() * pageSize;
         int end = Math.min(start + pageSize, files.size);
@@ -96,15 +90,13 @@ public class ReplayBrowser {
         return d;
     }
 
-    /** direction -1 moves the highlight up, +1 moves it down - input-source-agnostic, used by both
-     *  handleInput() (debug menu) and ReplaySelectScreen (its own direct Gdx.input polling). */
+    /** -1 = up, +1 = down, wrapping. */
     public void moveSelection(int direction) {
         if (files.size == 0) return;
         selectedIndex = (selectedIndex + direction + files.size) % files.size;
     }
 
-    /** direction -1 jumps a full page back, +1 a full page forward - wraps like moveSelection(),
-     *  and lands on the first row of the destination page. No-op with one page or fewer. */
+    /** -1/+1 = previous/next page (wrapping), landing on its first row. */
     public void movePage(int direction) {
         if (files.size == 0) return;
         int pageCount = getPageCount();
@@ -113,8 +105,7 @@ public class ReplayBrowser {
         selectedIndex = Math.min(page * pageSize, files.size - 1);
     }
 
-    /** Loads and returns the currently-highlighted replay, or null (with getStatusMessage() set) if
-     *  it fails to parse. Input-source-agnostic, same as moveSelection(). */
+    /** Loads the highlighted replay, or returns null and sets the status message on a parse error. */
     public ReplayData confirmSelection() {
         if (files.size == 0) return null;
         return load(files.get(selectedIndex));

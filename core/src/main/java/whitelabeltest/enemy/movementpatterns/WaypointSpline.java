@@ -2,29 +2,17 @@ package whitelabeltest.enemy.movementpatterns;
 
 import com.badlogic.gdx.math.Vector2;
 
-/** Stateless Cardinal-spline (tension-adjustable Catmull-Rom) curve math shared by
- *  WaypointPathMovement (the actual in-game path) and the editor's path preview/edit rendering
- *  (StageCanvas/MovementPathPreview, which depend on this core module and sample the exact same
- *  curve here rather than re-deriving their own, so the editor's preview always matches what the
- *  game actually flies - see MovementPatternDef's WaypointPath field docs).
- *
- * Each control point i has its own tension (0 = full smooth curve, 1 = straight corner): the
- * tangent at point i is (1 - tension[i]) * (points[i+1] - points[i-1]) / 2, the classic Cardinal-
- * spline formula, generalized to a per-point tension instead of one tension for the whole curve.
- * The segment between points[i] and points[i+1] is then a standard cubic Hermite interpolation
- * using each endpoint's own tangent. */
+/** Cardinal-spline math with per-point tension, shared by WaypointPathMovement and the editor's path
+ *  preview so they always match. Tangent at point i = (1 - tension[i]) * (p[i+1] - p[i-1]) / 2
+ *  (0 = smooth, 1 = sharp corner); each segment is a cubic Hermite between its endpoints. */
 public final class WaypointSpline {
     private WaypointSpline() {}
 
-    /** Number of straight segments used to APPROXIMATE one curve segment for preview/collision
-     *  purposes elsewhere (not used by evaluate() itself, which is exact) - a reasonable default
-     *  for how smooth a sampled polyline needs to look at this game's scale. */
+    /** Polyline samples per segment for previews (evaluate() itself is exact). */
     public static final int SAMPLES_PER_SEGMENT = 16;
 
-    /** Position at parameter t, where t's integer part selects the segment (points[i]..points[i+1])
-     *  and its fractional part is the local Hermite parameter within that segment. t is clamped to
-     *  [0, points.length - 1] unless closePath, in which case it wraps. points/tensions must be the
-     *  same length (at least 2). */
+    /** Position at t (integer part = segment, fraction = position within it). Clamped to
+     *  [0, points.length - 1], or wrapped if closePath. Needs at least 2 points. */
     public static Vector2 evaluate(Vector2 out, Vector2[] points, float[] tensions, boolean closePath, float t) {
         int n = points.length;
         int i0 = (int) Math.floor(t);
@@ -54,8 +42,7 @@ public final class WaypointSpline {
         return out;
     }
 
-    /** Tangent (velocity) direction at parameter t - the Hermite basis functions' own derivatives,
-     *  same segment/localT resolution as evaluate(). Used for "face travel direction" orientation. */
+    /** Derivative at t (same parameterization as evaluate()). */
     public static Vector2 tangentAt(Vector2 out, Vector2[] points, float[] tensions, boolean closePath, float t) {
         int n = points.length;
         int i0 = (int) Math.floor(t);
@@ -84,12 +71,8 @@ public final class WaypointSpline {
         return out;
     }
 
-    /** Cardinal-spline tangent at control point i, x then y component - duplicates the nearest endpoint
-     *  for the neighbor that doesn't exist on an open (non-closed) path, so the first/last point still gets
-     *  a sensible (one-sided) tangent instead of needing special-cased zero-tangent endpoints. Returned as
-     *  plain floats rather than a Vector2: evaluate()/tangentAt() run several times per moving enemy per
-     *  frame (see WaypointPathMovement.update()'s sub-steps), and a new Vector2 per call was a steady
-     *  source of garbage-collection hitches. */
+    /** Tangent at control point i (endpoints of an open path use a one-sided difference). Returned
+     *  as separate floats to avoid allocating a Vector2 on this hot path. */
     private static float tangentX(Vector2[] points, int i, float tension, boolean closePath) {
         int n = points.length;
         Vector2 prev = points[closePath ? ((i - 1 + n) % n) : Math.max(i - 1, 0)];

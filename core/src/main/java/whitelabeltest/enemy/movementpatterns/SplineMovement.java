@@ -13,19 +13,14 @@ public class SplineMovement implements MovementPattern {
     private final Vector2 tempPos = new Vector2();
     private final Vector2 tempVel = new Vector2();
 
-    // See MovementPattern.applyGroundScroll()'s own doc - this pattern sets the sprite's position
-    // outright from `path` every update(), which would otherwise silently overwrite (and discard)
-    // BaseEnemy's own translate-based ground scroll the very next frame.
+    // Accumulated ground scroll (see MovementPattern.applyGroundScroll()).
     private float groundScrollOffsetY = 0f;
 
     public SplineMovement(float worldHeight, float duration, float spawnCenterX) {
         this(worldHeight, duration, DEFAULT_ANGLE_DEG, spawnCenterX);
     }
 
-    /** @param angleDeg rotates the whole path around its starting point;
-     *  DEFAULT_ANGLE_DEG keeps the original top-to-bottom S-curve.
-     *  @param spawnCenterX the lane this enemy spawns in (its spawn center-X), as dictated by
-     *  the spawn schedule; the path's horizontal shape is anchored here instead of being random. */
+    /** A fixed top-to-bottom S-curve anchored at spawnCenterX, rotated by angleDeg around its start. */
     public SplineMovement(float worldHeight, float duration, float angleDeg, float spawnCenterX) {
         this.pathDuration = duration;
 
@@ -58,8 +53,7 @@ public class SplineMovement implements MovementPattern {
         path.valueAt(tempPos, t);
         path.derivativeAt(tempVel, t);
 
-        // Apply inverse movement by inverting Y position (and its corresponding velocity
-        // component) relative to world center
+        // Inverse movement mirrors Y (and its velocity) around the world center.
         float finalX = tempPos.x;
         float finalY = tempPos.y;
         if (inverseMovement) {

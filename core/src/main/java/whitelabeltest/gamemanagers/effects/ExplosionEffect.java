@@ -12,11 +12,8 @@ import com.badlogic.gdx.utils.FloatArray;
 import com.badlogic.gdx.utils.Pool;
 import whitelabeltest.enemy.ExplosionPatternDef;
 
-/** Plays one death-explosion pattern. A "Burst" pattern is a leaf: this object owns its own
- *  particles directly. A "Combined"/"Sequence" pattern makes this a composite node whose
- *  sub-patterns are played by child ExplosionEffect instances — mirroring how Combined/Sequence
- *  firing patterns wrap sub-FiringPatterns, just collapsed into one Poolable class since an
- *  explosion has no per-frame gameplay logic to specialize per node type. */
+/** Plays one death-explosion pattern. A "Burst" owns its particles; "Combined" (all at once) and
+ *  "Sequence" (one after another) play child ExplosionEffects. */
 public class ExplosionEffect implements Pool.Poolable {
 
     private static class Particle {
@@ -27,14 +24,12 @@ public class ExplosionEffect implements Pool.Poolable {
         Animation<TextureRegion> anim;
     }
 
-    // Particle objects are kept across pool reuse cycles and overwritten in place by init(),
-    // rather than reallocated on every explosion (this effect is obtained from a pool on every enemy kill).
+    // Particles are reused across pool cycles and overwritten by init() (one explosion per kill).
     private final Array<Particle> particles = new Array<>();
     private int activeParticleCount;
     private float velocityDamping = ExplosionPatternDef.DEFAULT_VELOCITY_DAMPING;
 
-    // Composite (Combined/Sequence) state. Child ExplosionEffect objects are likewise kept
-    // across pool cycles and re-initialized in place rather than reallocated.
+    // Composite state; children are reused the same way.
     private boolean isComposite;
     private boolean isSequence;
     private final Array<ExplosionEffect> children = new Array<>();
@@ -45,11 +40,8 @@ public class ExplosionEffect implements Pool.Poolable {
     private float sequenceTimer;
     private float originX, originY, enemyWidth;
 
-    /** Builds this explosion purely from its pattern definition (particle count, sprite-sheet
-     *  layout, size/speed ranges, timing and spread — or, for a Combined/Sequence pattern, its
-     *  sub-patterns) plus the enemy's own width and where it died — the same "pattern describes
-     *  it, caller only supplies world position" split used by firing/movement patterns. A
-     *  missing pattern produces no particles rather than throwing. */
+    /** Builds the explosion from its pattern, the death position and the enemy width (sizes scale
+     *  with it). A null pattern produces nothing. */
     public void init(ExplosionPatternDef pattern, float originX, float originY, float enemyWidth) {
         activeParticleCount = 0;
         isComposite = false;
@@ -139,10 +131,8 @@ public class ExplosionEffect implements Pool.Poolable {
                 return;
             }
 
-            // Sequence: only the current stage runs; once its duration elapses, cut over to the
-            // next stage immediately (not overlapped or faded) — the same "switch on a boundary"
-            // semantics SequencedFiringPattern uses. The final stage has no next stage to cut to,
-            // so it simply keeps running until its own particles finish.
+            // Sequence: run only the current stage, cutting to the next when its duration ends.
+            // The last stage runs until its particles finish.
             if (sequenceIndex < activeChildCount - 1) {
                 sequenceTimer += delta;
                 if (sequenceTimer >= childDurations.get(sequenceIndex)) {
@@ -205,7 +195,6 @@ public class ExplosionEffect implements Pool.Poolable {
 
     @Override
     public void reset() {
-        // Particle/child objects are intentionally kept (not cleared) so init() can reuse them
-        // on the next obtain() instead of reallocating; init() overwrites every field.
+        // Particles and children are kept for reuse; init() overwrites every field.
     }
 }

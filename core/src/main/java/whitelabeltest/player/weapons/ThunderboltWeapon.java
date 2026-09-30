@@ -33,10 +33,8 @@ public class ThunderboltWeapon extends BaseWeapon {
     private static final float CORE_ALPHA_SCALE = 1.0f;
     private static final float CORE_WIDTH_SCALE = 0.5f;
 
-    // Same hue as the additive glow, just driven far down in value, and drawn with normal alpha
-    // blending (see drawOutline()) instead of GL_MAX - MAX can only brighten a pixel, so against a
-    // light background (bg1.png) a "darker" additive layer would just lose to the background and
-    // vanish. This layer is what actually reads as dark, visible contrast there.
+    // Dark outline, alpha-blended rather than GL_MAX (which can only brighten), so the bolt keeps
+    // contrast on light backgrounds.
     private static final float OUTLINE_WIDTH_SCALE = 2.4f;
     private static final float OUTLINE_COLOR_R = 0.12f, OUTLINE_COLOR_G = 0.02f, OUTLINE_COLOR_B = 0.02f;
     private static final float OUTLINE_ALPHA_SCALE = 0.6f;
@@ -48,44 +46,28 @@ public class ThunderboltWeapon extends BaseWeapon {
     private static final float NOISE_SPEED_2 = 23f;
 
     private static final int SPRITES_PER_LAYER = 5;
-    // Layers 0-2 (outer glow, inner glow, core) are additive/GL_MAX; layer 3 (outline) is normal
-    // alpha blend - see drawOutline()/drawGlowAndCore() for why they're drawn in separate passes.
+    // Layers 0-2 (outer glow, inner glow, core) use GL_MAX; layer 3 (outline) is alpha-blended.
     private static final int LAYER_COUNT = 4;
     private static final int OUTLINE_LAYER_OFFSET = SPRITES_PER_LAYER * 3;
     private static final int SPRITES_PER_SEGMENT = SPRITES_PER_LAYER * LAYER_COUNT;
 
-    // ThunderboltWeapon's Hyper Attack: see Player.triggerThunderboltHyperAttack for the halo's
-    // charge-then-detonate behavior this only kicks off - all of the actual charge/damage/arc
-    // logic lives on Player/CollisionManager, the same split BasicWeapon's halo dash uses.
-    // Uncooldowned, unlike WaveBlastWeapon's hyper attack - Player.triggerThunderboltHyperAttack
-    // already refuses to start a second charge while the halo's still out on this one, so there's
-    // nothing left for a cooldown to gate.
-
-    // Public: EntityManager batches the GL_MAX blend section across every active strike instead
-    // of each one flushing/toggling it independently - see drawBolts()/draw().
+    // Public so EntityManager can open one GL_MAX section for all active strikes.
     public static final int GL_MAX = 0x8008;
 
     private WeaponDefinition def;
     private Texture texture;
     private Texture circleTexture;
     private final Vector2 origin = new Vector2();
-    // The single enemy this bolt was aimed at when fired (see ThunderboltWeapon.spawn()'s
-    // nearest-enemy selection) - no hitbox/direction/range check involved, hasDamaged() just
-    // refuses to damage anything else. rectangle is bound to this enemy's own rect at init() time
-    // so the normal per-frame CollisionManager overlap test resolves against it directly.
+    // The only enemy this strike can damage. rectangle is bound to its rect, so the normal
+    // overlap test always hits it.
     private Enemy target;
     private boolean hit;
-    // True for a bolt spawned by another bolt's hit (see spawnArcs()) rather than fired by the player: it
-    // deals reduced damage and never arcs on itself.
+    // Spawned by another bolt's hit: reduced damage, never arcs.
     private boolean arcBolt;
-    // Scratch buffer for spawnArcs()' candidate sort.
     private final Array<Enemy> arcCandidates = new Array<>(false, 16);
-    // Whether the equipped instance's most recent spawn() found any enemy to strike - see
-    // playFireSound(). Meaningless on a pooled per-bolt instance; only the equipped weapon-slot
-    // instance's spawn()/playFireSound() pair reads and writes it.
+    // Slot instance only: whether the last spawn() found a target (picks the fire sound).
     private boolean foundTarget;
-    // Scratch buffer for spawn()'s nearest-enemy sort - only ever used on the equipped weapon
-    // instance (spawn() is called on `this`, never on a pooled bolt), not per-bolt state.
+    // Slot instance only: scratch for spawn()'s nearest-enemy sort.
     private final Array<Enemy> nearestEnemies = new Array<>(false, 16);
     private final Array<Sprite> bolts = new Array<>(false, 96);
 
@@ -99,9 +81,7 @@ public class ThunderboltWeapon extends BaseWeapon {
     private int segCount = 0;
     private float lifeTime = 0f;
 
-    /** Configures the weapon-slot instance's definition only - unlike the full init() below (used
-     *  for an actual fired bolt), this instance is never itself drawn or collided (see Player's
-     *  currentWeapon dispatch); spawn()/getFireRate() just read its def. */
+    /** For the weapon-slot instance, which is never drawn; init() is for fired strikes. */
     public void initDefinition(WeaponDefinition def) {
         this.def = def;
     }
@@ -215,14 +195,9 @@ public class ThunderboltWeapon extends BaseWeapon {
         float midX = (x1 + x2) / 2f + perpX * wobble;
         float midY = (y1 + y2) / 2f + perpY * wobble;
 
-        // The three glow/core layers are drawn with a MAX blend equation (see draw()) so
-        // overlapping joints - e.g. where one segment's end cap sits on top of the next segment's
-        // start cap - don't compound into a brighter seam the way normal alpha blending would;
-        // max(a, a) is just a, no matter how many times the same spot gets drawn. MAX ignores
-        // blend factors entirely, so their fade has to be baked into RGB brightness instead of the
-        // alpha channel. The glow layers also spread wider as they fade (blurScale), a cheap
-        // stand-in for a real blur. The outline layer is normal alpha blend instead (see
-        // drawOutline()), so its fade is carried in the alpha channel like usual.
+        // GL_MAX keeps overlapping segment joints from forming bright seams, but ignores alpha, so
+        // the glow/core fade is baked into RGB. Glows widen as they fade (a cheap blur). The
+        // outline fades via alpha.
         float blurScale = 1f + FADE_BLUR_GROWTH * t;
         float coreBrightness = baseAlpha * CORE_ALPHA_SCALE;
 
@@ -276,10 +251,7 @@ public class ThunderboltWeapon extends BaseWeapon {
         }
     }
 
-    /** Draws just this strike's dark outline layer, with no blend-state changes of its own - it
-     *  needs normal alpha blending (not the glow/core layers' GL_MAX), so callers must draw it
-     *  before opening a GL_MAX section. See EntityManager.drawThunderboltBolts for the batched
-     *  multi-strike version this exists for. */
+    /** Outline only, no blend changes. Draw before opening the GL_MAX section. */
     public void drawOutline(SpriteBatch batch) {
         for (int i = 0; i < segCount; i++) {
             int base = i * SPRITES_PER_SEGMENT + OUTLINE_LAYER_OFFSET;
@@ -289,12 +261,8 @@ public class ThunderboltWeapon extends BaseWeapon {
         }
     }
 
-    /** Draws just this strike's outer glow, inner glow, and core sprites, with no blend-state
-     *  changes of its own - callers that have several active strikes (the common case: a level-4
-     *  fire spawns up to 6 at once) must wrap the whole batch of them in a single GL_MAX blend
-     *  section themselves (see EntityManager.drawThunderboltBolts), so the flush()/
-     *  glBlendEquation() cost - each a forced GPU sync point - is paid once per frame instead of
-     *  once per strike. */
+    /** Glow and core only, no blend changes. The caller wraps all strikes in one GL_MAX section so
+     *  the flush / blend switch happens once per frame. */
     public void drawGlowAndCore(SpriteBatch batch) {
         for (int i = 0; i < segCount; i++) {
             int base = i * SPRITES_PER_SEGMENT;
@@ -304,10 +272,7 @@ public class ThunderboltWeapon extends BaseWeapon {
         }
     }
 
-    /** Self-contained fallback for callers that draw a single strike in isolation - draws the
-     *  outline with the batch's normal blending, then wraps drawGlowAndCore() in its own GL_MAX
-     *  section. EntityManager doesn't use this path; it calls drawOutline()/drawGlowAndCore()
-     *  directly inside its own shared sections instead (see drawThunderboltBolts). */
+    /** Standalone draw of one strike with its own GL_MAX section (EntityManager batches instead). */
     @Override
     public void draw(SpriteBatch batch) {
         int srcFunc = batch.getBlendSrcFunc();
@@ -335,12 +300,9 @@ public class ThunderboltWeapon extends BaseWeapon {
         return false;
     }
 
-    /** Chain lightning: this bolt has just hit `hit`, so strike up to arcTargets OTHER enemies near it (within
-     *  arcRange of it) with bolts of their own - real Thunderbolt strikes, drawn and resolved exactly like a fired
-     *  one (same thick bolt, same hit animation, same damage/score handling in CollisionManager) but for this
-     *  bolt's damage times arcDamageMultiplier, and unable to arc further. Enemies no live bolt is already striking
-     *  come first - the point is to spread onto ADDITIONAL targets - then nearest first; if there aren't enough of
-     *  those it doubles up on ones already being struck rather than not arcing at all. */
+    /** Chain lightning: strikes up to arcTargets other enemies within arcRange of `hit` with full
+     *  strikes at reduced damage that can't arc again. Enemies not already targeted come first, then
+     *  the nearest. */
     public void spawnArcs(Array<Weapon> activeWeapons, Enemy hit, Array<Enemy> enemies) {
         if (arcBolt || def.arcTargets <= 0) return;
 
@@ -411,11 +373,8 @@ public class ThunderboltWeapon extends BaseWeapon {
         hit = true;
     }
 
-    /** Fires one bolt per target - up to 2 at level 1, 4/6/8 at higher levels - at whichever
-     *  enemies are currently closest to the player, full screen, no direction or range check.
-     *  With fewer active enemies than bolts to fire, extra bolts double up on the closest ones
-     *  again (round-robin from the front of the sorted list) instead of going unfired, so each
-     *  stacks its own instance of the weapon's damage onto the same target. */
+    /** Strikes the enemies nearest the player (2/4/6/8 bolts by level, no range limit). With too
+     *  few enemies, extra bolts double up on the nearest. */
     @Override
     public void spawn(Array<Weapon> activeWeapons, Texture texture, float x, float y, Player player, Array<Enemy> enemies, AssetManager assets) {
         nearestEnemies.clear();
@@ -460,18 +419,14 @@ public class ThunderboltWeapon extends BaseWeapon {
     @Override
     public float getFireRate() { return def.getFireRate(level); }
 
-    /** Only the normal weapon sound if the shot that just fired (see spawn()) actually found an
-     *  enemy to strike - otherwise the nulllightning.mp3 whiff, since a bolt with nothing to
-     *  target never even spawns. */
+    /** A whiff sound when there was nothing to strike. */
     @Override
     public void playFireSound(AudioManager audio, int level) {
         if (foundTarget) audio.playThunderboltWeaponSound(level);
         else audio.playThunderboltNullSound();
     }
 
-    /** Starts the halo's charge-then-detonate sequence (see Player.triggerThunderboltHyperAttack)
-     *  - no cooldown of its own; Player already refuses to start a new charge while the halo's
-     *  still out from the last one. */
+    /** Halo charge-and-detonate (see Player.triggerThunderboltHyperAttack). No cooldown. */
     @Override
     public void hyperAttack(Player player, Array<Weapon> activeWeapons, Array<Enemy> enemies, AssetManager assets, AudioManager audio) {
         player.triggerThunderboltHyperAttack();

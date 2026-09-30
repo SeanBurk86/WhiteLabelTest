@@ -17,20 +17,9 @@ import java.util.function.Consumer;
 import java.util.function.Predicate;
 import java.util.function.Supplier;
 
-/** Debug-only tool: edit the currently-loaded stage's spawn schedule (SpawnScheduler.SpawnEvent
- *  list) live from the debug menu - browse events one at a time (like PatternPreviewer's enemy id
- *  picker), add/remove them, and edit every field: time, event kind (a normal enemy spawn vs.
- *  silence/despawn-matching, a waypoint gem, or a weapon swap), enemy/def id, position, powerup,
- *  formation offset, and movement/firing pattern overrides.
- *
- *  Loads and saves the WHOLE schedule file (SpawnScheduler.ScheduleFile), not just its events
- *  list, so every other cue type already authored in the file (text/sound/sprite cues, gates,
- *  timing windows) round-trips untouched even though this editor doesn't expose them - see
- *  open()/saveToDisk(). Nothing is written to disk until the "Save Schedule To Disk" row is
- *  confirmed, same "edit a working copy, explicit save" convention as PatternPreviewer - and
- *  since SpawnScheduler itself only reads its schedule file once, at stage load, saved changes
- *  don't take effect on the currently-running stage until it's reloaded (see the status message
- *  after saving). */
+/** Debug-menu editor for the loaded stage's legacy spawn schedule events. Edits a working copy of
+ *  the whole ScheduleFile (so cue types it doesn't expose round-trip untouched) and writes it only
+ *  on explicit save, which then reloads the stage. */
 public class SpawnScheduleEditor {
     private static final String NONE_LABEL = "(none)";
     private static final String[] KIND_OPTIONS = {"Enemy Spawn", "Silence Matching", "Despawn Matching", "Waypoint Gem", "Swap Weapon"};
@@ -78,17 +67,11 @@ public class SpawnScheduleEditor {
     private final Array<Row> rows = new Array<>();
     private int selectedRow;
     private boolean dirty;
-    // Run at the end of a successful saveToDisk() - see open(). GameController wires this to a
-    // fresh reload of the currently-selected stage: SpawnScheduler only reads its schedule file
-    // once, at construction, so without this a save would sit correctly on disk but never reach
-    // the currently-running game, which was the actual cause of a saved event appearing not to
-    // spawn - the fix isn't in dispatch logic (SpawnScheduler already sorts by time and fires
-    // correctly regardless of a file's authored order), it's that nothing was pulling the save
-    // back into the live session at all.
+    // Run after a successful save; GameController reloads the stage so the running game picks up
+    // the change (SpawnScheduler only reads its file at construction).
     private Runnable onSavedToDisk;
 
-    // ---- In-menu text entry (typed numeric entry) - same InputAdapter approach as
-    // PatternPreviewer.promptTextEntry, since Gdx.input.getTextInput is a no-op on lwjgl3 desktop.
+    // ---- In-menu typed numeric entry (Gdx.input.getTextInput is a no-op on lwjgl3 desktop).
     private boolean textEntryActive;
     private String textEntryTitle;
     private StringBuilder textEntryBuffer;
@@ -108,8 +91,7 @@ public class SpawnScheduleEditor {
         return out;
     }
 
-    /** @param onSavedToDisk run once, at the end of a successful saveToDisk() - see the field's
-     *  own doc for why this exists (a save must reach the currently-running game, not just disk). */
+    /** @param onSavedToDisk run after a successful save (see the field). */
     public void open(AssetManager assets, String scheduleFilePath, float worldWidth, float worldHeight, Runnable onSavedToDisk) {
         active = true;
         this.assets = assets;
@@ -140,8 +122,7 @@ public class SpawnScheduleEditor {
         active = false;
     }
 
-    /** @return true if the delete key was consumed by the selected row (removing an event) rather
-     *  than falling through to closing the whole screen - same contract as PatternPreviewer.handleInput. */
+    /** @return true if the selected row consumed the delete key (instead of it closing the screen). */
     public boolean handleInput(InputManager input) {
         if (textEntryActive) return false;
         if (suppressNextMenuInput) {
@@ -269,8 +250,7 @@ public class SpawnScheduleEditor {
         applyChange();
     }
 
-    // ---- Event kind (silence/despawn/waypointGem/swapWeaponId are mutually exclusive flags on
-    // SpawnEvent - see SpawnScheduler.update()'s dispatch order, mirrored here) --------------------
+    // ---- Event kind (mutually exclusive SpawnEvent flags, same order as SpawnScheduler.update()) ---
 
     private static String eventKind(SpawnScheduler.SpawnEvent event) {
         if (event.silence) return KIND_OPTIONS[1];
@@ -307,13 +287,8 @@ public class SpawnScheduleEditor {
         event.powerup = raw < 1 ? null : Math.min(raw, 3);
     }
 
-    /** Writes the WHOLE working schedule file (including every cue type this editor doesn't
-     *  expose - see class doc) back to the real assets/ JSON file, then runs onSavedToDisk (see
-     *  its field doc) so the change reaches the currently-running game immediately instead of
-     *  silently sitting on disk until some later, easy-to-forget manual reload. Only resolves to
-     *  the true source file when launched via `gradlew run`/`:lwjgl3:run`, which pins the working
-     *  directory to assets/ (see lwjgl3/build.gradle) - same mechanism PatternPreviewer.saveAll()
-     *  relies on. */
+    /** Writes the whole working file back and runs onSavedToDisk. Only reaches the real source file
+     *  under `:lwjgl3:run`, whose working directory is assets/. */
     private void saveToDisk() {
         Json json = new Json();
         json.setOutputType(JsonWriter.OutputType.json);
@@ -407,10 +382,8 @@ public class SpawnScheduleEditor {
         return new Row(indent, label, dec, inc, typeIn, null);
     }
 
-    // Same NaN-means-"none" convention as SpawnEvent.offsetX/offsetY themselves - left/right starts
-    // nudging from 0 the first time a "none" field is touched, and typed entry (Confirm) always
-    // sets a concrete value; a companion "[Clear -> none]" action row (see appendEventFieldRows)
-    // is the only way back to "none" once set, so a stepper press near 0 can't accidentally re-null it.
+    // NaN = "none". Stepping from none starts at 0; only the companion "[Clear -> none]" row sets
+    // it back to none.
     private Row nullableNumberRow(int indent, String name, FloatGetter getter, FloatSetter setter, float step) {
         Supplier<String> label = () -> name + ": " + (Float.isNaN(getter.get()) ? "none" : formatFloat(getter.get()));
         Runnable dec = () -> { float cur = getter.get(); setter.set(snap(Float.isNaN(cur) ? -step : cur - step)); applyChange(); };

@@ -15,9 +15,10 @@ import whitelabeltest.enemy.bullets.EnemyBullet;
 import whitelabeltest.gamemanagers.ObjectPools;
 
 
+/** Volleys of numBullets fired inward from the play-area edges around the player, each path passing
+ *  missDistance to the side of them (a "surround but miss" ring). volleyCount volleys, fireRate apart. */
 public class RadialNearMissFiring implements FiringPattern {
-    // Inset from AimedEnemyBullet's actual cull bounds (x in [0,9], y in [-1,13] for this game's
-    // play area) so a spawned bullet's sprite - not just its center point - stays fully inside them.
+    // Inset from the bullets' cull bounds so the whole sprite spawns inside them.
     private static final float EDGE_MARGIN = 0.3f;
 
     private final float bulletSize;
@@ -77,8 +78,7 @@ public class RadialNearMissFiring implements FiringPattern {
             float dx = MathUtils.cosDeg(angle);
             float dy = MathUtils.sinDeg(angle);
 
-            // Ray from (px,py) in (dx,dy): smallest positive t that reaches any box edge, so the
-            // spawn point lands exactly on whichever edge this direction points toward.
+            // Spawn where the ray from the player in this direction first hits the edge box.
             float t = Float.MAX_VALUE;
             if (dx > 0.0001f) t = Math.min(t, (xMax - px) / dx);
             else if (dx < -0.0001f) t = Math.min(t, (xMin - px) / dx);
@@ -89,9 +89,8 @@ public class RadialNearMissFiring implements FiringPattern {
             float spawnX = px + dx * t;
             float spawnY = py + dy * t;
 
-            // Tangential (angle + 90) offset, not radial - keeps every bullet's straight-line path
-            // the same missDistance from px/py regardless of which of the numBullets directions it
-            // came from, and the shared +90 sense makes the whole ring curve past in one direction.
+            // Offset sideways (angle + 90) so every path passes missDistance from the player, all on
+            // the same side.
             float perpAngle = angle + 90f;
             float targetX = px + missDistance * MathUtils.cosDeg(perpAngle);
             float targetY = py + missDistance * MathUtils.sinDeg(perpAngle);

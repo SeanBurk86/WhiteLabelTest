@@ -5,6 +5,7 @@ import com.badlogic.gdx.math.Circle;
 import com.badlogic.gdx.math.Rectangle;
 import com.badlogic.gdx.utils.Array;
 
+/** Runs sub-patterns one after another for their durations. */
 public class SequencedMovementPattern implements MovementPattern {
     private final Array<MovementPattern> patterns;
     private final float[] durations;

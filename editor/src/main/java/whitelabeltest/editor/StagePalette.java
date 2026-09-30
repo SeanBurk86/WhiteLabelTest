@@ -9,15 +9,8 @@ import whitelabeltest.gamemanagers.spawning.StageDefinition;
 
 import java.util.function.Consumer;
 
-/** Click-to-select source for editing a StageDefinition's own metadata (background layers, music,
- *  shader/video background, kaleidoscope/ground-scroll overrides, etc.) - one row per
- *  data/stages.json entry, routed to StageDefinitionPanel the same way EnemyPalette routes a click
- *  to EnemyDefinitionPanel - see EditorApp.
- *
- * Deliberately separate from "Stage > Open Stage..." (OpenStageDialog), which loads a stage's
- * TRIGGER file into the main canvas for placing/editing spawns - this palette is purely about
- * editing the stage DEFINITION itself, not navigating to its placed content, so selecting a row
- * here does not also swap which trigger file the canvas has open. */
+/** One row per stage; clicking opens StageDefinitionPanel. This doesn't change which trigger file
+ *  is open (use Stage > Open Stage for that). */
 public class StagePalette extends ScrollPane {
     private VBox selectedRow;
     private Consumer<StageDefinition> selectionListener;

@@ -10,19 +10,12 @@ public class Lwjgl3Launcher {
     public static void main(String[] args) {
         if (StartupHelper.startNewJvmIfRequired()) return; // This handles macOS support and helps on Windows.
         createApplication();
-        // The Lwjgl3Application constructor only returns once the game has exited and disposed. gdx-video's
-        // FFMpegInternalThread is a non-daemon thread that outlives its VideoPlayer, so without this the JVM
-        // lingered after the window closed - a windowless process still holding ~650MB and native handles.
+        // gdx-video leaves a non-daemon thread running that would keep the JVM alive after the window closes.
         System.exit(0);
     }
 
-    /** Reads the quickPlay.* system properties the JavaFX editor's "Quick Play" button sets when it
-     *  forks this game as a subprocess via `gradlew :lwjgl3:run -PquickPlayStage=... -PquickPlay...`
-     *  (see lwjgl3/build.gradle's own run task, which translates those Gradle project properties
-     *  into these JVM system properties - the same "-D" passthrough pattern that task's existing
-     *  `debug` property already uses). null for every ordinary desktop launch (no quickPlay.stage
-     *  property set), which Main(QuickPlayConfig) already treats identically to the old no-arg
-     *  Main(). */
+    /** The editor's Quick Play settings: quickPlay.* system properties (passed through from
+     *  -PquickPlay* Gradle properties by lwjgl3/build.gradle). Null when quickPlay.stage isn't set. */
     private static Main.QuickPlayConfig readQuickPlayConfig() {
         String stageId = System.getProperty("quickPlay.stage");
         if (stageId == null || stageId.isBlank()) return null;
@@ -35,9 +28,7 @@ public class Lwjgl3Launcher {
         return new Main.QuickPlayConfig(stageId, distance, blankToNull(slotA), blankToNull(slotB), slotALevel, slotBLevel, inputType);
     }
 
-    /** quickPlay.input is QuickPlayDialog's InputType combo, forwarded as its enum name (e.g.
-     *  "GAMEPAD") - falls back to KEYBOARD for a missing/blank property (an older quickPlay call
-     *  that predates this field) or one that doesn't match a known InputType, rather than throwing. */
+    /** An InputType name; KEYBOARD if missing or unknown. */
     private static InputType parseInputType(String value) {
         if (value == null || value.isBlank()) return InputType.KEYBOARD;
         try {
@@ -79,13 +70,9 @@ public class Lwjgl3Launcher {
         //// Vsync limits the frames per second to what your hardware can display, and helps eliminate
         //// screen tearing. This setting doesn't always work on Linux, so the line after is a safeguard.
         configuration.useVsync(true);
-        // FPS cap as a safeguard only, for when vsync doesn't take (see the note above) - vsync must be what
-        // paces frames. The template's "refresh + 1" cap can land BELOW the real refresh: GLFW reports a
-        // fractional mode as its integer part (a ~60.08Hz panel as 59, so a cap of 60), and a cap below the
-        // real refresh makes the limiter pace the loop; its sleep then drifts across the vblank deadline once
-        // per 1/(refresh - cap) seconds (~12s here), missing vsync for ~half a second each time (a sustained
-        // run of 33ms frames). Twice the refresh never binds while vsync works.
-        // -Dperf.fpsCap=<n> overrides it for performance A/B runs (see lwjgl3/build.gradle's -PperfFpsCap).
+        // A fallback cap only; vsync must pace frames. 2x refresh, because GLFW rounds fractional refresh
+        // rates down, and a cap below the real rate causes periodic missed vsyncs.
+        // -Dperf.fpsCap=<n> overrides it.
         configuration.setForegroundFPS(Integer.getInteger("perf.fpsCap", Lwjgl3ApplicationConfiguration.getDisplayMode().refreshRate * 2));
         //// If you remove the above line and set Vsync to false, you can get unlimited FPS, which can be
         //// useful for testing performance, but can also be very stressful to some hardware.
@@ -98,11 +85,7 @@ public class Lwjgl3Launcher {
         //// They can also be loaded from the root of assets/ .
         configuration.setWindowIcon("icons/testskull128.png", "icons/testskull64.png", "icons/testskull32.png", "icons/testskull16.png");
 
-        // Default OpenAL simultaneous-source limit (16) is too low for this game's overlapping
-        // sound effects (multi-bullet weapon fire, chained explosions, pickups) - once it's
-        // exhausted, OpenAL can't grant new sources and audio drops out instead of just skipping
-        // the one sound that didn't fit. Bumped well above what a busy moment realistically needs;
-        // buffer size/count left at their libGDX defaults (512, 9).
+        // 64 simultaneous sources (default 16 runs out and audio drops out); default buffers.
         configuration.setAudioConfig(64, 512, 9);
 
         //// This could improve compatibility with Windows machines with buggy OpenGL drivers, Macs

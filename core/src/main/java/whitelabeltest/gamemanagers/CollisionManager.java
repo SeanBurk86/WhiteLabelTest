@@ -27,13 +27,14 @@ import whitelabeltest.player.weapons.ReflectedBolt;
 import whitelabeltest.player.weapons.ThunderboltWeapon;
 import whitelabeltest.player.weapons.Weapon;
 
+/** All hit tests: player vs enemies/bullets/pickups, graze, reflect shield, player weapons vs
+ *  enemies, enemy bullets vs damageable enemies, Hyper Attack hits, and paired-enemy death
+ *  resolution. Supports rotated shapes, scaled/offset bullet hitboxes and custom enemy hitboxes. */
 public class CollisionManager {
     private final Rectangle collisionHighlight;
-    // Scratch buffer for the scaled/offset hitbox rect built in overlaps(Circle, EnemyBullet) -
-    // reused every call instead of allocating a Rectangle per bullet-vs-player check.
+    // Scratch rect for a bullet's scaled/offset hitbox (avoids per-check allocation).
     private final Rectangle scratchHitbox = new Rectangle();
-    // Scratch for a rotated bullet's scaled/offset hitbox handed to overlapsRotated() - its own buffer, so it can't
-    // alias whichever rectangle (scratchHitbox, an enemy's scratchEnemyBox) is on the other side of the test.
+    // Separate scratch for a rotated bullet box, so it can't alias the other side of the test.
     private final Rectangle scratchRotatedBox = new Rectangle();
 
     public CollisionManager() {
@@ -64,13 +65,9 @@ public class CollisionManager {
         return false;
     }
 
-    /** While the player's reflect shield is active, any enemy bullet touching it is destroyed
-     *  and replaced with a ReflectedBolt - copying that bullet's own sprite and homing on
-     *  whichever enemy fired it (falling back to straight up if that enemy's gone) - dealing
-     *  back the destroyed bullet's own damage. Runs before checkPlayerBulletCollisions so a
-     *  reflected bullet never also registers as a hit on the player's own (much smaller) hitbox
-     *  that same frame. A bullet with no sprite to copy (shouldn't happen in practice) is simply
-     *  left alone rather than reflected. */
+    /** While the reflect shield is up, each enemy bullet touching it becomes a ReflectedBolt with the
+     *  same sprite and damage, homing on the enemy that fired it. Runs before the player-hit check so
+     *  a reflected bullet can't also hit the player that frame. */
     public void checkShieldReflections(Player player, Array<EnemyBullet> enemyBullets, Array<Weapon> bullets, AssetManager assets) {
         if (!player.isShieldActive()) return;
 
@@ -106,9 +103,7 @@ public class CollisionManager {
         Rectangle rect = bullet.getRectangle();
         float rotation = bullet.getRotation();
 
-        // getHitboxOffsetX/Y() is defined in the bullet's own unrotated frame so it stays attached
-        // to (and turns with) the sprite - rotate it into world space before using it. A no-op for
-        // rotation=0 or an unset offset, i.e. every bullet type that predates this field.
+        // The hitbox offset is in the bullet's unrotated frame; rotate it into world space.
         float offsetX = bullet.getHitboxOffsetX();
         float offsetY = bullet.getHitboxOffsetY();
         float cosR = MathUtils.cosDeg(rotation);
@@ -116,9 +111,7 @@ public class CollisionManager {
         float worldOffsetX = offsetX * cosR - offsetY * sinR;
         float worldOffsetY = offsetX * sinR + offsetY * cosR;
 
-        // The hitbox rect, scaled around rect's own center and then shifted by the (now
-        // world-space) offset - reduces to rect itself when scale=1/offset=(0,0), the default for
-        // every bullet type that doesn't set BulletDef.hitboxScale/hitboxOffsetX/hitboxOffsetY.
+        // Hitbox = rect scaled around its center, then shifted by the offset.
         float scale = bullet.getHitboxScale();
         float effWidth = rect.width * scale;
         float effHeight = rect.height * scale;
@@ -138,12 +131,8 @@ public class CollisionManager {
             return Intersector.overlaps(circle, scratchHitbox);
         }
 
-        // The pivot moves by the same world-space offset the box itself moved by (it's defined
-        // relative to the unrotated rect, which the offset displaces before rotation is applied
-        // around it), then localMin/MaxX/Y express the box's extent relative to that pivot - e.g.
-        // symmetric [-halfWidth, halfWidth] for a bullet that pivots on its own center, or
-        // [0, height] for one like LaserBullet that pivots on the rect's bottom edge - instead of
-        // assuming either convention.
+        // The pivot moves with the offset. Work in the box's local frame relative to the pivot, which
+        // may be the center or an edge (LaserBullet pivots on its bottom edge).
         float pivotX = bullet.getRotationPivotX() + worldOffsetX;
         float pivotY = bullet.getRotationPivotY() + worldOffsetY;
         float dx = circle.x - pivotX;
@@ -154,8 +143,7 @@ public class CollisionManager {
         float localX = dx * cos - dy * sin;
         float localY = dx * sin + dy * cos;
 
-        // effX/effY and pivotX/pivotY both carry the same worldOffset shift, so it cancels here -
-        // the box's extent relative to the pivot doesn't depend on where the offset moved it to.
+        // The offset shift cancels out of the box-relative-to-pivot extent.
         float minX = effX - pivotX;
         float minY = effY - pivotY;
         float closestX = MathUtils.clamp(localX, minX, minX + effWidth);
@@ -169,8 +157,7 @@ public class CollisionManager {
     public void checkPlayerPowerupCollisions(Player player, Array<Powerup> powerups, AudioManager audio) {
         for (int i = powerups.size - 1; i >= 0; i--) {
             Powerup p = powerups.get(i);
-            // Weapon powerups are collectible from the wider graze halo, not just the ship's tight
-            // hitbox, so drifting through the halo picks them up without needing to touch them directly.
+            // Weapon powerups are collected by the wider graze halo, not the tight ship hitbox.
             Circle pickupHitbox = p instanceof WeaponPowerup ? player.getGrazeHitbox() : player.getHitbox();
             if (Intersector.overlaps(pickupHitbox, p.getRectangle())) {
                 p.apply(player);
@@ -181,13 +168,12 @@ public class CollisionManager {
         }
     }
 
-    /** Point gems (see PointGem/GameController.destroyEnemy) are only collectible via the wider
-     *  graze halo, same as weapon powerups - they home into it once the player stops firing. */
+    /** Point gems are collected by the graze halo (they home in when the player stops firing). */
     public void checkPlayerGemCollisions(Player player, Array<PointGem> gems, ScoreManager scoreManager, AudioManager audio, AssetManager assets) {
         for (int i = gems.size - 1; i >= 0; i--) {
             PointGem gem = gems.get(i);
             if (Intersector.overlaps(player.getGrazeHitbox(), gem.getRectangle())) {
-                // A bigger gem (dropped with the player close to the enemy) is worth proportionally more.
+                // Bigger gems (dropped close to the player) are worth proportionally more.
                 scoreManager.addBonus(Math.round(assets.getGameBalance().gemPoints * gem.getValueScale()) * gem.getRepresents());
                 scoreManager.registerGemCollected(gem.getRepresents());
                 audio.playPointGem();
@@ -208,11 +194,8 @@ public class CollisionManager {
                 if (!bullet.hasDamaged(enemy)) {
                     bullet.markDamaged(enemy);
                     scoreManager.registerWeaponHit(bullet.getFireRate() / 2f, bullet.getChainWindow());
-                    // A paired enemy's death is deferred to resolvePairedEnemyDeaths() - see
-                    // Enemy.getPairId() - instead of scored/destroyed immediately here, since
-                    // whether it actually dies depends on whether its partner also crossed zero
-                    // this same frame, which isn't known until every enemy's damage for the frame
-                    // has been applied.
+                    // A paired enemy's death waits for resolvePairedEnemyDeaths(), once the whole
+                    // frame's damage is known.
                     if (enemy.takeDamage(bullet.getDamage()) && enemy.getPairId() == null) {
                         scoreManager.addScore(GameController.destroyEnemy(audio, entityManager, assets, worldWidth, worldHeight, enemy, scoreManager), bullet.getChainWindow());
                     }
@@ -229,29 +212,16 @@ public class CollisionManager {
                     ObjectPools.freeWeapon(bullet);
                 }
 
-                // Only stop checking bullets against THIS enemy once it's actually gone - a
-                // destroyed bullet just means that one bullet is done, not that every other bullet
-                // already overlapping the same enemy this frame should be skipped. That distinction
-                // barely matters for small enemies (rarely more than one bullet overlaps at once),
-                // but a large stationary boss can have many rapid-fire bullets overlapping it in a
-                // single frame - breaking here after the first one meant every other bullet already
-                // touching it got skipped entirely, and fast bullets had already flown past its
-                // hitbox by the next frame, i.e. they'd visibly "pass through" without ever hitting.
+                // Keep testing other bullets until the enemy itself is gone: a big boss can overlap
+                // many fast bullets in one frame, and skipping them lets them pass through.
                 if (!enemy.isActive()) break;
             }
         }
     }
 
-    /** Lets an enemy bullet damage another (non-source) enemy on contact, but only one that opts in
-     *  via Enemy.isDamageableByEnemyBullets() - the tutorial's bullet-streaming drill (see
-     *  SpawnScheduler.InvincibilityWindow) relies on it: the player kites the streaming emitter's
-     *  continuous aimed fire across a set of slow PowerCarrier targets, which take damage from it
-     *  exactly like they would from the player's own weapon. Everything else defaults to false so
-     *  a bullet passing near an unrelated enemy - e.g. several stationary tutorial emitters sharing
-     *  one spawn point - doesn't get silently eaten by it. A bullet never damages the enemy that
-     *  fired it (EnemyBullet.getSourceEnemy()), and is consumed on its first hit against a
-     *  damageable enemy - unlike player bullets there's no piercing flag to check, since every
-     *  enemy bullet type in this codebase is single-use against the player too. */
+    /** Enemy bullets damage enemies that opt in (EnemyDefinition.damageableByEnemyBullets), never
+     *  their own source. Used by the tutorial's bullet-streaming drill. The bullet is consumed on
+     *  its first hit. */
     public void checkEnemyBulletEnemyCollisions(Array<EnemyBullet> enemyBullets, Array<Enemy> enemies, AudioManager audio, EntityManager entityManager, AssetManager assets, float worldWidth, float worldHeight, ScoreManager scoreManager) {
         for (int i = enemyBullets.size - 1; i >= 0; i--) {
             EnemyBullet bullet = enemyBullets.get(i);
@@ -276,11 +246,8 @@ public class CollisionManager {
         }
     }
 
-    /** BasicWeapon's Hyper Attack dash (see Player.triggerBasicHyperAttack): while the halo is
-     *  actively launching forward, it deals a flat, weapon-level-independent hit to anything it
-     *  clips - once per enemy for the whole dash, tracked via Player.hasHaloDamaged/markHaloDamaged
-     *  the same way a lingering bullet tracks its own hits - with the same kill/score handling a
-     *  normal bullet hit gets. */
+    /** BasicWeapon Hyper Attack: while the halo launches forward it deals a flat hit once to each
+     *  enemy it touches. */
     public void checkHaloDashCollisions(Player player, Array<Enemy> enemies, AudioManager audio, EntityManager entityManager, AssetManager assets, float worldWidth, float worldHeight, ScoreManager scoreManager) {
         if (!player.isHaloDashing()) return;
 
@@ -307,9 +274,7 @@ public class CollisionManager {
     private static final float HALO_COLLISION_FRAME_DURATION = 0.05f;
     private static final float HALO_COLLISION_FRAME_ASPECT = 82f / 92f;
 
-    /** Plays the halo-collision burst where the halo meets an enemy - at the point on the enemy's bounds
-     *  nearest the halo's centre (the halo's own centre if that's already inside the enemy). Once per enemy per
-     *  dash, since it sits behind the same hasHaloDamaged() gate as the damage. */
+    /** Plays the halo-collision burst at the point on the enemy's bounds nearest the halo center. */
     private void spawnHaloCollisionEffect(Circle haloHitbox, float sizeInHaloDiameters, Enemy enemy, EntityManager entityManager, AssetManager assets) {
         Texture texture = assets.ensureTexture(HALO_COLLISION_TEXTURE);
         if (texture == null) return;
@@ -325,12 +290,9 @@ public class CollisionManager {
         entityManager.getHitEffects().add(effect);
     }
 
-    /** ThunderboltWeapon's Hyper Attack detonation (see Player.triggerThunderboltHyperAttack/
-     *  updateThunderboltCharge): once the charged bomb is released, this is called once - the
-     *  pending-flag on Player is what keeps it from firing again the following frame - and deals
-     *  its charge tier's damage to every active enemy within the blast radius in one pass, with
-     *  the same kill/score handling a normal hit gets, then spawns the green lightning arcing out
-     *  to each of them and plays thunderbolthyperexplosion.wav. */
+    /** Thunderbolt Hyper Attack: when the charged bomb is released (a one-shot pending flag on
+     *  Player), damages every enemy in the blast radius by the charge tier's damage and arcs green
+     *  lightning to each. */
     public void checkThunderboltDetonation(Player player, Array<Enemy> enemies, AudioManager audio, EntityManager entityManager, AssetManager assets, float worldWidth, float worldHeight, ScoreManager scoreManager) {
         if (!player.hasPendingThunderboltDetonation()) return;
         player.clearPendingThunderboltDetonation();
@@ -364,24 +326,12 @@ public class CollisionManager {
         audio.playThunderboltHyperExplosion();
     }
 
-    // How long (seconds) a paired enemy that's crossed zero first keeps waiting, mid-death, for
-    // its partner to also cross zero - see resolvePairedEnemyDeaths().
+    // Seconds a paired enemy that died first waits for its partner.
     private static final float PAIR_GRACE_WINDOW = 0.35f;
 
-    /** Finalizes or reverses every paired enemy's death - see EnemyDefinition.pairId. Must run
-     *  once per update(), after every other collision check above has applied this frame's damage
-     *  to every enemy (checkBulletEnemyCollisions and the rest all defer a paired enemy's
-     *  destroyEnemy() call rather than firing it inline, precisely so this can see the whole
-     *  frame's damage before deciding). For each paired enemy that's crossed zero (isDying(), not
-     *  yet isPairResolved()): if its partner has also crossed zero, both are genuine kills -
-     *  finalize them with the normal destroyEnemy() score/explosion/drop path, exactly once each
-     *  (markPairResolved() stops a later frame, while the death animation is still playing out,
-     *  from re-triggering this). Otherwise the first one to die holds in place - still isDying(),
-     *  not yet revived - for up to PAIR_GRACE_WINDOW seconds, giving the partner a real window to
-     *  follow it down rather than requiring a single-frame-perfect hit; only once that window
-     *  elapses without the partner also dying are both revived to full health, so a
-     *  half-simultaneous attempt can't chip away one side of the pair while leaving the other
-     *  untouched. */
+    /** Resolves paired enemies (EnemyDefinition.pairId); runs after all other damage this frame. If
+     *  both partners are dying, both are destroyed normally (once each). Otherwise the first waits
+     *  up to PAIR_GRACE_WINDOW for the partner, then both revive to full health. */
     public void resolvePairedEnemyDeaths(Array<Enemy> enemies, AudioManager audio, EntityManager entityManager, AssetManager assets, float worldWidth, float worldHeight, ScoreManager scoreManager, float delta) {
         for (int i = 0; i < enemies.size; i++) {
             Enemy enemy = enemies.get(i);
@@ -417,8 +367,7 @@ public class CollisionManager {
         return null;
     }
 
-    /** Spawns this bullet's impact animation (see WeaponDefinition.hitTexture) at the bullet's
-     *  own position - literally where it hit - if its weapon definition set one. */
+    /** Plays the weapon's hit animation (WeaponDefinition.hitTexture), if any, at the bullet. */
     private void spawnHitEffect(Weapon bullet, EntityManager entityManager) {
         Animation<TextureRegion> hitAnimation = bullet.getHitAnimation();
         if (hitAnimation == null) return;
@@ -435,8 +384,7 @@ public class CollisionManager {
         return overlapsRotated(aabb, bullet.getRectangle(), bullet.getRotationPivotX(), bullet.getRotationPivotY(), rotation);
     }
 
-    /** Same hitbox math as overlaps(Circle, EnemyBullet) above (scale/offset/hitRadius/rotation),
-     *  just tested against an axis-aligned enemy rectangle instead of the player's circular one. */
+    /** overlaps(Circle, EnemyBullet) against an axis-aligned rectangle. */
     private boolean overlaps(Rectangle aabb, EnemyBullet bullet) {
         Rectangle rect = bullet.getRectangle();
         float rotation = bullet.getRotation();
@@ -498,15 +446,8 @@ public class CollisionManager {
             && projectionsOverlap(ax, ay, bx, by, -sin, cos);
     }
 
-    /** Same SAT test as overlapsRotated() above, but for two rectangles that may BOTH be rotated
-     *  (e.g. a spinning IceSkull hit by an AimedEnemyBullet, which turns to face its target) -
-     *  overlapsRotated() only handles one rotated side against a plain axis-aligned one. Tests all
-     *  4 axes (one pair of edge normals per rectangle) instead of overlapsRotated()'s world-axes +
-     *  one rotated pair, which is what actually changes: each rectangle's own edges are always
-     *  perpendicular to each other, so a 0-degree rotation's axes reduce to the same (1,0)/(0,1)
-     *  pair overlapsRotated() hardcodes for its unrotated side - this is a strict generalization,
-     *  just written separately to avoid touching overlapsRotated()'s already-proven bullet-collision
-     *  callers. */
+    /** Separating-axis test for two rectangles that may both be rotated (overlapsRotated() handles
+     *  only one rotated side). */
     private static boolean overlapsRotatedRects(float x1, float y1, float w1, float h1, float pivotX1, float pivotY1, float rot1,
                                                  float x2, float y2, float w2, float h2, float pivotX2, float pivotY2, float rot2) {
         float[] ax = new float[4];
@@ -541,10 +482,7 @@ public class CollisionManager {
         }
     }
 
-    /** Same closest-point-on-box math as the rotation branch of overlaps(Circle, EnemyBullet)
-     *  above, generalized to any rotated rectangle/pivot pair - used for a circular hitbox (the
-     *  player's ship, the halo dash, a thunderbolt blast, or a circular enemy-bullet hitRadius)
-     *  against a possibly-rotated enemy. */
+    /** Circle vs a rectangle rotated about a pivot, via the closest point in the box's local frame. */
     private static boolean overlapsCircleRotatedRect(float cx, float cy, float radius,
                                                        float rectX, float rectY, float rectW, float rectH,
                                                        float pivotX, float pivotY, float rotationDeg) {
@@ -571,9 +509,7 @@ public class CollisionManager {
         return distX * distX + distY * distY <= radius * radius;
     }
 
-    /** Circle vs a (possibly rotated) enemy hitbox - see Enemy.getRotation()/getRotationPivotX/Y().
-     *  Falls back to a plain circle-vs-AABB test (Intersector.overlaps' own fast path) whenever the
-     *  enemy isn't rotated, i.e. every enemy as before this method existed. */
+    /** Circle vs an enemy: its custom hitboxes if defined, else its (possibly rotated) sprite box. */
     private boolean overlaps(Circle circle, Enemy enemy) {
         Array<HitboxDef> boxes = enemy.getHitboxDefs();
         if (boxes == null) return overlapsCircleRect(circle, enemy.getRectangle(), enemy.getRotationPivotX(), enemy.getRotationPivotY(), enemy.getRotation());
@@ -601,14 +537,11 @@ public class CollisionManager {
         return overlapsCircleRotatedRect(circle.x, circle.y, circle.radius, r.x, r.y, r.width, r.height, pivotX, pivotY, rotation);
     }
 
-    // Scratch shapes for an enemy's custom hitboxes (see EnemyHitboxes) - reused so testing them allocates nothing.
+    // Scratch shapes for custom enemy hitboxes (no per-test allocation).
     private final Rectangle scratchEnemyBox = new Rectangle();
     private final Circle scratchEnemyCircle = new Circle();
 
-    /** enemy.getRectangle() vs a player weapon bullet, both accounted for their own rotation (see
-     *  Enemy.getRotation()/Weapon.getRotation()). Reuses the existing single-rotated-side
-     *  overlapsRotated() for the (overwhelmingly common) case where at most one side is actually
-     *  rotated, only falling through to the full two-sided SAT when both are. */
+    /** Enemy vs a player weapon bullet, both possibly rotated. */
     private boolean overlaps(Enemy enemy, Weapon bullet) {
         Array<HitboxDef> boxes = enemy.getHitboxDefs();
         if (boxes == null) return overlapsRect(enemy.getRectangle(), enemy.getRotationPivotX(), enemy.getRotationPivotY(), enemy.getRotation(), bullet);
@@ -643,9 +576,7 @@ public class CollisionManager {
             bulletRect.x, bulletRect.y, bulletRect.width, bulletRect.height, bullet.getRotationPivotX(), bullet.getRotationPivotY(), bulletRot);
     }
 
-    /** Same hitbox math as overlaps(Rectangle, EnemyBullet) above (scale/offset/hitRadius/rotation
-     *  on the bullet's side), but also accounts for the enemy's own rotation (see
-     *  Enemy.getRotation()) instead of assuming it's always an axis-aligned box. */
+    /** Enemy (possibly rotated, possibly custom hitboxes) vs an enemy bullet. */
     private boolean overlaps(Enemy enemy, EnemyBullet bullet) {
         Array<HitboxDef> boxes = enemy.getHitboxDefs();
         if (boxes == null) return overlapsRect(enemy.getRectangle(), enemy.getRotationPivotX(), enemy.getRotationPivotY(), enemy.getRotation(), bullet);
@@ -654,7 +585,7 @@ public class CollisionManager {
         for (int i = 0; i < boxes.size; i++) {
             HitboxDef box = boxes.get(i);
             if (box.isCircle()) {
-                // A circle hitbox against an enemy bullet is exactly the player-ship-vs-bullet test, with this circle.
+                // Same test as the player ship vs a bullet.
                 if (overlaps(EnemyHitboxes.circle(box, sprite, rotation, scratchEnemyCircle), bullet)) return true;
             } else {
                 Rectangle hb = EnemyHitboxes.rect(box, sprite, rotation, scratchEnemyBox);

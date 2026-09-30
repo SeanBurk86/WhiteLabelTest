@@ -25,33 +25,17 @@ import whitelabeltest.player.Player;
 import java.util.Comparator;
 import java.util.Objects;
 
-/** Camera-position-driven counterpart to SpawnScheduler. Every SpawnScheduler feature now has a
- *  distance-based equivalent here: enemy/sound/sprite/text cues, camera-speed changes, boss-video/
- *  music-fade triggers (see Trigger's own action fields), gates (see Trigger.gate/requireConfirm -
- *  freezes the whole camera, not just one trigger, the same way GateCue freezes the whole schedule),
- *  a schedule-end marker for a boss-less stage (Trigger.scheduleEnd), and the five wall-clock
- *  [start, end) windows (practice checkpoints, invincibility, weapons/Hyper-Attack/bomb-disabled -
- *  see TriggerFile's own fields and the matching isXxx(distance) query methods below). A stage can
- *  still mix both sources - a SpawnScheduler with nothing left in it at all, like stage1's and the
- *  tutorial's once fully migrated, alongside a fully triggers-driven stage - since a stage that sets
- *  StageDefinition.triggerFile gets one of these alongside its SpawnScheduler either way; the two
- *  run in parallel, each firing whatever content was actually authored onto it.
- *
- * Owns a LevelCamera and fires each Trigger exactly once, the moment the camera's swept collision
- * box (see LevelCamera.getCollisionBox()) reaches that trigger's distance - i.e. the camera
- * "collides" with it, same framing as every other hitbox check in this game, just against a
- * 1-dimensional position instead of a 2D one. */
+/** Runs a stage's trigger file: advances a LevelCamera and arms/fires each Trigger as the camera's
+ *  swept distance reaches it. Also answers the stage's distance windows (practice checkpoints,
+ *  invincibility, weapons/Hyper-Attack/bomb disabled). The distance-based successor to
+ *  SpawnScheduler; see the README's "Trigger system" section. */
 public class TriggerManager {
-    /** Public so a future debug/editor tool can load/edit/save the whole file directly, same
-     *  reasoning as SpawnScheduler.ScheduleFile. */
+    /** The JSON shape of a *_triggers.json file (also loaded/saved directly by the editor). */
     public static class TriggerFile {
         public float cameraSpeed = 1f;
         public Array<Trigger> triggers;
 
-        // Zero or more [start, end) distance windows - one class shared by all five lists below
-        // (SpawnScheduler kept these as distinctly-named classes; here the list's own JSON key
-        // already says what it's for, so one shape is enough). See the matching isXxx() query
-        // method on TriggerManager for what each list actually gates.
+        // [start, end) distance windows; see the matching isXxx() query methods.
         public Array<DistanceWindow> practiceCheckpoints;
         public Array<DistanceWindow> invincibilityWindows;
         public Array<DistanceWindow> weaponsDisabledWindows;
@@ -74,86 +58,43 @@ public class TriggerManager {
     private final ObjectMap<String, EnemyDefinition> enemyDefinitions;
     private final ScrollingBackground background;
     private final LevelCamera camera;
-    // TriggerFile.cameraSpeed as authored (1f if the file didn't set one) - the "100%" reference
-    // point a Trigger.setSpeed action's absolute value is measured against, so GameController can
-    // turn camera.getSpeed() back into a relative scale (see getSpeedScale()) for driving the
-    // ACTUAL on-screen scroll (ScrollingBackground's per-layer scrollSpeed, ground-scroll enemies),
-    // which - unlike camera.position itself, see LevelCamera's own class doc - stays a fixed,
-    // independently-authored rate that was never wired to this class's distance clock until a
-    // Trigger.setSpeed action needed to visibly pause/resume it (e.g. freezing the screen for a
-    // stationary boss fight, then resuming at the same rate once it's destroyed).
+    // The authored cameraSpeed: the "100%" reference getSpeedScale() divides by.
     private final float baseSpeed;
     private Array<Trigger> triggers;
-    // Trigger.id -> trigger, for Condition "spawnDestroyed" lookups - built once in the constructor.
+    // Trigger.id -> trigger, for "spawnDestroyed" lookups.
     private final ObjectMap<String, Trigger> triggersById = new ObjectMap<>();
-    // Trigger.id -> how many enemies that spawn trigger produces in total (1 for a single spawn, the formation
-    // size for a wave), recorded the moment it fires - see registerSpawnGroup(). A spawn trigger that has fired
-    // but has NO entry here was skipped by a seekTo() rather than played, which "spawnDestroyed" treats as done.
+    // Trigger.id -> total enemies that spawn produces (1, or the wave size), recorded when it fires.
+    // A fired spawn trigger with no entry was skipped by seekTo(), which "spawnDestroyed" treats as done.
     private final ObjectMap<String, Integer> spawnGroupExpected = new ObjectMap<>();
-    // Live text cues fired via a Trigger.text action - see fire()/getTextCues(). GameController
-    // merges this alongside SpawnScheduler's own (wall-clock) textCues into one combined list for
-    // UIManager to draw, exactly as if they'd come from a single source.
+    // Text cues shown by triggers; drawn by UIManager.
     private final Array<TextCue> liveTextCues = new Array<>();
-    // The one gate trigger (see Trigger.gate) currently freezing the camera, or null if none is -
-    // see update()'s own doc on why this needs to be checked before camera.update() runs at all,
-    // mirroring SpawnScheduler's own activeGate field exactly, just against distance instead of time.
+    // The gate currently freezing the camera, or null.
     private Trigger activeGate;
-    // This manager's own wall-clock accumulator, incremented by delta at the top of update() -
-    // stamps/measures every text cue's reveal progress (fireTextCue()/checkConfirm()/
-    // updateTextCueTyping(), all self-consistent against this SAME clock). Used to be supplied
-    // externally (GameController.getSpawnScheduleRealTime(), i.e. SpawnScheduler's own clock) so a
-    // stage running both systems drew every cue - whichever fired it - against one shared clock;
-    // now that a triggerFile-driven stage no longer runs a SpawnScheduler at all (see
-    // GameController.loadStage()), this manager owns its own instead. GameController's
-    // getSpawnScheduleRealTime() falls back to THIS clock (getRealTime()) when there's no
-    // SpawnScheduler running, so UIManager.drawTextCues() keeps working unmodified either way.
+    // Never-frozen clock for text reveal timing and wave spawn staggering. Keeps running while a gate
+    // freezes the camera.
     private float realTime = 0f;
     private Array<DistanceWindow> practiceCheckpoints = new Array<>();
-    // The practice checkpoint the player has been rewound into after a failed attempt (see
-    // seekToPracticeRetry()), or null on a first attempt - decides which of Trigger.firstAttemptOnly/
-    // retryOnly plays inside that window (see isSkippedThisAttempt()).
+    // The checkpoint being retried after a failed attempt, or null on a first attempt.
     private DistanceWindow retryCheckpoint;
     private Array<DistanceWindow> invincibilityWindows = new Array<>();
     private Array<DistanceWindow> weaponsDisabledWindows = new Array<>();
     private Array<DistanceWindow> hyperAttackDisabledWindows = new Array<>();
     private Array<DistanceWindow> bombDisabledWindows = new Array<>();
-    // Mirrors SpawnScheduler's own gemsAtLastWaypointSpawn exactly: gemsCollected as of the most
-    // recent waypointGem trigger's own fire() call - necessarily taken before that gem could
-    // possibly be collected - so a "gemsCollected" condition's armConditions() baseline can use THIS
-    // instead of the live count, closing the race where a fast player grabs the gem before the gate
-    // arms (almost always the very next trigger) and a live snapshot would already include it,
-    // demanding one more gem than intended and cascading that off-by-one through however many more
-    // gates follow (see the tutorial's own 21-gate waypoint-gem gauntlet). -1 means "nothing to use"
-    // (falls back to the live count) - reset the moment ANY trigger arms (not just a gemsCollected
-    // one), same as the original, so a stale snapshot from an unrelated earlier gem spawn can't leak
-    // into a much later gate's baseline.
+    // Gem count taken right after the latest waypoint gem spawned, used as the next gemsCollected
+    // gate's baseline. A fast player can grab the gem before that gate arms, and a live snapshot
+    // would then demand one extra gem. -1 = none pending (use the live count).
     private int gemsAtLastWaypointSpawn = -1;
-    // Same reasoning as gemsAtLastWaypointSpawn, one leg over: enemiesDestroyed as of the most
-    // recent enemy-spawning trigger's own fire() call - necessarily taken before that enemy could
-    // possibly be destroyed. SpawnScheduler never protected "enemiesDestroyed" gates against this
-    // race the way it did gems (no equivalent of this field exists there - see
-    // enemiesDestroyedAtGateStart's own plain live-count snapshot), which mattered less there since
-    // GateCue and TextCue never shared one arming path the way a Trigger's own gate+requireConfirm
-    // can. Once LevelCamera.clampTo() started letting a gate co-located with its own text cue
-    // reliably arm right after that cue (rather than being silently stranded - see that method's own
-    // doc), this exact race became real: a fast player destroying the tutorial's third stream target
-    // while its "Perfect!" text cue is still up gets that kill baked into the co-located
-    // enemiesDestroyed gate's baseline the moment it finally arms, leaving it waiting on a 4th kill
-    // that never comes. -1 means "nothing to use" (falls back to the live count); reset the moment
-    // ANY trigger arms, same as gemsAtLastWaypointSpawn.
+    // Same idea for enemiesDestroyed gates: kill count taken right after the latest enemy spawned.
     private int enemiesDestroyedAtLastSpawn = -1;
 
-    /** One still-to-spawn member of an already-fired wave trigger (see Trigger.waveShape/
-     *  fireWave()) - queued rather than spawned immediately since waveSpawnInterval staggers
-     *  members out over real time AFTER the trigger itself fires, and fire() only ever runs once,
-     *  synchronously, at the instant a trigger's conditions/distance are satisfied. */
+    /** A wave member waiting for its staggered spawn time (see fireWave()). */
     private static final class PendingWaveSpawn {
-        final Trigger source; // the original trigger - type/firingPattern/inverseMovement/powerup
+        final Trigger source; // type/firingPattern/inverseMovement/powerup come from here
         final float dueRealTime;
         final float x, y, offsetX, offsetY;
-        final String movementPatternId; // already registered in PatternRegistry - see fireWave()
-        final Trigger entranceView; // synthetic per-member stand-in - see fireWave()'s own doc
-        final Array<HealthPhase> healthPhases; // this member's own (possibly formation-shifted) copy - see fireWave()
+        final String movementPatternId; // already registered in PatternRegistry
+        final Trigger entranceView; // per-member stand-in for EnemyEntranceMovement
+        final Array<HealthPhase> healthPhases; // this member's (possibly formation-shifted) phases
 
         PendingWaveSpawn(Trigger source, float dueRealTime, float x, float y, float offsetX, float offsetY,
                           String movementPatternId, Trigger entranceView, Array<HealthPhase> healthPhases) {
@@ -169,13 +110,8 @@ public class TriggerManager {
         }
     }
 
-    // See PendingWaveSpawn's own doc - drained in update() (BEFORE the activeGate early-return, same
-    // "never freezes" treatment realTime itself already gets) rather than all at once inside fire().
     private final Array<PendingWaveSpawn> pendingWaveSpawns = new Array<>();
-    // Every synthetic MovementPatternDef id this manager has ever registered into PatternRegistry
-    // (see fireWave()) - just a monotonically-increasing counter, so two different wave triggers (or
-    // two fires of the same repeatable one - not that any currently are) never collide on the same
-    // synthetic id.
+    // Counter for unique synthetic movement pattern ids registered by waves.
     private int nextSyntheticPatternId = 0;
 
     public TriggerManager(float worldWidth, float worldHeight, AssetManager assets, String triggerFilePath,
@@ -222,18 +158,12 @@ public class TriggerManager {
     public Array<TextCue> getTextCues() { return liveTextCues; }
     public float getRealTime() { return realTime; }
 
-    /** camera.getSpeed() expressed as a fraction of baseSpeed - 1.0 at the stage's authored normal
-     *  pace, 0.0 while a Trigger.setSpeed(0) action has frozen it, etc. - see baseSpeed's own doc.
-     *  GameController multiplies this into ScrollingBackground's/ground-scroll enemies' own scroll
-     *  rates every frame so a setSpeed action visibly pauses/resumes the on-screen world, not just
-     *  this class's internal distance clock. baseSpeed <= 0 (camera speed authored as 0 or negative
-     *  to begin with) has no meaningful "normal pace" to scale against, so this just falls back to
-     *  camera.getSpeed() itself rather than dividing by zero/flipping sign. */
+    /** Current camera speed relative to the authored speed (1 = normal, 0 = stopped by setSpeed).
+     *  GameController scales background and ground-enemy scrolling by this. Falls back to the raw
+     *  speed if the authored speed is <= 0. */
     public float getSpeedScale() { return baseSpeed > 0f ? camera.getSpeed() / baseSpeed : camera.getSpeed(); }
 
-    /** Debug-only (see UIManager.drawDebugTriggerInfo()): a short human-readable description of
-     *  whichever gate is currently freezing the camera, or null if none is - lets a stuck stage be
-     *  diagnosed on screen (which gate, what it's waiting on) instead of guessing blind. */
+    /** Debug overlay text describing the gate currently freezing the camera, or null. */
     public String describeActiveGate() {
         if (activeGate == null) return null;
         StringBuilder sb = new StringBuilder();
@@ -259,20 +189,9 @@ public class TriggerManager {
         return sb.toString();
     }
 
-    /** Advances this manager's own realTime clock (see that field's own doc) by delta FIRST, always
-     *  - unlike distance (this.camera, frozen by an active gate below), realTime must never freeze,
-     *  same "separate, ever-advancing clock purely for cue reveal timing" contract
-     *  SpawnScheduler.getRealTime() (vs. its own gate-frozen getTotalTime()) already had: a
-     *  confirm-gated typewriter cue still needs to finish revealing its text while the gate itself
-     *  holds the camera/trigger timeline frozen waiting on that same confirm press.
-     *
-     * If activeGate is set (see Trigger.gate's own doc), this frame does nothing but re-check that
-     * one gate's resolution state (see tryResolve()) - camera.update() is skipped entirely, freezing
-     * distance exactly the way SpawnScheduler freezes totalTime at an unsatisfied GateCue, so nothing
-     * further into the stage can arm/fire while a gate is blocking. Gameplay itself (entities,
-     * bullets, player movement) is driven entirely outside this class and keeps running normally
-     * throughout - only the camera/trigger timeline is what freezes, same distinction SpawnScheduler's
-     * own gate freeze already makes. */
+    /** realTime and pending wave spawns always advance. While a gate is active, only that gate is
+     *  re-checked and the camera stays frozen; gameplay itself (entities, bullets, player) runs
+     *  outside this class and is unaffected. */
     public void update(float delta, EntityManager entityManager, AudioManager audio, InputManager input, ScoreManager scoreManager) {
         Player player = entityManager.getPlayer();
         realTime += delta;
@@ -294,15 +213,8 @@ public class TriggerManager {
 
         for (Trigger trigger : triggers) {
             if (trigger.fired) continue;
-            // See Trigger.spawnLead's own doc - a trigger with a lead set actually arms/fires this
-            // many distance-units BEFORE its own authored `distance`, even though `distance` itself
-            // (used for sorting/display/every other purpose) is untouched. Clamped to 0: the camera's
-            // own collision box (see LevelCamera.getCollisionBox()) starts at minY=0 and only ever
-            // advances forward from there, so a negative armDistance (a lead bigger than the
-            // trigger's own distance - exactly what "already spawned before the camera starts
-            // scrolling at all" needs) would fall inside NO box ever produced and could never arm -
-            // clamping means it simply arms on the very first frame instead, which is the correct
-            // "present from the start" behavior this was actually being used for.
+            // spawnLead arms early. Clamped to 0, since the camera starts at 0 and a negative arm
+            // distance would never be reached; such triggers arm on the first frame instead.
             float armDistance = Math.max(0f, trigger.distance - trigger.spawnLead);
             if (!trigger.armed) {
                 if (armDistance < minY || armDistance >= maxY) continue;
@@ -318,12 +230,9 @@ public class TriggerManager {
             if (!tryResolve(trigger, entityManager, audio, input, scoreManager, player, realTime)) {
                 if (trigger.gate) {
                     activeGate = trigger;
-                    // See LevelCamera.clampTo()'s own doc - without this, any OTHER trigger sharing
-                    // this exact distance (later in trigger order) would be permanently stranded once
-                    // this gate clears. Clamped to armDistance (not the raw `distance`) so the camera
-                    // freezes exactly where this gate actually armed, matching spawnLead's own effect.
+                    // See LevelCamera.clampTo(): keeps later triggers at this distance armable.
                     camera.clampTo(armDistance);
-                    break; // freeze here - nothing further into the stage arms/fires this frame
+                    break; // nothing further arms while the gate holds
                 }
                 continue;
             }
@@ -333,20 +242,9 @@ public class TriggerManager {
         updateTextCueTyping(audio, realTime);
     }
 
-    /** Advances trigger through its two independent phases for this frame: fires the moment
-     *  `conditions` are satisfied - exactly once, guarded by actionFired, and NEVER delayed by
-     *  requireConfirm, so a text cue shows the instant it's reached, same as one without confirm -
-     *  then, only once already fired, waits for requireConfirm's press if it's set. Returns true once
-     *  BOTH phases are done (or were never needed), meaning the camera/rest of the stage can treat
-     *  this trigger as fully resolved.
-     *
-     * Firing before checking confirm (rather than gating firing on it, this method's original and
-     * wrong shape) is the whole point: confirm means "the player has SEEN this and pressed on," which
-     * is meaningless to check before the thing they need to see has actually appeared. Getting this
-     * backwards froze every confirm trigger with nothing shown, so an unrelated shoot-press (which
-     * confirm also treats as its input) satisfied confirm and firing in the same frame, letting the
-     * camera race on to the next one - the same failure mode is why despawn/silence triggers further
-     * into the stage no longer landed where they should either, once the pacing was off. */
+    /** Fires the action as soon as the conditions are met (once), then, if requireConfirm, waits for
+     *  the confirm press. Firing must come first: confirm means "seen and pressed on", so it can't be
+     *  checked before the thing to see has appeared. Returns true when fully resolved. */
     private boolean tryResolve(Trigger trigger, EntityManager entityManager, AudioManager audio,
                                 InputManager input, ScoreManager scoreManager, Player player, float realTime) {
         if (!trigger.actionFired) {
@@ -354,13 +252,8 @@ public class TriggerManager {
             fire(trigger, entityManager, audio, realTime);
             trigger.actionFired = true;
             if (trigger.waypointGem) {
-                // See gemsAtLastWaypointSpawn's own doc - taken now, immediately after spawning,
-                // necessarily before this gem could possibly be collected.
                 gemsAtLastWaypointSpawn = scoreManager.getGemsCollected();
             } else if (isEnemySpawn(trigger)) {
-                // See enemiesDestroyedAtLastSpawn's own doc - same reasoning as
-                // gemsAtLastWaypointSpawn, just for a spawned enemy's own kill instead of a gem's
-                // own collection.
                 enemiesDestroyedAtLastSpawn = scoreManager.getEnemiesDestroyed();
                 registerSpawnGroup(trigger, scoreManager);
             }
@@ -372,17 +265,9 @@ public class TriggerManager {
         return true;
     }
 
-    /** Latches trigger.confirmed the first frame SHOOT or RESTART is pressed while it's waiting -
-     *  see Trigger.requireConfirm's own doc. Mirrors SpawnScheduler.update()'s own awaitingConfirmCue
-     *  handling exactly: if the press lands while a linked typewriter cue (see Trigger.liveTextCue)
-     *  is STILL REVEALING, it force-completes the reveal instead of confirming - rewinding the cue's
-     *  own triggeredAtRealTime by its reveal duration, the same trick that method uses, so every
-     *  other bit of elapsed-time math (typing sound, display duration) keeps working unmodified -
-     *  rather than cutting the message off before the player has actually read it. Only a SECOND
-     *  press, once the reveal is genuinely done (naturally or just force-completed), actually
-     *  confirms. A trigger with no linked text cue, or a non-typewriter one (nothing to reveal),
-     *  confirms on the first press same as before this fix. A no-op once already confirmed or if
-     *  this trigger doesn't use confirm at all. */
+    /** Handles a SHOOT/RESTART press for a requireConfirm trigger. If its typewriter text is still
+     *  revealing, the first press completes the reveal (by backdating triggeredAtRealTime) and a
+     *  second press confirms. Confirming dismisses the text cue so it doesn't linger under the next. */
     private void checkConfirm(Trigger trigger, AudioManager audio, InputManager input, float realTime) {
         if (!trigger.requireConfirm || trigger.confirmed) return;
         if (!(input.isRestartJustPressed() || input.isShootJustPressed())) return;
@@ -397,32 +282,22 @@ public class TriggerManager {
                     audio.stopTextCueLoop();
                     cue.typingSoundActive = false;
                 }
-                return; // still frozen - this press force-completed the reveal, not confirmed yet
+                return; // this press completed the reveal; not confirmed yet
             }
         }
         trigger.confirmed = true;
-        // UIManager.drawTextCues() only hides a cue once `dismissed` is set - otherwise it stays
-        // drawn (at whatever screen position, usually shared by every cue) until its OWN duration
-        // naturally runs out, regardless of this trigger having moved on - see TextCue.dismissed's
-        // own doc. Without this, a cue confirmed well inside its own duration window (the normal
-        // case - the player reads and confirms faster than the multi-second duration meant as a
-        // "max time if never confirmed" ceiling) stays on screen overlapping whatever the NEXT
-        // trigger fires right after, exactly the way SpawnScheduler.update() itself sets
-        // awaitingConfirmCue.dismissed the instant it resolves.
         if (cue != null) cue.dismissed = true;
     }
 
-    /** Stops a typewriter cue's looping blip sound once its reveal finishes - same condition
-     *  SpawnScheduler.update() checks for its own text cues (see that method's own doc). Runs every
-     *  frame regardless of an active gate, since an already-shown cue's reveal keeps playing out in
-     *  real time even while the camera/trigger timeline itself is frozen waiting on that gate. */
+    /** Stops each typewriter cue's typing sound once its reveal finishes. Runs even while a gate is
+     *  active, since the reveal keeps playing in real time. */
     private void updateTextCueTyping(AudioManager audio, float realTime) {
         for (TextCue cue : liveTextCues) {
             if (!cue.typingSoundActive) continue;
             float cueElapsedTime = realTime - cue.triggeredAtRealTime;
             float revealDuration = cue.charsPerSecond > 0f ? cue.text.length() / cue.charsPerSecond : 0f;
-            // A confirm-gated cue stays up past its duration (see TextCue.requireConfirm), so its
-            // reveal - and typing sound - keeps going until the text is fully shown.
+            // A confirm-gated cue stays up past its duration, so its typing sound runs until the
+            // text is fully shown.
             if (cueElapsedTime >= revealDuration || (!cue.requireConfirm && cueElapsedTime >= cue.duration)) {
                 audio.stopTextCueLoop();
                 cue.typingSoundActive = false;
@@ -430,28 +305,9 @@ public class TriggerManager {
         }
     }
 
-    /** Snapshots each of trigger's conditions' baseline the instant it arms - count-based
-     *  conditions (enemiesDestroyed/enemyTypeDestroyed/gemsCollected/grazed) compare against how
-     *  much has happened SINCE arming, not the run's running total, same reasoning as
-     *  SpawnScheduler's own *AtGateStart fields (see Condition's doc for why this can't just be a
-     *  handful of instance fields here the way it is there).
-     *
-     * Also consumes+resets gemsAtLastWaypointSpawn/enemiesDestroyedAtLastSpawn (see either field's
-     * own doc) - but ONLY for a trigger that actually HAS conditions of its own, i.e. one that's
-     * functionally a GateCue-equivalent, not merely gate=true for its OWN confirm-freeze (see
-     * Trigger.gate/requireConfirm). This distinction matters here in a way it never needed to in
-     * SpawnScheduler: there, GateCue and TextCue were entirely separate mechanisms operating on
-     * separate arrays, so a text cue "arming" (triggering) never touched gemsAtLastWaypointSpawn at
-     * all. Here, a text-cue Trigger arms through this exact same method (it's a Trigger too) despite
-     * having no conditions of its own - resetting unconditionally on EVERY arm (this method's
-     * original, wrong shape) meant a text cue co-located with its own paired gate (the tutorial's
-     * "Perfect!" cue right before the third stream-kill gate, same pattern as the gems gauntlet)
-     * would wipe out the snapshot the SECOND it armed, before the real gate ever got a chance to
-     * consume it - leaving that gate to fall back to the live count once it finally armed after the
-     * cue's own confirm resolved, which by then usually already included the kill. Gating the reset
-     * on "has real conditions" restores the original's actual behavior: only a genuine gate-with-
-     * conditions consumes (and clears) the pending snapshot; anything else arming in between (a text
-     * cue, a plain spawn, a sound cue) leaves it alone for whatever later trigger actually needs it. */
+    /** Snapshots each count-based condition's baseline so it measures progress since arming. Only a
+     *  trigger with real conditions consumes the pending post-spawn snapshots; a text cue arming in
+     *  between must not wipe them before the gate that needs them arms. */
     private void armConditions(Trigger trigger, ScoreManager scoreManager, Player player) {
         if (trigger.conditions == null || trigger.conditions.size == 0) return;
         for (Condition condition : trigger.conditions) {
@@ -468,9 +324,7 @@ public class TriggerManager {
         enemiesDestroyedAtLastSpawn = -1;
     }
 
-    /** True once trigger's conditions (see conditionMode) are met - vacuously true for a trigger
-     *  with no conditions at all, so an armed trigger with nothing to wait on fires the same frame
-     *  it arms, exactly like before conditions existed. */
+    /** True once the conditions are met per conditionMode; always true with no conditions. */
     private boolean conditionsSatisfied(Trigger trigger, InputManager input, ScoreManager scoreManager, Player player) {
         if (trigger.conditions == null || trigger.conditions.size == 0) return true;
         boolean any = "ANY".equalsIgnoreCase(trigger.conditionMode);
@@ -485,10 +339,8 @@ public class TriggerManager {
         return !any; // ALL: nothing failed -> true. ANY: nothing matched -> false.
     }
 
-    /** "spawnDestroyed": true once every enemy the spawn trigger `id` produced has been destroyed. False while
-     *  that trigger hasn't fired yet, or has but not everything it spawned (a wave included - members still
-     *  waiting to spawn count as not yet destroyed) is dead. True for an id no trigger has (a typo mustn't
-     *  soft-lock content) and for a spawn a seekTo() skipped past (see spawnGroupExpected's doc). */
+    /** "spawnDestroyed": every enemy from spawn trigger `id` (including wave members not yet spawned)
+     *  has been killed. True for an unknown id or a spawn skipped by seekTo(). */
     private boolean isSpawnDestroyed(String id, ScoreManager scoreManager) {
         Trigger source = id == null ? null : triggersById.get(id);
         if (source == null) return true;
@@ -514,7 +366,7 @@ public class TriggerManager {
             case "gemsCollected" -> scoreManager.getGemsCollected() - condition.baseline >= condition.count;
             case "grazed" -> player.getGrazePoints() - condition.baseline >= condition.count;
             case "spawnDestroyed" -> isSpawnDestroyed(condition.triggerId, scoreManager);
-            default -> true; // unrecognized condition string - don't soft-lock content over a typo
+            default -> true; // unknown type: don't soft-lock over a typo
         };
     }
 
@@ -543,20 +395,9 @@ public class TriggerManager {
         } else if (trigger.swapWeaponId != null) {
             entityManager.getPlayer().setSlotWeapon(trigger.weaponSlot, trigger.swapWeaponId);
         } else if (trigger.type != null) {
-            // Only reached with a real enemy id - a blank trigger (an ActionPalette "Trigger Event"
-            // linked to nothing, or a bare gate/requireConfirm trigger with no action at all - see
-            // Trigger.gate's own doc) has trigger.type == null here, and must NOT fall through to
-            // EnemySpawnOps.spawnEnemy(): ObjectMap.get(null) throws IllegalArgumentException in
-            // this libGDX version rather than returning null, so this guard is load-bearing, not
-            // just a shortcut - a null type used to crash the whole game the instant such a trigger
-            // fired.
-            //
-            // See EnemyEntranceMovement's own doc - trigger.enterFromAbove's actual off-screen spawnY
-            // depends on the real spawn sprite's true height, which isn't known until GenericEnemy.
-            // initWithDefinition() itself has built it, so this just passes trigger.y through as an
-            // ordinary spawn position; that method overrides it (and builds the entrance MOVEMENT)
-            // once the real size is known - this just passes `trigger` and the camera's CURRENT
-            // speed through for it to use there.
+            // The null check matters: a blank trigger (e.g. a bare gate) must not reach spawnEnemy(),
+            // because ObjectMap.get(null) throws in this libGDX version. The entrance spawn height
+            // is resolved later in GenericEnemy once the real sprite size is known.
             if (trigger.waveShape != null) {
                 fireWave(trigger, realTime);
             } else {
@@ -569,40 +410,14 @@ public class TriggerManager {
         }
     }
 
-    /** Expands `trigger` (an enemy-spawn Trigger with waveShape set) into its full member list via
-     *  WaveSpawnPlanner, then queues every member as a PendingWaveSpawn due waveStartDelay +
-     *  i*waveSpawnInterval real-seconds from now - see dispatchPendingWaveSpawns() for the actual
-     *  spawn once each becomes due. Nothing is spawned synchronously here, even the "first" member -
-     *  a uniform "every member (including the one at slot 0) waits its own due time" rule is simpler
-     *  than special-casing "slot 0 spawns immediately, the rest queue", and waveStartDelay 0/
-     *  waveSpawnInterval 0 (the field defaults) already make slot 0 due THIS SAME FRAME's
-     *  dispatchPendingWaveSpawns() call anyway (it runs once more, right after this), so nothing
-     *  actually spawns any later than it would have otherwise.
+    /** Queues every member of a wave as a PendingWaveSpawn due at waveStartDelay + i * waveSpawnInterval
+     *  (with zero delays, members still spawn this frame via dispatchPendingWaveSpawns()).
      *
-     * Every member spawns/arrives at its OWN true slot position - never a shared anchor - so a
-     * member with Trigger.enterFromAbove set flies in (and, if it has a real waypoint path, starts
-     * flying that path) using the EXACT SAME single-enemy machinery a normal, non-wave trigger
-     * already uses (EnemyEntranceMovement.build()'s existing "a WaypointPathMovement afterEntrance
-     * needs no synthetic entrance leg, its own initFrom() already reads the real off-screen spawn
-     * position" case) - no Squadron wrapping, no runtime offset-translate trick, and so none of the
-     * entrance-timing edge cases that come with either. This session tried (twice) to make
-     * SquadronMovement's own runtime "-offset/leader.update/+offset" translate carry the formation
-     * instead, keeping ONE shared pattern instance for the whole group - that meant the off-screen
-     * spawn height and the leader's own curve start point both had to be reverse-engineered to
-     * cancel out correctly, and EnemyEntranceMovement.build()'s entrance-skip check needed unwrapping
-     * to even recognize a Squadron-wrapped waypoint path - fragile in a way that broke twice under
-     * exactly the paired symptoms reported ("shoots down before the path" / "not offset until the
-     * end"). Cloning the pattern PER MEMBER instead - see registerShiftedClone() - and shifting
-     * every absolute target inside it by that member's own (offsetX, offsetY) sidesteps all of that:
-     * each member is just an ordinary, self-contained spawn with its own real movement pattern,
-     * indistinguishable (from BaseEnemy/EnemyEntranceMovement's own perspective) from one hand-
-     * authored at that exact slot - shifting the pattern's own targets is what "keep formation" (the
-     * whole group's shape holding together) actually reduces to, since a Straight/ZigZag/etc.
-     * pattern (no absolute target to shift at all) already preserves relative spacing automatically
-     * once every member shares the identical velocity - see registerShiftedClone()'s own doc.
-     * waveRotation only ever moves WHERE each member's shape/spawn position sits (see
-     * WaveSpawnPlanner.plan()) - it deliberately does NOT rotate the direction any member actually
-     * flies, which stays whatever the source pattern was authored with regardless of rotation. */
+     * Each member is an ordinary self-contained spawn at its own slot. With waveKeepFormation and an
+     * authored movementPattern, each member gets its own clone of the pattern with every absolute
+     * target shifted by its slot offset (registerShiftedClone()), which keeps the shape rigid. Without
+     * an authored pattern, all members share one straight-line direction. waveRotation only moves
+     * spawn positions; it never rotates the direction members fly. */
     private void fireWave(Trigger trigger, float fireRealTime) {
         Array<WaveSpawnPlanner.Slot> slots = WaveSpawnPlanner.plan(trigger, worldWidth / 2f, 1f);
         if (slots.size == 0) return;
@@ -610,23 +425,14 @@ public class TriggerManager {
         boolean hasOwnMovement = trigger.movementPattern != null && !trigger.movementPattern.isBlank()
             && PatternRegistry.getMovement(trigger.movementPattern) != null;
 
-        // keepFormation's fallback (no authored movementPattern) needs exactly ONE shared angle for
-        // the whole group - computed once here (see singleAnchorProbe()'s own doc) rather than per
-        // member, since a synthesized Straight pattern has no absolute target to shift per member,
-        // only a direction: giving every member the SAME direction is what keeps the group's shape
-        // rigid (identical velocity every frame never changes anyone's position relative to anyone
-        // else's), whereas per-member angles (the independent/non-formation case below) would fan
-        // the group out instead.
+        // Keep-formation without an authored pattern: one shared angle, so identical velocities keep
+        // the shape rigid (per-member angles would fan the group out).
         String sharedFallbackAngleId = null;
         if (trigger.waveKeepFormation && !hasOwnMovement) {
             float sharedAngle = WaveSpawnPlanner.plan(singleAnchorProbe(trigger), worldWidth / 2f, 1f).first().angleDeg;
             sharedFallbackAngleId = registerStraight(trigger.waveSpeed, sharedAngle, null);
         }
 
-        // See Trigger.waveSpawnLift's own doc/computeWaveSpawnLift()'s own doc - only the
-        // waveKeepFormation+hasOwnMovement combination ever gives members DIFFERENT shifted targets
-        // (registerShiftedClone() below), so it's the only case where a per-member lift could ever
-        // need to differ from its squadmates' in the first place.
         float waveSpawnLift = trigger.waveKeepFormation ? computeWaveSpawnLift(trigger, slots, hasOwnMovement) : Float.NaN;
 
         for (int i = 0; i < slots.size; i++) {
@@ -642,30 +448,9 @@ public class TriggerManager {
                 movementPatternId = hasOwnMovement ? trigger.movementPattern : registerStraight(trigger.waveSpeed, slot.angleDeg, null);
             }
 
-            // Per-member entrance stand-in - EnemyEntranceMovement.build() reads its OWN x/y as the
-            // entrance leg's arrival point (or, for a WaypointPathMovement afterEntrance, as nothing
-            // beyond its own off-screen SPAWN height - see GenericEnemy.initWithDefinition()'s own
-            // spawnY() override - since no synthetic leg is built for that case at all); offsetX/
-            // offsetY are passed through as trigger's own (almost always unset) - formationOffsetX/Y
-            // (PatternFactory.createMovement()'s param for THAT) is only ever consumed by a
-            // "Squadron" pattern, and nothing built here is one anymore.
-            //
-            // entranceView.y is always this member's own TRUE slot.y - exactly what a normal,
-            // individually-hand-placed enemy at that exact position would use, no formation-wide
-            // adjustment at all. Two earlier designs both got this wrong: shifting it by the group's
-            // own total Y-spread (worldHeight - minOffsetY + offsetY, sized off waveHeight alone) could
-            // inflate a tall wave's spawn point far ABOVE its own real target, reading as "moving
-            // opposite to its waypoint"; replacing that with each member computing its OWN off-screen
-            // height from only its OWN shifted target (no shared adjustment at all) fixed that but let
-            // members spawn at different heights with no relation to each other, breaking the
-            // formation's shape from the very first frame; collapsing every member to ONE shared
-            // absolute height fixed THAT but flattened the formation's own vertical shape at spawn down
-            // to a single line, then let it shear open during the flight since spawn Y no longer varied
-            // the way arrival Y does. waveSpawnLift (added below, in EnemyEntranceMovement.spawnY() -
-            // see that field's own doc) is the actual fix: a single ADDITIVE delta applied to every
-            // member's own DIFFERENT slot.y, not a value that replaces it - so the formation's real
-            // vertical shape survives untouched at spawn, through the flight, AND at arrival, while
-            // still guaranteeing every member clears both worldHeight and its own real target.
+            // Per-member stand-in for EnemyEntranceMovement: this member's true slot position plus the
+            // shared additive lift (see Trigger.waveSpawnLift), so the formation keeps its shape from
+            // spawn through arrival.
             Trigger entranceView = new Trigger();
             entranceView.x = slot.x;
             entranceView.y = slot.y;
@@ -674,9 +459,8 @@ public class TriggerManager {
             entranceView.distance = trigger.distance;
             entranceView.waveSpawnLift = waveSpawnLift;
 
-            // A health phase's movementPattern gets the same per-member shift as the spawn
-            // movement above - otherwise, with keepFormation, every member would fly its phase path
-            // to the SAME absolute waypoints and collapse the formation the moment the phase starts.
+            // Shift health-phase movement patterns per member too, or the formation would collapse
+            // onto the same absolute waypoints when a phase starts.
             Array<HealthPhase> memberPhases = trigger.healthPhases;
             if (trigger.waveKeepFormation && memberPhases != null && memberPhases.size > 0) {
                 memberPhases = new Array<>();
@@ -693,24 +477,10 @@ public class TriggerManager {
         }
     }
 
-    /** See Trigger.waveSpawnLift's own doc - the single additive delta this wave's members all add to
-     *  their own (different) slot.y, or NaN when there's nothing to add.
-     *
-     * Two separate requirements, both satisfied by ONE shared lift because of how registerShiftedClone
-     * works: (a) every member has to clear worldHeight - driven by whichever member has the SMALLEST
-     * slot.y, so lift >= worldHeight - min(slot.y) covers all of them at once (every other member's
-     * own slot.y is larger, so the same lift clears worldHeight for them with room to spare); (b) every
-     * member has to clear its OWN real target - and since registerShiftedClone() shifts a member's
-     * target by the exact same (slot.y - trigger.y) its slot.y itself already differs from trigger.y
-     * by, (member target.y) - (member slot.y) reduces to (base target.y - trigger.y) for EVERY member,
-     * a single constant independent of which member - so lift >= that one constant clears every
-     * member's own target simultaneously, no per-member loop needed for this half at all. Whichever
-     * requirement needs more lift wins.
-     *
-     * Only a real authored WaypointPath movement can ever make (b) exceed (a) - every other movement
-     * kind has no absolute target to outrun, so (a) alone (already covered by EnemyEntranceMovement.
-     * spawnY()'s own worldHeight floor even with lift=0) is always enough, and this returns NaN for
-     * those, leaving spawnY() untouched exactly as if this method had never been called. */
+    /** The shared additive entrance lift for a keep-formation wave, or NaN with no entrance. It must
+     *  (a) lift the lowest member above worldHeight and (b) lift every member above its own shifted
+     *  target. Because targets are shifted by the same offset as slots, (b) is one constant,
+     *  baseTarget.y - trigger.y, for all members. Only an authored WaypointPath has a target to clear. */
     private float computeWaveSpawnLift(Trigger trigger, Array<WaveSpawnPlanner.Slot> slots, boolean hasOwnMovement) {
         if (!trigger.enterFromAbove) return Float.NaN;
         float minSlotY = Float.POSITIVE_INFINITY;
@@ -727,20 +497,10 @@ public class TriggerManager {
         return lift;
     }
 
-    /** Deep-clones `sourceId`'s MovementPatternDef (a Json round-trip, same technique StageCanvas.
-     *  cloneTrigger()/forkMovementPattern() already use in the editor) and shifts every absolute
-     *  target coordinate found anywhere in it - MoveToPoint/Straight's own targetX/targetY, plus each
-     *  leg of a WaypointPath (its `patterns` list is itself a list of MovementPatternDef legs, each
-     *  with its own targetX/Y) and each sub-pattern of a Sequence/Squadron (`patterns`/`pattern`),
-     *  recursively - by (dx, dy), then registers the shifted copy under a fresh synthetic id via
-     *  PatternRegistry.putMovement() (never written to disk, same reasoning as registerStraight()).
-     *  Deliberately a plain TRANSLATE, not a rotate-then-translate, even when waveRotation is set:
-     *  every member keeps flying in the SAME direction the pattern was originally authored with,
-     *  regardless of how waveRotation has spread the group's own spawn positions out - confirmed as
-     *  the intended behavior (a rotated-direction version was tried and explicitly rejected). A field
-     *  left NaN (no target authored for that leg/pattern - falls back to spawnCenterX/0 at resolve
-     *  time, already relative to wherever THIS member itself spawns) is left untouched rather than
-     *  shifted, so it keeps behaving exactly as relative as it already was. */
+    /** Deep-clones a movement pattern, translates every absolute target in it (recursively through
+     *  waypoint legs and sub-patterns) by (dx, dy), and registers it under a synthetic id (never saved
+     *  to disk). A plain translate: members keep the authored flight direction even when waveRotation
+     *  is set. NaN (unset) targets are relative already and stay untouched. */
     private String registerShiftedClone(String sourceId, float dx, float dy) {
         MovementPatternDef source = PatternRegistry.getMovement(sourceId);
         Json json = new Json();
@@ -760,12 +520,8 @@ public class TriggerManager {
         shiftTargets(def.pattern, dx, dy);
     }
 
-    /** A throwaway Trigger sharing `trigger`'s own x/y/waveOrientation - used purely to ask
-     *  WaveSpawnPlanner for the angle IT would compute for a member sitting exactly at the anchor
-     *  (i.e. the degenerate "member == anchor" case - see WaveSpawnPlanner.computeAngle()'s own
-     *  fallback doc) without duplicating that computation here. waveShape is forced to "point" (a
-     *  single member, at the anchor, by construction) so plan() returns exactly one slot regardless
-     *  of `trigger`'s own actual shape. */
+    /** A one-member "point" wave at `trigger`'s anchor, used to ask WaveSpawnPlanner for the anchor's
+     *  orientation angle. */
     private static Trigger singleAnchorProbe(Trigger trigger) {
         Trigger probe = new Trigger();
         probe.x = trigger.x;
@@ -776,9 +532,8 @@ public class TriggerManager {
         return probe;
     }
 
-    /** Builds (and registers into PatternRegistry under a fresh synthetic id, unless `explicitId` is
-     *  given) a plain "Straight" MovementPatternDef - see fireWave()'s own doc on why this is never
-     *  written to disk. Returns the id it was registered under. */
+    /** Registers a "Straight" movement pattern under `explicitId` or a fresh synthetic id, and
+     *  returns the id. */
     private String registerStraight(float speed, float angleDeg, String explicitId) {
         MovementPatternDef def = new MovementPatternDef();
         String id = explicitId != null ? explicitId : ("__wave" + (nextSyntheticPatternId++));
@@ -790,11 +545,8 @@ public class TriggerManager {
         return id;
     }
 
-    /** Spawns every PendingWaveSpawn whose dueRealTime has arrived, oldest-due-first - run every
-     *  frame (see update()'s own doc on why this happens BEFORE the activeGate early-return: a
-     *  wave's own real-time schedule, like realTime itself, must never freeze just because some
-     *  unrelated later trigger's gate is blocking the camera). Iterates backward so removing a
-     *  dispatched entry mid-loop is safe without a separate pass. */
+    /** Spawns every wave member whose due time has arrived. Runs before the gate check so waves keep
+     *  spawning while the camera is frozen. */
     private void dispatchPendingWaveSpawns(EntityManager entityManager) {
         for (int i = pendingWaveSpawns.size - 1; i >= 0; i--) {
             PendingWaveSpawn pending = pendingWaveSpawns.get(i);
@@ -809,11 +561,8 @@ public class TriggerManager {
         }
     }
 
-    /** Builds a live TextCue from trigger's authored text fields and starts it playing - same
-     *  trigger-time behavior SpawnScheduler.update() gives its own (wall-clock) text cues the
-     *  instant they're reached: an immediate blip for a static/blinking cue, or a looping typing
-     *  sound for a typewriter cue that update()'s own per-frame loop above stops once the reveal
-     *  finishes. */
+    /** Builds and shows a TextCue from the trigger's text fields: a looping typing sound for a
+     *  typewriter cue, otherwise a single blip. */
     private void fireTextCue(Trigger trigger, AudioManager audio, float realTime) {
         TextCue cue = new TextCue();
         cue.text = trigger.text;
@@ -837,18 +586,15 @@ public class TriggerManager {
         trigger.liveTextCue = cue;
     }
 
-    /** Tags the enemy a spawn call just added (it goes on the end of the enemy list) with trigger's id, so
-     *  GameController.destroyEnemy() can count its death toward that spawn - see Condition's "spawnDestroyed".
-     *  `enemiesBefore` is the list size from before the spawn call, since a spawn can add nothing (an unknown
-     *  enemy type) and the last entry would then belong to somebody else. A no-op for a trigger with no id. */
+    /** Tags the enemy a spawn call just added with the trigger's id, for "spawnDestroyed".
+     *  `enemiesBefore` guards against a spawn that added nothing (unknown enemy type). */
     private static void tagSpawnGroup(EntityManager entityManager, int enemiesBefore, Trigger trigger) {
         if (trigger.id == null || trigger.id.isBlank()) return;
         Array<Enemy> enemies = entityManager.getEnemies();
         if (enemies.size > enemiesBefore) enemies.peek().setSpawnGroup(trigger.id);
     }
 
-    /** Called as an enemy-spawn trigger with an id fires: records how many enemies it will produce in all (so
-     *  "spawnDestroyed" knows when it's all been killed) and starts its kill tally from zero. */
+    /** Records how many enemies an id'd spawn trigger will produce and resets its kill tally. */
     private void registerSpawnGroup(Trigger trigger, ScoreManager scoreManager) {
         if (trigger.id == null || trigger.id.isBlank() || trigger.type == null) return;
         int members = trigger.waveShape != null ? WaveSpawnPlanner.plan(trigger, 0f, 0f).size : 1;
@@ -856,9 +602,7 @@ public class TriggerManager {
         scoreManager.clearGroupDestroyed(trigger.id);
     }
 
-    /** True for a Trigger that actually spawns an enemy (the default action, same as an ordinary
-     *  SpawnScheduler.SpawnEvent) rather than one of the other action kinds - see
-     *  getEnemySpawnCount(). */
+    /** True for a trigger whose action is spawning an enemy (no other action field set). */
     private static boolean isEnemySpawn(Trigger trigger) {
         return trigger.sound == null && trigger.spriteTexture == null && trigger.setSpeed == null
             && trigger.text == null && !trigger.triggerBossVideo && !trigger.fadeOutMusic && trigger.music == null
@@ -866,13 +610,8 @@ public class TriggerManager {
             && !trigger.gate && !trigger.scheduleEnd;
     }
 
-    /** Number of enemies that actually spawn - added into GameController's totalEnemiesAcrossRun
-     *  alongside SpawnScheduler.getSchedule().size(). A wave trigger (Trigger.waveShape != null)
-     *  spawns WaveSpawnPlanner.plan()'s whole member list rather than just the one trigger, so it
-     *  must be counted that way too - counting 1 per wave trigger (as an ordinary single spawn would
-     *  be) undercounts any stage using waves, throwing off both the end-of-stage total and
-     *  computeRank()'s killFraction. The nominal player point only affects each member's angle, never
-     *  the member count, so passing 0,0 here still yields the exact size fireWave() will spawn. */
+    /** Total enemies this stage's triggers spawn, counting every wave member. Feeds the end-of-stage
+     *  total and computeRank()'s kill fraction. */
     public int getEnemySpawnCount() {
         int count = 0;
         for (Trigger trigger : triggers) {
@@ -882,9 +621,7 @@ public class TriggerManager {
         return count;
     }
 
-    /** Mirrors SpawnScheduler.getBossSpawnTime() - the distance of the first enemy-spawning trigger
-     *  whose EnemyDefinition sets isBoss, or -1 if this stage's triggers spawn no boss (either it
-     *  has none, or - as today - its boss still spawns via the old SpawnScheduler). */
+    /** Distance of the first trigger spawning an isBoss enemy, or -1. */
     public float getBossSpawnDistance() {
         for (Trigger trigger : triggers) {
             if (!isEnemySpawn(trigger)) continue;
@@ -894,17 +631,8 @@ public class TriggerManager {
         return -1f;
     }
 
-    /** Distance of this stage's triggerBossVideo trigger (see Trigger.triggerBossVideo), or -1 if
-     *  this stage's triggers don't fire one - mirrors getBossSpawnDistance()'s own fallback
-     *  pattern. Consumed by GameController's hue-cycle-background period (see
-     *  ScrollingBackground.setHueCyclePeriod()), which reuses this same "how far into the stage
-     *  things escalate" value as a ready-made period rather than needing its own separately
-     *  authored one - the same accidental-but-kept coupling SpawnScheduler.getBackgroundVideoTime()
-     *  served before this trigger kind existed. */
-    /** The track the latest Trigger.music at or before `distance` switches to, or null if none has been
-     *  reached yet (the stage's own music is still the right one). seekTo() skips triggers rather than
-     *  replaying them, so GameController asks this after a seek/checkpoint to put the right track back
-     *  on - see GameController.syncStageMusic(). */
+    /** The track of the latest music trigger at or before `distance`, or null if none (the stage's
+     *  own music applies). Used to restore the right track after a seek. */
     public String musicAt(float distance) {
         String track = null;
         float trackDistance = -Float.MAX_VALUE;
@@ -917,8 +645,7 @@ public class TriggerManager {
         return track;
     }
 
-    /** Every sound this stage's triggers can play (Trigger.sound) - GameController preloads them at stage
-     *  load so the first one to fire doesn't stall that frame loading it. */
+    /** Every sound the triggers can play, so they can be preloaded at stage load. */
     public Array<String> getCueSoundPaths() {
         Array<String> paths = new Array<>();
         for (Trigger trigger : triggers) {
@@ -927,6 +654,8 @@ public class TriggerManager {
         return paths;
     }
 
+    /** Distance of the boss-video trigger, or -1. GameController also uses it as the hue-cycle
+     *  background's period. */
     public float getBossVideoDistance() {
         for (Trigger trigger : triggers) {
             if (trigger.triggerBossVideo) return trigger.distance;
@@ -934,10 +663,7 @@ public class TriggerManager {
         return -1f;
     }
 
-    /** True once a Trigger.scheduleEnd trigger has fired - the distance-based equivalent of
-     *  SpawnScheduler.isScheduleEndTriggered(), for a stage with no boss to kill (e.g. the tutorial).
-     *  A live lookup rather than a separately-tracked latch, since Trigger.fired already gets reset/
-     *  reconstructed correctly by reset()/seekTo() with no extra bookkeeping needed here. */
+    /** True once a scheduleEnd trigger has fired (stage complete without a boss). */
     public boolean isScheduleEndTriggered() {
         for (Trigger trigger : triggers) {
             if (trigger.scheduleEnd && trigger.fired) return true;
@@ -945,22 +671,19 @@ public class TriggerManager {
         return false;
     }
 
-    /** True while `distance` sits inside any [start, end) practice checkpoint - see
-     *  SpawnScheduler.isInPracticeSection()'s own doc for what this means for GameController's hit
-     *  handling; identical meaning here, just keyed by distance instead of time. */
+    /** True while `distance` is inside a practice checkpoint, where a hit rewinds instead of
+     *  costing a life. */
     public boolean isInPracticeSection(float distance) {
         return findCheckpoint(distance) != null;
     }
 
-    /** Where a hit at `distance` (while isInPracticeSection(distance)) rewinds the camera back to -
-     *  returns `distance` itself if no checkpoint currently contains it. */
+    /** Start of the checkpoint containing `distance`, or `distance` itself if none. */
     public float getPracticeCheckpointStart(float distance) {
         DistanceWindow checkpoint = findCheckpoint(distance);
         return checkpoint != null ? checkpoint.start : distance;
     }
 
-    /** See Trigger.firstAttemptOnly/retryOnly - true if trigger should be skipped rather than played
-     *  on the current pass through its own practice checkpoint. */
+    /** True if `trigger` should be skipped on this pass (see Trigger.firstAttemptOnly/retryOnly). */
     private boolean isSkippedThisAttempt(Trigger trigger) {
         if (!trigger.firstAttemptOnly && !trigger.retryOnly) return false;
         boolean retrying = retryCheckpoint != null
@@ -968,10 +691,8 @@ public class TriggerManager {
         return trigger.retryOnly ? !retrying : retrying;
     }
 
-    /** seekTo() back to the start of the practice checkpoint containing `distance` after a failed
-     *  attempt - same rewind GameController.restartPracticeSection() always did, plus marking that
-     *  checkpoint as being retried so its Trigger.firstAttemptOnly/retryOnly variants swap (see
-     *  isSkippedThisAttempt()). Returns the distance rewound to. */
+    /** Rewinds to the start of the checkpoint containing `distance` after a failed attempt and marks
+     *  that checkpoint as being retried. Returns the distance rewound to. */
     public float seekToPracticeRetry(float distance) {
         DistanceWindow checkpoint = findCheckpoint(distance);
         float target = checkpoint != null ? checkpoint.start : distance;
@@ -987,26 +708,18 @@ public class TriggerManager {
         return null;
     }
 
-    /** True while `distance` sits inside any [start, end) invincibility window - see
-     *  SpawnScheduler.isPlayerInvincible()'s own doc. */
     public boolean isPlayerInvincible(float distance) {
         return inAnyWindow(invincibilityWindows, distance);
     }
 
-    /** True while `distance` sits inside any [start, end) weapons-disabled window - see
-     *  SpawnScheduler.isWeaponsDisabled()'s own doc. */
     public boolean isWeaponsDisabled(float distance) {
         return inAnyWindow(weaponsDisabledWindows, distance);
     }
 
-    /** True while `distance` sits inside any [start, end) Hyper-Attack-disabled window - see
-     *  SpawnScheduler.isHyperAttackDisabled()'s own doc. */
     public boolean isHyperAttackDisabled(float distance) {
         return inAnyWindow(hyperAttackDisabledWindows, distance);
     }
 
-    /** True while `distance` sits inside any [start, end) bomb-disabled window - see
-     *  SpawnScheduler.isBombDisabled()'s own doc. */
     public boolean isBombDisabled(float distance) {
         return inAnyWindow(bombDisabledWindows, distance);
     }
@@ -1034,28 +747,18 @@ public class TriggerManager {
         }
     }
 
-    /** Debug/practice-rewind parity with SpawnScheduler.seekTo() - same "skip rather than replay"
-     *  compromise that method's own doc describes for a gate it jumps past: a trigger whose distance
-     *  falls behind targetDistance is marked armed-and-fired without its conditions (if any) ever
-     *  actually being checked, rather than replayed. One ahead of it resets to fully unarmed so it
-     *  behaves normally once the camera reaches it again. A text-cue trigger skipped this way simply
-     *  never shows its cue (same skip, not replay) - liveTextCues is cleared unconditionally so a
-     *  rewind can't leave a stale cue from beyond the new position still on screen. activeGate is
-     *  likewise dropped unconditionally - whichever gate (if any) the new position actually falls on
-     *  will simply arm again normally on a later update() once it's ahead of targetDistance, or was
-     *  already marked fired/past if behind it. */
+    /** Jumps to targetDistance. Triggers behind it are marked fired without running (skipped, not
+     *  replayed); triggers ahead are reset. Live text cues and any active gate are dropped. */
     public void seekTo(float targetDistance) {
         camera.seekTo(targetDistance);
         liveTextCues.clear();
         activeGate = null;
-        retryCheckpoint = null; // a plain (debug) seek is a fresh pass - see seekToPracticeRetry()
+        retryCheckpoint = null; // a plain seek is a fresh pass
         spawnGroupExpected.clear();
         gemsAtLastWaypointSpawn = -1;
         enemiesDestroyedAtLastSpawn = -1;
         for (Trigger trigger : triggers) {
-            // See Trigger.spawnLead's own doc/update()'s matching (identically-clamped) armDistance -
-            // a trigger due to arm early is "past" a seek target that's still short of its own
-            // authored distance too.
+            // Same clamped arm distance as update().
             boolean past = Math.max(0f, trigger.distance - trigger.spawnLead) <= targetDistance;
             trigger.armed = past;
             trigger.fired = past;

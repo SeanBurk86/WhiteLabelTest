@@ -3,11 +3,8 @@ package whitelabeltest.gamemanagers;
 import com.badlogic.gdx.utils.Array;
 import whitelabeltest.gamemanagers.spawning.StageMapDefinition;
 
-/** The runtime graph built from a StageMapDefinition: one Node per entry, positioned and connected the
- *  way the reference sketch (assets/stage guide.png) shows - columns left to right, each column's nodes
- *  centred vertically, every node joined to whichever nodes in the next column sit next to it. Pure data,
- *  no rendering or input - see StageSelect for the "which one do I pick" state and GameController for
- *  how the player's route through it becomes the run's stage order. */
+/** The runtime graph built from a StageMapDefinition: columns left to right, each column centred
+ *  vertically, each node joined to the next column's nodes beside it. Pure data. */
 public class StageMap {
     public static class Node {
         public final int column, row;
@@ -42,8 +39,8 @@ public class StageMap {
         int columnCount = def.columns.length;
         int tallest = 1;
         for (String[] column : def.columns) tallest = Math.max(tallest, column.length);
-        // One row step = the vertical distance between neighbours in the tallest column; a shorter column's
-        // nodes are centred, so they sit half a step off the ones beside them.
+        // Row step = spacing in the tallest column. Shorter columns are centred, so their nodes sit
+        // half a step off their neighbours.
         float rowStep = tallest <= 1 ? 0f : 1f / (tallest - 1);
 
         Array<Array<Node>> columns = new Array<>();

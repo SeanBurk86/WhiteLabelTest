@@ -12,8 +12,7 @@ import whitelabeltest.enemy.bullets.EnemyBullet;
 import whitelabeltest.enemy.bullets.LaserBullet;
 import whitelabeltest.gamemanagers.ObjectPools;
 
-/** Fires a persistent beam (see LaserBullet) anchored at the enemy's emission point instead of a
- *  bullet that travels away. The beam can sweep by giving it a nonzero angularSpeed. */
+/** A persistent beam (LaserBullet) anchored at the emission point; sweeps with a nonzero angularSpeed. */
 public class LaserFiring implements FiringPattern {
     public static final float DEFAULT_LENGTH = 12f;
     public static final float DEFAULT_DURATION = 2.0f;

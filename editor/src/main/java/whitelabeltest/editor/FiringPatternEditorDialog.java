@@ -22,17 +22,8 @@ import whitelabeltest.enemy.FiringPatternDef;
 
 import java.util.Optional;
 
-/** "Firing Pattern Editor" - a standalone window (mirrors QuickPlayDialog's own separate-Stage
- *  convention) laid out like SHMUP Creator's own Weapon Editor from the reference screenshots this
- *  was built against: a pattern list on the left, tabbed properties in the center
- *  (FiringPatternFieldsEditor - every FiringPatternDef field this codebase actually has, not
- *  SHMUP's own richer/different model), and a REAL live-ticking preview on the right
- *  (FiringPatternPreviewCanvas - the actual FiringPattern/EnemyBullet machinery the game itself
- *  runs, driven by a JavaFX AnimationTimer with Play/Pause/Reset controls; see that class's own
- *  doc for how it manages without a live GL context). Reads/writes data/firing_patterns/&lt;id&gt;
- *  .json exactly the way PatternRegistry.load() does in the real game, via FiringPatternLibrary -
- *  so a pattern saved here is immediately usable from any Trigger's/EnemyDefinition's own "Firing
- *  pattern" combo elsewhere in this editor, no extra step. */
+/** The Firing Pattern Editor window: pattern list (left), FiringPatternFieldsEditor (center) and
+ *  FiringPatternPreviewCanvas (right). Saves data/firing_patterns/&lt;id&gt;.json. */
 final class FiringPatternEditorDialog {
     private FiringPatternEditorDialog() {}
 
@@ -68,10 +59,7 @@ final class FiringPatternEditorDialog {
 
         Runnable markDirty = () -> {
             dirty[0] = true;
-            // A field edit changes `current[0]`'s data, but the live preview's FiringPattern
-            // instance already baked the OLD values into its own private fields at construction
-            // (see FiringPatternPreviewCanvas.rebuild()'s own doc) - onFieldChanged() rebuilds it
-            // from scratch rather than a plain redraw(), or the edit would never actually show up.
+            // The preview must be rebuilt, not just redrawn, to pick up the edit.
             preview.onFieldChanged();
             statusLabel.setText((current[0] != null ? current[0].id : "") + " - unsaved changes");
         };
@@ -86,9 +74,7 @@ final class FiringPatternEditorDialog {
                 statusLabel.setText("No pattern selected.");
                 return;
             }
-            // New/Duplicate below select a freshly-built, not-yet-saved def by id before any file
-            // exists for it - reload from disk only when there actually IS one; otherwise this is
-            // that selection callback firing and `current[0]` already IS the right in-memory def.
+            // New/Duplicate select an unsaved def; only load from disk when a file exists.
             boolean unsaved = current[0] != null && id.equals(current[0].id) && !library.exists(id);
             current[0] = unsaved ? current[0] : library.load(id);
             idField.setText(id);
@@ -140,10 +126,7 @@ final class FiringPatternEditorDialog {
             list.getSelectionModel().clearSelection();
         });
 
-        // Also serves as this pattern's rename/"Save As": saving under a different id than the one
-        // originally loaded writes a NEW file (added to the list below) and leaves the old one on
-        // disk untouched - same non-destructive "Save As" convention EditorDocument's own Stage
-        // menu already uses, rather than silently deleting whatever the id used to be.
+        // Saving under a new id writes a new file and leaves the old one (Save As).
         Button saveButton = new Button("Save");
         saveButton.setOnAction(e -> {
             if (current[0] == null) return;

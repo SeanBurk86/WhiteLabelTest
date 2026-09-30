@@ -1,9 +1,6 @@
 package whitelabeltest.player;
 
-/** The three starting weapon-slot pairings offered on WeaponSelectScreen before a run begins -
- *  WaveBlastWeapon is deliberately left out of all three, same as it always has been: it's only
- *  ever obtained mid-run from a powerup, never a starting choice. Slot A/B map directly to
- *  Player.setSlotWeapon(0, ...)/setSlotWeapon(1, ...) in Player.reset(WeaponLoadout). */
+/** The starting weapon pairs offered on WeaponSelectScreen (slot A, slot B). */
 public enum WeaponLoadout {
     BASIC_THUNDERBOLT("RAIN.sh & LIGHTNING.bat", "BasicWeapon", "Thunderbolt"),
     BASIC_ORBIT("RAIN.sh & MOON.cmd", "BasicWeapon", "OrbitWeapon"),

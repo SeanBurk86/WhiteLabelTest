@@ -13,6 +13,7 @@ import whitelabeltest.enemy.bullets.EnemyBullet;
 import whitelabeltest.enemy.bullets.OrbitingBullet;
 import whitelabeltest.gamemanagers.ObjectPools;
 
+/** Fires bullets whose centers drift toward the player while each bullet spins around its center. */
 public class OrbitingFiring implements FiringPattern {
     private final float fireRate;
     private final float bulletSize;
@@ -56,8 +57,7 @@ public class OrbitingFiring implements FiringPattern {
         this(fireRate, bulletSize, bulletSpeed, spriteOverride, offsetX, offsetY, bulletDamage, DEFAULT_ORBIT_RADIUS, DEFAULT_ORBIT_SPEED);
     }
 
-    /** @param orbitRadius, orbitSpeed each bullet's spin around its own drifting center - see
-     *  FiringPatternDef.orbitRadius/orbitSpeed */
+    /** @param orbitRadius,orbitSpeed each bullet's spin around its drifting center */
     public OrbitingFiring(float fireRate, float bulletSize, float bulletSpeed, Animation<TextureRegion> spriteOverride, float offsetX, float offsetY, int bulletDamage, float orbitRadius, float orbitSpeed) {
         this.fireRate = fireRate;
         this.bulletSize = bulletSize;

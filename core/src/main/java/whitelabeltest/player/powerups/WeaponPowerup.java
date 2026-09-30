@@ -23,9 +23,7 @@ public class WeaponPowerup implements Powerup {
     private final Vector2 velocity = new Vector2();
     private float worldWidth, worldHeight;
 
-    // How many levels this adds to both equipped weapons at once on pickup (see
-    // Player.levelUpEquippedWeapons()) - same for a normal drop and a death-restore drop (see
-    // initAsRestore()).
+    // Levels added to both equipped weapons on pickup.
     private int amount;
 
     public WeaponPowerup() {
@@ -58,18 +56,14 @@ public class WeaponPowerup implements Powerup {
         }
     }
 
-    /** A normal weapon-level pickup - adds `amount` levels (1-3, see GameController's tier
-     *  textures) to both currently equipped weapons on pickup (see Player.levelUpEquippedWeapons()). */
+    /** A normal drop (amount 1-3, each with its own texture). */
     public void initWithAmount(Texture texture, int amount, float x, float y, float worldWidth, float worldHeight) {
         this.amount = amount;
         init(texture, x, y, worldWidth, worldHeight);
     }
 
-    /** The pickup GameController.applyPlayerHit() spawns at the death spot: adds back the levels
-     *  death's floor-to-1 just took away (see Player.resetWeaponsOnDeath()) - an ordinary additive
-     *  level-up like initWithAmount(), so it stacks correctly with any other pickup collected
-     *  before or after it instead of clobbering whichever arrived second with a flat "restore to
-     *  X" that ignored the other's gain. */
+    /** The drop at the death spot, adding back the levels lost. Additive, so it stacks with other
+     *  pickups. */
     public void initAsRestore(Texture texture, int amount, float x, float y, float worldWidth, float worldHeight) {
         this.amount = amount;
         init(texture, x, y, worldWidth, worldHeight);
@@ -107,8 +101,7 @@ public class WeaponPowerup implements Powerup {
         if (sprite != null) sprite.draw(batch);
     }
 
-    // No longer time-limited - a dropped weapon powerup stays on screen (bouncing off the world
-    // edges, see update()) until collected. Bounds check kept only as a pooling safety net.
+    // Powerups bounce around until collected; this is only a safety net.
     @Override
     public boolean isOffScreen() {
         return sprite.getY() < -sprite.getHeight() || sprite.getY() > worldHeight + sprite.getHeight()

@@ -6,20 +6,11 @@ import com.badlogic.gdx.utils.Json;
 import com.badlogic.gdx.utils.SerializationException;
 import whitelabeltest.player.WeaponLoadout;
 
-/** Captures one run's worth of ReplayFrames and persists them - see GameController's recorder
- *  field, which owns exactly one of these per reset()-to-reset()/dispose() span. Deliberately uses
- *  Gdx.files.external() rather than DebugSaveStateManager/PatternPreviewer's local-file style:
- *  those two are dev-only tools that intentionally write back into the project's assets/ source
- *  tree (via lwjgl3/build.gradle's `run.workingDir = assets/`), but replays are a player-facing
- *  feature meant to be recorded, found, and shared from a real packaged build - where Gdx.files.local
- *  would resolve relative to whatever directory the game happens to be launched from (unpredictable,
- *  and not something a player sharing a run with a friend could reliably find). external() instead
- *  resolves under the user's home directory, same stable-per-user-location principle AudioSettings/
- *  KeyBindings already use via Gdx.app.getPreferences(). */
+/** Records one run's frames and saves them to ~/WhiteLabelTest/replays/ (external storage, a stable
+ *  per-user location, unlike the debug tools which write into assets/). */
 public class ReplayRecorder {
     static final String REPLAY_DIR = "WhiteLabelTest/replays/";
-    // Below this, a recording is almost certainly a false start (e.g. an instant F9 restart) -
-    // not worth littering a file for.
+    // Shorter recordings are false starts (e.g. an instant restart) and aren't saved.
     private static final int MIN_FRAMES_TO_SAVE = 30;
 
     private final ReplayData data = new ReplayData();
@@ -44,9 +35,7 @@ public class ReplayRecorder {
         data.frames.add(frame);
     }
 
-    /** Appends a special marker frame for a debug-menu seek/bookmark jump (see
-     *  GameController.seekToTime()) - an instantaneous clock jump that normal delta-accumulation
-     *  playback can't reconstruct on its own, so it needs its own event in the stream. */
+    /** Records a debug seek as its own frame (it can't be reconstructed from deltas). */
     public void recordSeek(float targetTime) {
         ReplayFrame frame = new ReplayFrame();
         frame.seekToTime = targetTime;

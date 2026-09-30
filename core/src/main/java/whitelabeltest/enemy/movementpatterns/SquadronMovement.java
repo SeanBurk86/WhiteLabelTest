@@ -4,6 +4,8 @@ import com.badlogic.gdx.graphics.g2d.Sprite;
 import com.badlogic.gdx.math.Circle;
 import com.badlogic.gdx.math.Rectangle;
 
+/** Runs a leader pattern as if the sprite were at (position - offset), so a squad shares one path
+ *  shape at different offsets. */
 public class SquadronMovement implements MovementPattern {
     private final MovementPattern leader;
     private final float offsetX;
@@ -15,10 +17,7 @@ public class SquadronMovement implements MovementPattern {
         this.offsetY = offsetY;
     }
 
-    /** The wrapped pattern this formation's shape/timing actually comes from - see
-     *  EnemyEntranceMovement.build()'s own doc on why it needs to look through a Squadron wrapper
-     *  to find a WaypointPathMovement leader, the same way it already recognizes one at the top
-     *  level. */
+    /** The wrapped pattern (EnemyEntranceMovement looks through to it). */
     public MovementPattern getLeader() { return leader; }
 
     @Override

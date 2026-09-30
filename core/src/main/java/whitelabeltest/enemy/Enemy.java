@@ -9,120 +9,66 @@ import com.badlogic.gdx.utils.Pool;
 import whitelabeltest.enemy.bullets.EnemyBullet;
 import whitelabeltest.gamemanagers.audio.AudioManager;
 
+/** A pooled enemy. Most flags mirror EnemyDefinition fields; see that class for their meaning. */
 public interface Enemy extends Pool.Poolable {
     void init(Texture texture, float worldWidth, float worldHeight, float startX, float startY);
-    // groundScrollSpeed is the current stage schedule's background scroll speed (see
-    // SpawnScheduler.getGroundScrollSpeed()) - only consumed by a ground enemy (isGround()), which
-    // gets shifted down by that same amount every frame on top of its own movement pattern, so it
-    // stays visually planted on the scrolling terrain instead of sliding relative to it. Ignored by
-    // every other enemy.
-    // audio lets a WaypointPath movement's per-waypoint sound cue actually play - see
-    // BaseEnemy.update()'s MovementPattern.consumeCue() handling; ignored by every enemy whose
-    // movement pattern never queues one.
+    // groundScrollSpeed moves ground enemies with the terrain (ignored by others); audio plays
+    // waypoint sound cues.
     void update(float delta, Array<EnemyBullet> enemyBullets, Circle playerHitbox, Circle grazeHitbox, boolean firingPaused, float groundScrollSpeed, AudioManager audio);
     void draw(SpriteBatch batch);
     default void drawShadow(SpriteBatch batch) {}
     boolean isOffScreen();
+    // Unrotated sprite box.
     Rectangle getRectangle();
-    // Sprite-space rotation (degrees, same convention as Sprite.getRotation()/EnemyBullet.
-    // getRotation()) getRectangle() itself is drawn/rotated at - see GenericEnemy.getRotation() and
-    // StraightMovement (and friends) which call sprite.setRotation() to visually face movement
-    // direction while getRectangle() stays an unrotated axis-aligned box. 0 for every enemy that
-    // doesn't rotate (rotateWithMovement=false, or a movement pattern that never turns the sprite
-    // away from upright) - CollisionManager's enemy collision checks fall back to a plain AABB test
-    // whenever this is 0, same cost as before this existed.
+    // Sprite rotation in degrees about the box center; 0 lets collisions use a plain AABB test.
     default float getRotation() { return 0f; }
-    // The enemy's custom collision shapes (see EnemyDefinition.hitboxes/EnemyHitboxes), or null for the default:
-    // one box exactly the size of getRectangle().
+    // Custom collision shapes, or null for one box the size of getRectangle().
     default Array<HitboxDef> getHitboxDefs() { return null; }
-    // World-space point getRotation() rotates getRectangle() around - see GenericEnemy's
-    // sprite.setOriginCenter(), the only origin an enemy sprite is ever given, so this is always
-    // getRectangle()'s own center regardless of enemy type.
+    // Rotation pivot: always the box center (enemy sprites use setOriginCenter()).
     default float getRotationPivotX() { Rectangle r = getRectangle(); return r.x + r.width / 2f; }
     default float getRotationPivotY() { Rectangle r = getRectangle(); return r.y + r.height / 2f; }
     boolean takeDamage(int amount);
     default boolean isBoss() { return false; }
     default boolean isGround() { return false; }
-    // See EnemyDefinition.backgroundLayer - -1 (the default) means not attached to any background
-    // layer, drawn in front of the whole stack as before this existed. GameController.draw()/
-    // EntityManager use this both to decide draw order (sandwiched right after that layer instead
-    // of after the whole background) and, for a ground enemy, which layer's scrollSpeed drives its
-    // implicit movement instead of the schedule-wide one.
+    // Background layer to draw on / scroll with, or -1 for none.
     default int getBackgroundLayer() { return -1; }
-    // Sealable enemies hold their fire while the player's graze halo overlaps their hitbox - see
-    // BaseEnemy.update's firing gate.
+    // Holds fire while the player's graze halo overlaps it.
     default boolean isSealable() { return false; }
-    // Enemies that ignore the ceasefire zone keep firing at the play area's bottom/left/right
-    // edges instead of holding their fire there - see BaseEnemy.update's firing gate and
-    // EnemyDefinition.ignoreCeasefireZone.
+    // Keeps firing inside the edge ceasefire zones.
     default boolean ignoresCeasefireZone() { return false; }
-    // Defiant enemies take no damage until they've fired at least once - see
-    // BaseEnemy.takeDamage()/hasFiredOnce.
+    // Takes no damage until it has fired once.
     default boolean isDefiant() { return false; }
-    // Whether another enemy's bullets can damage (and be consumed by) this enemy - see
-    // CollisionManager.checkEnemyBulletEnemyCollisions. False by default so stray enemy bullets
-    // passing near an unrelated enemy (e.g. several stationary tutorial emitters sharing one spawn
-    // point) don't get silently eaten; only enemies meant to be a bullet-streaming drill's target
-    // (e.g. PowerCarrier) opt in.
+    // Can be damaged (and consume) other enemies' bullets.
     default boolean isDamageableByEnemyBullets() { return false; }
-    // Whether UIManager.drawEnemyHealthBars() draws a health meter above this enemy during normal
-    // play (not the debug-only drawEnemyHealthDebug, which shows every enemy regardless of this
-    // flag) - e.g. the tutorial's bullet-streaming targets, whose regenerating health needs to be
-    // visible so the player can tell their stream is actually landing.
+    // Shows a player-facing health bar.
     default boolean showsHealthBar() { return false; }
-    // Whether a screen-wide homing scan (see ThunderboltWeapon.spawn's nearest-enemy selection)
-    // is allowed to pick this enemy as a target. True by default; a purely decorative/utility
-    // enemy that's only ever a bullet source (e.g. the tutorial's stationary wall/stream
-    // emitters) opts out so it can sit active on screen without stealing a homing bolt meant for
-    // a real target.
+    // Can be picked by homing target scans.
     default boolean isTargetableByHoming() { return true; }
-    // See EnemyDefinition.pairId/CollisionManager.resolvePairedEnemyDeaths() - null (the default)
-    // means this enemy dies normally, independent of any other enemy. Two active enemies sharing
-    // the same non-null pairId must both cross zero health within PAIR_GRACE_WINDOW of each other
-    // to actually die; whichever does so without its partner following in time regenerates instead
-    // - see reviveFully()/getPairGraceTimer().
+    // Paired-death group, or null (see CollisionManager.resolvePairedEnemyDeaths()).
     default String getPairId() { return null; }
-    // Reverses a just-started death for a paired enemy whose partner didn't also cross zero within
-    // the grace window - restores full health and returns to ACTIVE as if it had never taken the
-    // lethal hit. No-op for a non-paired enemy (the default death flow never calls this on one).
+    // Undoes a paired enemy's death (full health, active again) when its partner didn't follow.
     default void reviveFully() {}
-    // Guards CollisionManager.resolvePairedEnemyDeaths() against reprocessing a paired enemy on a
-    // later frame while it's still playing out an already-finalized death (its death animation
-    // takes a few frames, during which it's still isDying()==true and would otherwise look like a
-    // fresh, unresolved pair death again). Reset on pool reuse.
+    // Set once a pair's death is finalized, so it isn't reprocessed during the death animation.
     default boolean isPairResolved() { return false; }
     default void markPairResolved() {}
-    // How much longer (seconds) a paired enemy that's crossed zero keeps waiting, mid-death, for
-    // its partner to also cross zero - see CollisionManager.resolvePairedEnemyDeaths(). Negative
-    // means it isn't currently in that wait. Reset on pool reuse/revive.
+    // Seconds left waiting for the partner to die; negative when not waiting.
     default float getPairGraceTimer() { return -1f; }
     default void setPairGraceTimer(float secondsRemaining) {}
-    // See EnemyDefinition.bulletCancel - GameController.destroyEnemy checks this to decide
-    // whether to also clear out this enemy's in-flight bullets when it dies.
+    // Destroys its bullets in flight on death.
     default boolean cancelsBulletsOnDeath() { return false; }
     default int getScore() { return 10; }
     default String getExplosionPattern() { return null; }
 
-    // Forces this enemy's firing pattern to its next stage immediately - see
-    // GameController.destroyEnemy, which calls this on every other boss whenever any enemy dies,
-    // and FiringPattern.advance()/SequencedFiringPattern.advance() for the actual step logic. A
-    // no-op default since only BaseEnemy (with a FiringPattern to forward to) does anything with it.
+    // Advances the firing pattern to its next stage (called on bosses whenever any enemy dies).
     default void advanceFiringPattern() {}
 
-    // Permanently stops this enemy from firing (it stays alive/on-screen otherwise) - see
-    // SpawnScheduler.SpawnEvent.silence, which uses this to shut off a scripted enemy the instant
-    // its drill actually finishes (e.g. the tutorial's bullet-streaming emitter, whose firing
-    // pattern has no fixed duration of its own - see TutorialStreamShot - so it must be told to
-    // stop rather than just running out a timer).
+    // Permanently stops firing (a silence trigger).
     default void silenceFiring() {}
-    // This enemy's EnemyDefinition id (e.g. "TutorialStreamEmitter"), or null if it wasn't built
-    // from one - see SpawnScheduler.SpawnEvent.silence, which matches on this to find which live
-    // enemy/enemies a silence event applies to.
+    // EnemyDefinition id, or null.
     default String getDefinitionId() { return null; }
 
 
-    /** The Trigger.id of the enemy-spawn trigger that spawned this enemy, or null - see Condition's
-     *  "spawnDestroyed". Set by TriggerManager right after spawning; read by GameController.destroyEnemy(). */
+    /** The Trigger.id of the spawn trigger that created this enemy, or null ("spawnDestroyed"). */
     default String getSpawnGroup() { return null; }
     default void setSpawnGroup(String group) {}
     default int getHealth() { return 0; }
@@ -133,14 +79,12 @@ public interface Enemy extends Pool.Poolable {
     default boolean isDying() { return false; }
 
 
-    // The guaranteed weapon-powerup tier (1-3, see GameController.spawnPowerup()) this enemy drops
-    // on death, or null for no guarantee.
+    // Guaranteed powerup tier (1-3) dropped on death, or null.
     void setGuaranteedPowerup(Integer powerupTier);
     Integer getGuaranteedPowerup();
 
 
-    // See HealthPhase/Trigger.healthPhases - hands this enemy the list of health thresholds at
-    // which it swaps movement/firing pattern. No-op default for an enemy that doesn't support it.
+    // Health thresholds at which it switches movement/firing (see HealthPhase).
     default void setHealthPhases(Array<HealthPhase> phases) {}
 
     void setInvertMovement(boolean invert);

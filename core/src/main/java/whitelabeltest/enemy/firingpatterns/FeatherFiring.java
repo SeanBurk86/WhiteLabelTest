@@ -13,19 +13,15 @@ import whitelabeltest.enemy.bullets.EnemyBullet;
 import whitelabeltest.enemy.bullets.FeatherBullet;
 import whitelabeltest.gamemanagers.ObjectPools;
 
-/** Fires bullets that waft down the screen like a feather - a slow, gently-swaying descent instead
- *  of a straight or aggressively wavy shot. See FeatherBullet for the actual motion; this class
- *  just spawns one on each fireRate tick, mirroring SineWaveFiring's own shape exactly (same
- *  constructor chain and defaults resolution) so the two patterns are interchangeable in the editor
- *  and reuse the same amplitude/frequency fields on FiringPatternDef. */
+/** Fires FeatherBullets (a slow, swaying descent) every fireRate seconds. Mirrors SineWaveFiring's
+ *  fields so the two are interchangeable. */
 public class FeatherFiring implements FiringPattern {
     private final float fireRate;
     private final float bulletSize;
     private final float bulletSpeed;
     private float shootTimer;
 
-    // A feather's own defaults: wider, lazier sway than SineWave's (SineWaveFiring.
-    // DEFAULT_AMPLITUDE/DEFAULT_FREQUENCY) and a much slower fall - see DEFAULT_SPEED below.
+    // Wider, lazier sway and a slower fall than SineWave.
     public static final float DEFAULT_AMPLITUDE = 1.4f;
     public static final float DEFAULT_FREQUENCY = 1.1f;
     private static final float DEFAULT_SPEED = 1.5f;
@@ -65,14 +61,12 @@ public class FeatherFiring implements FiringPattern {
         this(fireRate, bulletSize, bulletSpeed, spriteOverride, offsetX, offsetY, bulletDamage, SpeedProfile.CONSTANT_SPEED, HitboxSpec.DEFAULT);
     }
 
-    /** @param speedProfile how bulletSpeed changes over each bullet's flight - see SpeedProfile
-     *  @param hitboxSpec each bullet's collision hitbox, independent of its visual size - see
-     *  HitboxSpec */
+    /** @param speedProfile,hitboxSpec see SpeedProfile and HitboxSpec */
     public FeatherFiring(float fireRate, float bulletSize, float bulletSpeed, Animation<TextureRegion> spriteOverride, float offsetX, float offsetY, int bulletDamage, SpeedProfile speedProfile, HitboxSpec hitboxSpec) {
         this(fireRate, bulletSize, bulletSpeed, spriteOverride, offsetX, offsetY, bulletDamage, speedProfile, hitboxSpec, DEFAULT_AMPLITUDE, DEFAULT_FREQUENCY);
     }
 
-    /** @param amplitude, frequency the sway's shape - see FiringPatternDef.amplitude/frequency */
+    /** @param amplitude,frequency the sway's shape */
     public FeatherFiring(float fireRate, float bulletSize, float bulletSpeed, Animation<TextureRegion> spriteOverride, float offsetX, float offsetY, int bulletDamage, SpeedProfile speedProfile, HitboxSpec hitboxSpec, float amplitude, float frequency) {
         this.fireRate = fireRate;
         this.bulletSize = bulletSize;

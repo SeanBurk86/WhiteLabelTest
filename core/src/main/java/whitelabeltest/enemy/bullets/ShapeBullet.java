@@ -10,29 +10,24 @@ import whitelabeltest.enemy.Enemy;
 import whitelabeltest.enemy.HitboxSpec;
 import whitelabeltest.enemy.SpeedProfile;
 
-/** One dot of a ShapeFiring picture (a mouse head, a hand, a claw swipe...). Every dot of a picture
- *  leaves the SAME point at the SAME moment; what differs is each dot's own spread velocity and
- *  acceleration, both proportional to where that dot sits in the shape. They're tuned so that at
- *  formTime every dot lands exactly on its place in the picture at formScale - the picture appears
- *  mid-flight - and from then on each dot just keeps drifting at the spread velocity it had at that
- *  moment, so the picture swells and loosens as it flies on.
+/** One dot of a ShapeFiring picture. All dots leave the same point together; each spreads out in
+ *  proportion to its place in the shape so that at formTime they form the picture at formScale,
+ *  then keep drifting apart.
  *
  *  Position = origin + direction * travelled + offset * spread(t), where travelled follows the
- *  pattern's shared speed profile (so the whole picture moves as one) and spread(t) is:
+ *  shared speed profile and spread(t) is:
  *    t < formTime:  u*t + a*t^2/2,  with u = (2 - r) * formScale / formTime and
  *                                   a = 2 * (r - 1) * formScale / formTime^2
  *    t >= formTime: formScale + r * formScale / formTime * (t - formTime)
- *  where r is driftRatio - the post-formation spread speed as a fraction of the average speed while
- *  forming. r = 1 means no acceleration at all; r < 1 bursts out fast and decelerates into the
- *  shape (it lingers, readable, then drifts apart slowly); r > 1 starts slow and speeds up. A
- *  non-positive formTime skips all of this - the picture is fully formed from the first frame and
- *  keeps that size, the whole thing just translating as one rigid body. */
+ *  r (driftRatio) = post-formation spread speed relative to the average forming speed: 1 = no
+ *  acceleration, < 1 bursts out then settles into the shape, > 1 starts slow and speeds up.
+ *  formTime <= 0 = formed and rigid from the start. */
 public class ShapeBullet implements EnemyBullet {
     private Sprite sprite;
     private final Rectangle rectangle = new Rectangle();
     private final Vector2 origin = new Vector2();
     private final Vector2 direction = new Vector2();
-    // This dot's offset in the picture at scale 1 - already flipped/rotated into world orientation.
+    // This dot's offset at scale 1, already flipped/rotated to world orientation.
     private final Vector2 offset = new Vector2();
     private float travelled;
     private float currentSpeed;
@@ -50,14 +45,10 @@ public class ShapeBullet implements EnemyBullet {
     private Animation<TextureRegion> animation;
     private float animationTime = 0;
 
-    /** @param originX, originY the point every dot of the picture leaves from (usually the emitter)
-     *  @param angleDeg the picture's travel direction (0 = right, 90 = up)
-     *  @param offsetX, offsetY this dot's position in the picture at scale 1, already oriented
-     *  @param formScale the picture's size at the moment it forms
-     *  @param formTime seconds after firing that the picture forms - non-positive = formed from the
-     *  start and rigid
-     *  @param driftRatio post-formation spread speed relative to the average forming speed, clamped
-     *  to [0, 2] so no dot ever heads back inward - see the class doc */
+    /** @param originX,originY where every dot starts (usually the emitter)
+     *  @param angleDeg travel direction (0 = right, 90 = up)
+     *  @param offsetX,offsetY this dot's position in the picture at scale 1, already oriented
+     *  @param driftRatio clamped to [0, 2] so no dot moves back inward */
     public void init(Animation<TextureRegion> animation, float originX, float originY, float angleDeg, float offsetX, float offsetY,
                      float formScale, float formTime, float driftRatio,
                      float size, float speed, int damage, Enemy source, SpeedProfile speedProfile, HitboxSpec hitboxSpec) {
@@ -98,7 +89,7 @@ public class ShapeBullet implements EnemyBullet {
         place();
     }
 
-    /** The picture's current size - see the class doc. */
+    /** The picture's current size (see the class doc). */
     private float spread() {
         if (formTime <= 0f) return formScale;
         if (age < formTime) return initialSpreadSpeed * age + 0.5f * spreadAcceleration * age * age;

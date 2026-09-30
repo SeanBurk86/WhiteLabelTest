@@ -23,18 +23,8 @@ import java.io.File;
 import java.util.Optional;
 import java.util.function.Consumer;
 
-/** Drag source for enemy-spawn triggers, and click-to-select source for editing an enemy's own
- *  definition - one tile per data/enemies.json entry, thumbnail cropped to the sheet's first frame
- *  (same columns/rows math EnemyDefinition already encodes for the game's own renderer). Dragging a
- *  tile onto StageCanvas puts "enemy:&lt;id&gt;" on the Dragboard - see StageCanvas.createTrigger().
- *  Clicking (not dragging) a tile instead notifies the selection listener - see EditorApp, which
- *  routes that to EnemyDefinitionPanel.
- *
- * "+ New Enemy" (top, always visible - outside the scrollable tile area, unlike the tiles
- * themselves) prompts for an id, adds a fresh blank EnemyDefinition to the library, and selects it
- * exactly as if its own tile had just been clicked - so it opens straight into EnemyDefinitionPanel
- * ready to fill in, the same "new, unsaved until Save" flow FiringPatternEditorDialog's own New
- * button already uses for firing patterns. */
+/** One tile per enemy type. Drag onto the canvas to place a spawn ("enemy:&lt;id&gt;"), click to
+ *  edit the type. "+ New Enemy" adds a blank type and selects it. */
 public class EnemyPalette extends BorderPane {
     private final StageLibrary library;
     private final TilePane tiles = new TilePane();
@@ -65,9 +55,7 @@ public class EnemyPalette extends BorderPane {
 
     public void setSelectionListener(Consumer<EnemyDefinition> listener) { this.selectionListener = listener; }
 
-    /** Rebuilds every tile from the library's current enemy list - the only way this palette's
-     *  tiles ever change, since (unlike EnemyDefinitionPanel's own refresh()) there was previously
-     *  no rebuild path at all: a freshly-added enemy needed a whole editor restart to show up. */
+    /** Rebuilds the tiles from the library. */
     private void rebuildTiles() {
         tiles.getChildren().clear();
         selectedTile = null;

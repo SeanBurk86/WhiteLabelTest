@@ -9,16 +9,8 @@ import whitelabeltest.enemy.MovementPatternDef;
 
 import java.util.function.Consumer;
 
-/** One "MoveToPoint" leg of an enemy spawn's movement pattern, shown directly on StageCanvas while
- *  that spawn's Trigger is in path-edit mode - see StageCanvas.setPathEditTrigger(). Positioned via
- *  the SAME anchor+offset transform StageCanvas.drawPathPreviews() already uses for the static
- *  preview line (true scale - PIXELS_PER_UNIT_X - anchored at the trigger's own canvas position; see
- *  that method's doc for why the anchor is a point of convenience rather than a literal distance-axis
- *  mapping), so this handle sits exactly on the vertex it edits. Draggable to reposition (writes back
- *  MovementPatternDef.targetX/targetY live), click to select for PropertiesPanel's "Delete Selected
- *  Point" action - mirrors TriggerNode's own interaction model, including consuming MOUSE_CLICKED so
- *  a click here doesn't bubble up to StageCanvas.handleCanvasClicked() as "add a new point" (the same
- *  fix TriggerNode itself just needed for the same reason). */
+/** A draggable handle for one MoveToPoint waypoint in path-edit mode, placed like the path
+ *  preview so it sits on its vertex. Dragging writes targetX/targetY; clicking selects it. */
 public class PathWaypointNode extends StackPane {
     private final MovementPatternDef waypoint;
     private final StageCanvas canvas;
@@ -49,10 +41,7 @@ public class PathWaypointNode extends StackPane {
         indexLabel.setStyle("-fx-font-size: 9px; -fx-font-weight: bold;");
         getChildren().addAll(circle, indexLabel);
         setUnselected();
-        // See TriggerNode's own doc on this exact pattern - same fix, same reason: this StackPane
-        // sits in pathEditLayer (a Group), which never resizes it, so without the listener,
-        // updatePosition() below can center it on a stale (0,0) - or merely too-small - box instead
-        // of its real one, and never get another chance to correct itself.
+        // Re-center when the real size settles (as in TriggerNode).
         boundsInLocalProperty().addListener((obs, oldBounds, newBounds) -> updatePosition());
         autosize();
         updatePosition();

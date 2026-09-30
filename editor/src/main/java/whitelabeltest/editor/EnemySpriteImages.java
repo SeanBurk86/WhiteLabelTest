@@ -9,19 +9,10 @@ import java.io.File;
 import java.util.HashMap;
 import java.util.Map;
 
-/** Loads and crops an enemy/sprite-cue's real texture to its actual in-game footprint - shared by
- *  TriggerNode (the placed-trigger icon on StageCanvas) and PlayerPreviewView (the simulated player
- *  view), so this sizing/cropping math lives in exactly one place instead of drifting between two
- *  copies. Same sizing rules the real game uses: GenericEnemy.initWithDefinition() for
- *  buildEnemyImage() (def.size along the frame's longer axis), EnemySpawnOps.spawnSpriteCue() for
- *  buildSpriteCueImage() (size is the drawn HEIGHT directly) - both converted to pixels at
- *  StageCanvas.PIXELS_PER_UNIT_X, the same real-world-unit scale every other width/height on the
- *  canvas already uses. */
+/** First-frame images of enemies and sprite cues at in-game size (StageCanvas scale), sized like
+ *  the game: enemies by def.size on the longer axis, sprite cues by height. Images are cached. */
 public final class EnemySpriteImages {
-    // Sanity ceiling on the sprite's rendered size, in pixels - guards against a pathological
-    // EnemyDefinition.size/Trigger.size value blowing up the layout; every real boss in
-    // data/enemies.json today (size up to ~3.5) renders well under this at
-    // StageCanvas.PIXELS_PER_UNIT_X scale.
+    // Guards the layout against absurd sizes.
     public static final double MAX_SPRITE_PIXELS = 320;
     public static final double MIN_SPRITE_PIXELS = 4;
 
@@ -62,27 +53,10 @@ public final class EnemySpriteImages {
         return cropFrame(sheet, frameW, frameH, worldW * StageCanvas.PIXELS_PER_UNIT_X, worldH * StageCanvas.PIXELS_PER_UNIT_X);
     }
 
-    // Keyed by the raw texturePath argument (pre-"images/"-stripping - fine, since every caller
-    // passes the same convention consistently) - JavaFX Image decoding is the single biggest cost
-    // in a rebuild (PlayerPreviewView/StageCanvas/TriggerNode all reload on every edit/scrub tick),
-    // and the same handful of texture files get requested over and over across every enemy/layer
-    // sharing them, so caching the decoded Image once per session removes essentially all of that
-    // cost after the first load. Only ever holds SUCCESSFUL decodes - see loadImage()'s own doc on
-    // why a missing file is deliberately never cached. Single-threaded (JavaFX Application Thread
-    // only), so a plain HashMap is fine - no concurrent access to guard against.
+    // Decoding is the main cost of a rebuild, so decoded images are cached (FX thread only).
     private static final Map<String, Image> imageCache = new HashMap<>();
 
-    /** Never caches a miss (loadImageUncached() returning null because the file doesn't exist YET)
-     *  - only a real decoded Image ever goes into imageCache. An editor session is long-lived (this
-     *  same instance keeps running while the user adds new enemy art, exactly the DollarsMiniBoss-
-     *  style workflow of authoring a definition and dropping its texture file in moments later) and
-     *  every texture lookup - including Player View's own per-scrub-tick rebuild() - funnels through
-     *  here, so caching a miss permanently would poison every later lookup for that same path the
-     *  instant it was tried once too early, even after the real file shows up on disk: no scrub, no
-     *  re-open, nothing short of restarting the whole editor process would ever pick it up again.
-     *  Retrying the (cheap - just a File.exists() check) miss on every call is a fair trade to keep
-     *  a still-genuinely-missing texture no more expensive than before, in exchange for a texture
-     *  that JUST appeared becoming visible on the very next rebuild instead of never. */
+    /** Misses aren't cached, so art added while the editor is running shows up on the next rebuild. */
     public static Image loadImage(String texturePath) {
         Image cached = imageCache.get(texturePath);
         if (cached != null) return cached;

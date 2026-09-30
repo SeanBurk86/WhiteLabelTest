@@ -9,13 +9,7 @@ import java.io.UncheckedIOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 
-/** Reads/writes one data/firing_patterns/&lt;id&gt;.json at a time - filename == id, the same
- *  convention whitelabeltest.enemy.PatternRegistry.load() relies on in the game itself (see
- *  PatternIds.firingPatternIds()). FiringPatternDef implements Json.Serializable with its own
- *  hand-written read()/write() (not plain reflection), which Json.fromJson()/toJson() already call
- *  automatically - same String-based read/write technique MovementPatternLibrary/StageLibrary/
- *  EditorDocument all already use (no live Gdx.files, since there's no LibGDX Application in this
- *  JavaFX app). See FiringPatternEditorDialog for the actual editing UI this backs. */
+/** Loads and saves data/firing_patterns/&lt;id&gt;.json (file name = id) with plain file I/O. */
 public class FiringPatternLibrary {
     private static final Path DIR = Path.of("data/firing_patterns");
 

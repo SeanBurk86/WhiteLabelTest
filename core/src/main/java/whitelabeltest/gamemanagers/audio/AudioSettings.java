@@ -4,11 +4,8 @@ import com.badlogic.gdx.Gdx;
 import com.badlogic.gdx.Preferences;
 import com.badlogic.gdx.math.MathUtils;
 
-/** Persisted music/sound-effect volume levels (0..1), edited from the Options screen's Audio
- *  submenu - see OptionsScreen. Kept separate from AudioManager/ScrollingBackground (rather than
- *  living on either of them) because the Options screen is reachable from the start menu, before
- *  a game session - and with it, either of those classes - exists; both are constructed reading
- *  the current values here once a session starts. */
+/** Persisted master/music/SFX volume (0..1), edited in Options. Separate from AudioManager because
+ *  Options is reachable before a game session exists. */
 public class AudioSettings {
     private static final String PREFS_NAME = "whitelabeltest-audio";
     private static final String MASTER_KEY = "masterVolume";
@@ -32,26 +29,18 @@ public class AudioSettings {
     public float getMusicVolume() { return musicVolume; }
     public float getSfxVolume() { return sfxVolume; }
 
-    // Perceived loudness scales roughly logarithmically with linear amplitude, so feeding a slider's
-    // raw 0..1 position straight into Sound.play()/Music.setVolume() (linear gain) makes most of the
-    // slider's travel sound bunched up near the top, with all the useful low-volume range crammed
-    // into the first ~10-20%. Cubing the position before it's applied as gain approximates that log
-    // response instead, so equal slider steps feel like more even steps in perceived loudness. Only
-    // the applied gain is curved - the stored/displayed slider position (see get*Volume()) stays
-    // linear so the Options screen's 10%-per-press steps and label are unaffected.
+    // Loudness is perceived roughly logarithmically, so the applied gain is the slider position cubed
+    // (even-feeling steps). The stored/displayed slider value stays linear.
     private static final float GAIN_CURVE_EXPONENT = 3f;
 
     private static float toGain(float sliderPosition) {
         return (float) Math.pow(sliderPosition, GAIN_CURVE_EXPONENT);
     }
 
-    /** Music volume actually applied to any Music instance, factoring in masterVolume - all
-     *  playback code (AudioManager, StartScreen) should use this instead of getMusicVolume() so
-     *  master volume affects every music track without each caller re-deriving the product. */
+    /** The gain to apply to music (includes master volume). Use this, not getMusicVolume(). */
     public float getEffectiveMusicVolume() { return toGain(masterVolume) * toGain(musicVolume); }
 
-    /** Sound-effect volume actually applied to any Sound.play() call, factoring in masterVolume -
-     *  see getEffectiveMusicVolume(). */
+    /** The gain to apply to sound effects (includes master volume). */
     public float getEffectiveSfxVolume() { return toGain(masterVolume) * toGain(sfxVolume); }
 
     public void setMasterVolume(float volume) {

@@ -20,22 +20,10 @@ import javafx.scene.layout.StackPane;
 import javafx.scene.layout.VBox;
 import javafx.stage.Stage;
 
-/** Entry point for the stage editor - a JavaFX app that drags enemies/trigger-actions onto a
- *  scrolling canvas and reads/writes the exact same *_triggers.json format
- *  whitelabeltest.gamemanagers.trigger.TriggerManager parses in-game, so a stage edited here can be
- *  tested by just running the game against the saved file - see StageLibrary/EditorDocument.
- *
- * Movement-pattern (path/waypoint) editing happens directly on the StageCanvas itself, scoped to
- * whichever placed enemy-spawn trigger is selected - see StageCanvas.setPathEditTrigger() and
- * PropertiesPanel's "Movement Path" section, which is what turns it on/off. Not a separate
- * top-level view or a small standalone canvas - a placed spawn already has the real stage context
- * (nearby triggers, background art) a standalone editor never had, and every trigger's resolved
- * path is always visible as a true-scale preview on the canvas regardless of edit mode.
- *
- * Two center tabs: "Edit" (the interactive canvas above - also serves as the zoomable stage
- * overview, so there's no separate "camera view" tab) and "Player View" (PlayerPreviewView - a true
- * simulated render of what the player actually sees at the TimelineBar's scrubbed distance, which
- * sits below the tabs and is an inert no-op while the Edit tab is active). */
+/** The stage editor (JavaFX). Palettes on the left, the StageCanvas ("Edit" tab) and
+ *  PlayerPreviewView ("Player View" tab, driven by the TimelineBar) in the center, and one
+ *  properties panel on the right (trigger, enemy or stage). It reads and writes the same
+ *  *_triggers.json the game loads. */
 public class EditorApp extends Application {
     private EditorDocument document;
     private StageLibrary library;
@@ -57,16 +45,11 @@ public class EditorApp extends Application {
         enemyDefinitionPanel = new EnemyDefinitionPanel(library);
         stageDefinitionPanel = new StageDefinitionPanel(library);
 
-        // The right-hand dock shows exactly one of these three panels at a time: a placed trigger's
-        // per-instance settings, an enemy's own template stats, or a stage's own metadata -
-        // whichever the user selected most recently (canvas node vs. palette tile/row). See
-        // EnemyPalette/StagePalette/StageCanvas's own selection listeners below for the triggers
-        // that flip this.
+        // Shows whichever panel matches the most recent selection (trigger, enemy or stage).
         StackPane rightDock = new StackPane(propertiesPanel, enemyDefinitionPanel, stageDefinitionPanel);
         showRightDock(propertiesPanel);
 
-        // 0 selected -> showTrigger(null)'s "nothing selected" message; exactly 1 -> the normal
-        // per-field form; 2+ (Ctrl/Cmd-click - see StageCanvas.select()) -> the bulk-delete view.
+        // 0: nothing selected, 1: the trigger form, 2+: bulk delete.
         canvas.setSelectionListener(triggers -> {
             showRightDock(propertiesPanel);
             if (triggers.size() == 1) {
@@ -101,21 +84,16 @@ public class EditorApp extends Application {
         canvasScroll = new ScrollPane(canvas);
         canvasScroll.setPannable(false);
         canvasScroll.setFitToWidth(true);
-        // Distance 0 (stage start) is anchored to the BOTTOM of the canvas - see StageCanvas's own
-        // doc - so a freshly-opened stage should scroll all the way down, not show the far end of
-        // the level first.
+        // Start scrolled to the bottom (distance 0).
         canvasScroll.setVvalue(1.0);
 
         TimelineBar timelineBar = new TimelineBar(document);
         timelineBar.addListener(playerPreviewView::setPreviewDistance);
-        // Show something the instant the app opens rather than leaving Player View blank until the
-        // user first touches the slider.
+        // Render Player View once at startup.
         playerPreviewView.setPreviewDistance(timelineBar.getValue());
         HBox.setHgrow(timelineBar, Priority.ALWAYS);
 
-        // Launches the real game starting exactly where this timeline is scrubbed to - see
-        // QuickPlayDialog's own doc. Sits right next to the timeline it reads from, rather than
-        // buried in a menu, since it's meant for fast edit/test iteration.
+        // Launches the game at the timeline's distance.
         Button quickPlay = new Button("Quick Play");
         quickPlay.setOnAction(e -> QuickPlayDialog.show(stage, document, library, timelineBar));
         HBox timelineRow = new HBox(8, timelineBar, quickPlay);
@@ -144,17 +122,14 @@ public class EditorApp extends Application {
         stage.show();
     }
 
-    /** Player View isn't zoomable/pannable (see PlayerPreviewView's own doc - it's meant to read as
-     *  the game's own fixed viewport, not an editing surface) - just centered in whatever space the
-     *  tab gives it. */
+    /** Centers Player View (it doesn't zoom or pan). */
     private Node wrapPlayerView(PlayerPreviewView view) {
         StackPane holder = new StackPane(view);
         holder.setStyle("-fx-background-color: #17181c;");
         return holder;
     }
 
-    /** Shows exactly `active` in the right-hand dock, hiding (and un-managing, so it doesn't still
-     *  claim layout space) the others. */
+    /** Shows only `active` (the others are hidden and unmanaged). */
     private void showRightDock(javafx.scene.Node active) {
         for (javafx.scene.Node node : new javafx.scene.Node[] { propertiesPanel, enemyDefinitionPanel, stageDefinitionPanel }) {
             boolean isActive = node == active;
@@ -173,8 +148,7 @@ public class EditorApp extends Application {
         MenuItem openStage = new MenuItem("Open Stage...");
         openStage.setOnAction(e -> {
             new OpenStageDialog(library).showAndLoad(stage, document);
-            // Scroll to the stage's start (the bottom - see StageCanvas's doc) rather than leaving
-            // whatever scroll position the previously-open file happened to be at.
+            // Scroll to the stage start.
             canvasScroll.setVvalue(1.0);
         });
 

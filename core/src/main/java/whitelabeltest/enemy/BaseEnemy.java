@@ -16,6 +16,8 @@ import whitelabeltest.enemy.firingpatterns.FiringPattern;
 import whitelabeltest.enemy.movementpatterns.MovementPattern;
 import whitelabeltest.gamemanagers.audio.AudioManager;
 
+/** Shared enemy behavior: lifecycle (entering -> active -> dying), animation, movement, firing
+ *  gates, damage, health regen, health phases, ground scroll, facing and drop shadow. */
 public abstract class BaseEnemy implements Enemy {
     protected enum LifecycleState { ENTERING, ACTIVE, DYING }
 
@@ -23,27 +25,23 @@ public abstract class BaseEnemy implements Enemy {
     protected Rectangle rectangle;
     protected int health;
     protected int maxHealth;
-    // See EnemyDefinition.healthRegenPerSecond - fractional regen accumulates here until it's
-    // worth a whole point of health (health is an int), same idea as SpeedRamp's own accumulation.
+    // Fractional regen accumulates until it's worth a whole health point.
     protected float healthRegenPerSecond = 0f;
     private float healthRegenAccumulator = 0f;
     protected Integer guaranteedPowerup;
     protected float worldWidth, worldHeight;
-    protected boolean invertMovement; // Added field to store inversion state
+    protected boolean invertMovement;
     protected boolean rotateWithMovement = true;
-    // See EnemyDefinition.facePlayer's own doc - applyFacePlayer() overrides whatever rotation the
-    // movement/rotateWithMovement logic above just set, every frame, while this is true.
+    // Overrides movement rotation every frame to face the player.
     protected boolean facePlayer = false;
 
     protected Animation<TextureRegion> animation;
     protected float animationTime = 0;
 
-    // See EnemyDefinition.uniformPixelScale - world units per source pixel every frame is drawn at, or
-    // NaN (the default) to keep drawing every frame into the sprite's existing box.
+    // World units per source pixel for uniformPixelScale, or NaN to draw frames into the sprite box.
     protected float unitsPerPixel = Float.NaN;
 
-    // See EnemyDefinition.flipWithDirection/updateFacing(). lastCenterX is NaN until the first
-    // movement update after a spawn, so there's no bogus "movement" measured from a stale position.
+    // Direction flipping; lastCenterX is NaN until the first movement update after a spawn.
     protected boolean flipWithDirection = false;
     private boolean facingRight = false;
     private float lastCenterX = Float.NaN;
@@ -56,26 +54,18 @@ public abstract class BaseEnemy implements Enemy {
     protected MovementPattern movement;
     protected FiringPattern firing;
 
-    // World Y=0 is the bottom edge of the play area and X spans [0, worldWidth] - any enemy whose
-    // hitbox has reached the bottom, left, or right edge (a little inside the literal edge, so
-    // each zone has some breathing room instead of only covering the exact boundary pixel) holds
-    // its fire instead of shooting into or past the play area's boundary.
+    // An enemy whose hitbox is within this distance of the bottom, left or right edge holds fire.
     private static final float CEASEFIRE_ZONE_Y = 1.5f;
     private static final float CEASEFIRE_ZONE_X = 0.5f;
 
-    // See HealthPhase/setHealthPhases() - sorted highest healthPercent first, so nextHealthPhase
-    // only ever moves forward through them as health falls. Null when this enemy has no phases.
+    // Sorted highest threshold first; nextHealthPhase only moves forward. Null = no phases.
     private Array<HealthPhase> healthPhases;
     private int nextHealthPhase = 0;
 
-    // Tracks whether a Defiant enemy (see Enemy.isDefiant()) has actually spawned a bullet yet -
-    // detected generically (any firing pattern growing enemyBullets) rather than each
-    // FiringPattern reporting it, so this works unmodified for every existing/future pattern.
+    // Whether it has fired yet (for defiant enemies), detected by enemyBullets growing.
     private boolean hasFiredOnce = false;
 
-    // See Enemy.isPairResolved()/markPairResolved().
     private boolean pairResolved = false;
-    // See Enemy.getPairGraceTimer()/setPairGraceTimer().
     private float pairGraceTimer = -1f;
 
     protected Animation<TextureRegion> spawnAnimation;
@@ -86,10 +76,7 @@ public abstract class BaseEnemy implements Enemy {
     protected LifecycleState lifecycleState = LifecycleState.ACTIVE;
     protected float lifecycleTime = 0f;
 
-    // True once this enemy's sprite has been within GenericEnemy.isOffScreen()'s own bounds at
-    // least once since it last spawned - see that method's own doc on why the off-screen REMOVAL
-    // check is gated on this instead of applying unconditionally from frame 1. Reset in
-    // beginEntrance() (called once per real spawn, pooled reuse included), never anywhere mid-life.
+    // Set once the sprite has been on screen since spawning; off-screen removal waits for it.
     protected boolean hasBeenOnScreen = false;
 
     public BaseEnemy() {
@@ -132,13 +119,8 @@ public abstract class BaseEnemy implements Enemy {
         if (sprite == null) return;
 
         if (lifecycleState == LifecycleState.DYING) {
-            // A paired enemy (see getPairId()) that hasn't been confirmed dead yet - it crossed
-            // zero, but CollisionManager.resolvePairedEnemyDeaths() is still giving its partner a
-            // window to follow it down - holds here at the exact moment of the hit: lifecycleTime
-            // stays frozen so the death animation doesn't play (and isDeathAnimationFinished()
-            // can't fire early and get it removed from the world) before the pair is actually
-            // resolved one way or the other. Once markPairResolved() confirms the kill (or
-            // reviveFully() reverses it), this falls through to the normal flow below.
+            // An unresolved paired death holds here, death animation frozen, until the pair is
+            // confirmed dead or revived.
             if (getPairId() != null && !isPairResolved()) return;
             lifecycleTime += delta;
             updateDeathAnimation();
@@ -195,12 +177,8 @@ public abstract class BaseEnemy implements Enemy {
             }
         }
 
-        // Skipped (not just no-op fired) while paused, in the ceasefire zone (unless this enemy ignores it - see
-        // Enemy.ignoresCeasefireZone()/EnemyDefinition.ignoreCeasefireZone), or "sealed" by the
-        // graze halo overlapping this enemy's hitbox (see Enemy.isSealable()/EnemyDefinition.
-        // sealable) - in every case so a firing pattern's internal cooldown timer stays frozen at
-        // its pre-gate value instead of overshooting and unloading the instant firing resumes -
-        // see EntityManager's firingPaused computation.
+        // Firing isn't updated at all while paused, in a ceasefire zone, or sealed by the graze halo,
+        // so the pattern's cooldown stays frozen instead of unloading a backlog when firing resumes.
         boolean sealed = isSealable() && grazeHitbox.radius > 0f && Intersector.overlaps(grazeHitbox, rectangle);
         if (firing != null && !firingPaused && (ignoresCeasefireZone() || !isInCeasefireZone()) && !sealed) {
             int bulletsBefore = enemyBullets.size;
@@ -214,13 +192,7 @@ public abstract class BaseEnemy implements Enemy {
         firing = null;
     }
 
-    /** Dispatches whatever one-shot event a WaypointPath movement just queued on reaching a
-     *  waypoint (see MovementPattern.consumeCue()/WaypointCue) - plays its sound (if any, and if
-     *  audio is actually available - see Enemy.update()'s own doc) and swaps this enemy's live
-     *  firing pattern (if the waypoint set changeWeaponSet) via resolveWeaponSet(), a plain field
-     *  reassignment safe to do mid-flight since `firing` is already re-read fresh every frame (see
-     *  silenceFiring() already doing exactly that). A no-op for every OTHER movement pattern, whose
-     *  consumeCue() default returns null. */
+    /** Handles a waypoint event queued by the movement: plays its sound and switches weapon set. */
     private void resolveMovementCue(AudioManager audio) {
         MovementPattern.WaypointCue cue = movement.consumeCue();
         if (cue == null) return;
@@ -233,39 +205,19 @@ public abstract class BaseEnemy implements Enemy {
         }
     }
 
-    /** Resolves a "weapon set" name (see MovementPatternDef.weaponSet) to a live FiringPattern for
-     *  THIS enemy - a no-op hook here since BaseEnemy has no EnemyDefinition of its own to resolve
-     *  the name against; GenericEnemy (the only subclass with one) overrides this using its own
-     *  def.weaponSets map. */
+    /** Resolves a weapon set name to a FiringPattern (overridden by GenericEnemy). */
     protected FiringPattern resolveWeaponSet(String weaponSetName) { return null; }
 
-    // Shifts a ground enemy (isGround()) down by the stage's current background scroll speed, on
-    // top of whatever its own movement pattern already did this frame - same translate-then-sync
-    // idiom every MovementPattern uses (see e.g. StraightMovement) - so it stays visually planted on
-    // the scrolling terrain (a "Stationary" ground enemy scrolls down screen right along with the
-    // ground instead of floating in a fixed screen position) instead of sliding relative to it.
-    // No-op for every other enemy.
-    //
-    // Also hands the same dy to movement.applyGroundScroll() BEFORE translating the sprite - a
-    // no-op default for the ordinary translate()-based patterns (StraightMovement, MoveToPointMovement,
-    // etc.), whose own next update() call adds to wherever this translate just left the sprite, same
-    // as always. WaypointPathMovement/SplineMovement instead SET the sprite's position outright from
-    // their own spawn-anchored curve every update() - that overwrites this method's translate the very
-    // next frame, before it ever reaches the screen, silently discarding the scroll instead of merely
-    // delaying it (a ground enemy on either of those patterns visibly lagged the actual background by
-    // however much it should have scrolled, with no waypoint/speed retuning able to fix a discard
-    // baked into a different frame's overwrite). Their applyGroundScroll() override folds dy into
-    // their OWN evaluated position instead, so it survives.
-    // Points the sprite at the player's current center, in the same "art faces up at rotation 0"
-    // convention every aimed bullet already uses (see AimedEnemyBullet.init()'s velocity.angleDeg()
-    // - 90) - so an enemy with EnemyDefinition.facePlayer set visually tracks the player exactly
-    // the way its bullets would if it also fired an aimed pattern.
+    // Points the sprite at the player (art faces up at rotation 0, like aimed bullets).
     private void applyFacePlayer(Circle playerHitbox) {
         float dx = playerHitbox.x - (sprite.getX() + sprite.getWidth() / 2f);
         float dy = playerHitbox.y - (sprite.getY() + sprite.getHeight() / 2f);
         sprite.setRotation(MathUtils.atan2(dy, dx) * MathUtils.radiansToDegrees - 90f);
     }
 
+    // Moves a ground enemy with the scrolling terrain, on top of its own movement. The movement is
+    // told first: curve-based patterns (WaypointPath, Spline) set the position outright each frame,
+    // so they must fold the scroll into their own position or it would be overwritten.
     private void applyGroundScroll(float delta, float groundScrollSpeed) {
         if (!isGround()) return;
         float dy = groundScrollSpeed * delta;
@@ -274,10 +226,8 @@ public abstract class BaseEnemy implements Enemy {
         rectangle.setPosition(sprite.getX(), sprite.getY());
     }
 
-    /** Shows `frame`, resizing the sprite around its own center to the frame's pixel size times
-     *  unitsPerPixel when that's set (see EnemyDefinition.uniformPixelScale) - so sheets cut at
-     *  different frame sizes stay at one consistent on-screen scale. The hitbox rectangle follows
-     *  the new size immediately. */
+    /** Shows `frame`; with uniformPixelScale, resizes the sprite (and hitbox) around its center to
+     *  the frame's pixel size. */
     protected void applyFrame(TextureRegion frame) {
         sprite.setRegion(frame);
         if (Float.isNaN(unitsPerPixel)) return;
@@ -292,10 +242,8 @@ public abstract class BaseEnemy implements Enemy {
         rectangle.set(sprite.getX(), sprite.getY(), width, height);
     }
 
-    /** See EnemyDefinition.flipWithDirection - mirrors the sprite (art drawn facing left) to face
-     *  whichever way it moved horizontally this frame, keeping its last facing while it holds still.
-     *  Runs after movement, and must re-apply the flip every frame because applyFrame()'s
-     *  setRegion() resets it. */
+    /** Mirrors the sprite to face its horizontal movement (keeping the last facing when still).
+     *  Re-applied every frame because setRegion() resets the flip. */
     private void updateFacing() {
         float centerX = sprite.getX() + sprite.getWidth() / 2f;
         if (flipWithDirection && !Float.isNaN(lastCenterX)) {
@@ -304,8 +252,7 @@ public abstract class BaseEnemy implements Enemy {
             else if (dx < -0.0001f) facingRight = false;
         }
         lastCenterX = centerX;
-        // Only touches the flip for an enemy that uses (or just stopped using) direction flipping, so
-        // every other enemy's frames are drawn exactly as their sheet has them.
+        // Leave the flip alone for enemies that never use direction flipping.
         if (flipWithDirection || facingRight) sprite.setFlip(flipWithDirection && facingRight, false);
     }
 
@@ -342,8 +289,7 @@ public abstract class BaseEnemy implements Enemy {
         }
     }
 
-    // Drawn in its own pass before any enemy sprite (see EntityManager.draw), so a shadow never
-    // paints over another enemy's sprite when the two overlap.
+    // Drawn in a pass before all enemy sprites so shadows never cover another enemy.
     @Override
     public void drawShadow(SpriteBatch batch) {
         if (sprite != null && !isOffScreen() && !isGround()) {
@@ -356,9 +302,7 @@ public abstract class BaseEnemy implements Enemy {
         float r = color.r, g = color.g, b = color.b, a = color.a;
         if (a <= 0f) return;
 
-        // Shadow points toward the center of the play area, as if lit from behind each enemy
-        // outward from the edges: enemies near an edge cast a longer, more skewed shadow toward
-        // the middle, while enemies near dead-center fall back to a straight-down offset.
+        // The shadow falls toward the center of the play area (straight down at dead center).
         float magnitude = sprite.getWidth() * SHADOW_OFFSET_FACTOR;
         float dx = worldWidth / 2f - (sprite.getX() + sprite.getWidth() / 2f);
         float dy = worldHeight / 2f - (sprite.getY() + sprite.getHeight() / 2f);
@@ -394,16 +338,13 @@ public abstract class BaseEnemy implements Enemy {
         return sprite.getRotation();
     }
 
-    // True once the enemy's whole hitbox - not just some overlap with it - sits within the play
-    // area, so an enemy sliding/dropping in from off-screen can't be shot before it's fully in
-    // view (see takeDamage()).
+    // Enemies can't be damaged until their whole box is inside the play area.
     private boolean isFullyOnScreen() {
         return rectangle.x >= 0f && rectangle.x + rectangle.width <= worldWidth
             && rectangle.y >= 0f && rectangle.y + rectangle.height <= worldHeight;
     }
 
-    // True while the enemy's hitbox has reached the bottom, left, or right edge of the play area
-    // (see CEASEFIRE_ZONE_Y/CEASEFIRE_ZONE_X's firing gate in update()).
+    // Within the bottom/left/right ceasefire zones.
     private boolean isInCeasefireZone() {
         return rectangle.y <= CEASEFIRE_ZONE_Y
             || rectangle.x <= CEASEFIRE_ZONE_X
@@ -446,10 +387,8 @@ public abstract class BaseEnemy implements Enemy {
         healthPhases.sort((a, b) -> Float.compare(b.healthPercent, a.healthPercent));
     }
 
-    /** Enters every not-yet-entered phase whose threshold current health has reached, in order from
-     *  highest threshold to lowest - so a hit that skips past several at once still ends up in the
-     *  deepest one's patterns. Compared as health*100 <= maxHealth*percent to avoid integer
-     *  truncation of the threshold. */
+    /** Enters every phase whose threshold has been reached, highest first. Compared as
+     *  health*100 <= maxHealth*percent to avoid truncating the threshold. */
     private void advanceHealthPhases() {
         if (healthPhases == null || maxHealth <= 0) return;
         while (nextHealthPhase < healthPhases.size
@@ -459,10 +398,7 @@ public abstract class BaseEnemy implements Enemy {
         }
     }
 
-    /** Swaps in phase's movement and/or firing pattern, each only if it names a pattern that
-     *  actually exists - an unknown or blank id leaves the current one running rather than silently
-     *  turning the enemy into one that doesn't move or fire (see resolveMovementPattern()/
-     *  resolveFiringPattern()). */
+    /** Applies a phase. An unknown or blank id keeps the current pattern rather than stopping it. */
     private void enterHealthPhase(HealthPhase phase) {
         if (phase.movementPattern != null && !phase.movementPattern.isBlank()) {
             MovementPattern resolved = resolveMovementPattern(phase.movementPattern);
@@ -482,17 +418,11 @@ public abstract class BaseEnemy implements Enemy {
         if (phase.flipWithDirection != null) flipWithDirection = phase.flipWithDirection;
     }
 
-    /** Builds the named alternate animation (see EnemyDefinition.animations) - a no-op hook here for
-     *  the same reason resolveWeaponSet() is. Null = no swap. */
+    // Hooks overridden by GenericEnemy (which has the definition); null = no swap.
     protected Animation<TextureRegion> resolveAnimation(String animationName) { return null; }
 
-    /** Builds a live MovementPattern for the given movement-pattern id, starting from this enemy's
-     *  current position - a no-op hook here for the same reason resolveWeaponSet() is: only
-     *  GenericEnemy has the definition/world info needed to build one. Null = no swap. */
     protected MovementPattern resolveMovementPattern(String movementPatternId) { return null; }
 
-    /** Builds a live FiringPattern for the given firing-pattern id - see resolveMovementPattern().
-     *  Null = no swap. */
     protected FiringPattern resolveFiringPattern(String firingPatternId) { return null; }
 
     @Override
@@ -500,7 +430,6 @@ public abstract class BaseEnemy implements Enemy {
         if (firing != null) firing.advance();
     }
 
-    // See Enemy.reviveFully()/isPairResolved()/markPairResolved().
     @Override
     public void reviveFully() {
         health = maxHealth;
@@ -536,11 +465,10 @@ public abstract class BaseEnemy implements Enemy {
     }
 
     @Override
-    public void setInvertMovement(boolean invert) { // Implemented method from Enemy interface
+    public void setInvertMovement(boolean invert) {
         this.invertMovement = invert;
     }
 
-    // See Enemy.getSpawnGroup().
     private String spawnGroup;
 
     @Override
@@ -555,7 +483,7 @@ public abstract class BaseEnemy implements Enemy {
         spawnGroup = null;
         damageFlashTimer = 0;
         guaranteedPowerup = null;
-        invertMovement = false; // Reset on pool
+        invertMovement = false;
         rotateWithMovement = true;
         facePlayer = false;
         unitsPerPixel = Float.NaN;

@@ -14,6 +14,7 @@ import whitelabeltest.enemy.bullets.DrifterBullet;
 import whitelabeltest.enemy.bullets.EnemyBullet;
 import whitelabeltest.gamemanagers.ObjectPools;
 
+/** When the player comes within triggerDistance, fires a radial burst once and the enemy is removed. */
 public class SelfDestructFiring implements FiringPattern {
     private final float triggerDistance;
     private final float bulletSize;
@@ -54,9 +55,7 @@ public class SelfDestructFiring implements FiringPattern {
         this(triggerDistance, bulletSize, bulletSpeed, spriteOverride, offsetX, offsetY, bulletDamage, SpeedProfile.CONSTANT_SPEED, HitboxSpec.DEFAULT);
     }
 
-    /** @param speedProfile how bulletSpeed changes over each bullet's flight - see SpeedProfile
-     *  @param hitboxSpec each bullet's collision hitbox, independent of its visual size - see
-     *  HitboxSpec */
+    /** @param speedProfile,hitboxSpec see SpeedProfile and HitboxSpec */
     public SelfDestructFiring(float triggerDistance, float bulletSize, float bulletSpeed, Animation<TextureRegion> spriteOverride, float offsetX, float offsetY, int bulletDamage, SpeedProfile speedProfile, HitboxSpec hitboxSpec) {
         this.triggerDistance = triggerDistance;
         this.bulletSize = bulletSize;
@@ -78,7 +77,7 @@ public class SelfDestructFiring implements FiringPattern {
 
         if (currentPos.dst(targetPos) <= triggerDistance) {
             triggered = true;
-            // Offset only shifts the burst's spawn point, not the trigger-distance check itself.
+            // The offset moves the burst, not the trigger check.
             float centerX = currentPos.x + offsetX;
             float centerY = currentPos.y + offsetY;
             Animation<TextureRegion> animation = spriteOverride != null ? spriteOverride : bulletAnimation;

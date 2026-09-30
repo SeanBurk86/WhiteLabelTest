@@ -2,20 +2,14 @@ package whitelabeltest.gamemanagers.spawning;
 
 import com.badlogic.gdx.utils.Array;
 
+/** One stage from stages.json. See the README's "Stages" section. */
 public class StageDefinition {
     public static class BackgroundLayerDef {
         public String texture;
-        // Alternative to texture (ignored if this is set and non-empty): a relay of several images
-        // played one after another as this SAME layer scrolls, not several layers scrolling at once.
-        // The first image scrolls through its own full height exactly like a single-texture layer
-        // would (see ScrollingBackground.Layer/clampToTopOfImage) - normally that just freezes once
-        // fully revealed, but a sequence instead hands off to the next image at that point (resetting
-        // to its own top) and keeps scrolling, continuing through every entry in order. Only the
-        // LAST image actually freezes at the end, same as a normal single-texture layer. Lets one
-        // parallax layer read as a single long continuous piece of art across several separate files
-        // instead of needing one giant image.
+        // Alternative to texture: images played one after another in this same layer, each handing
+        // off to the next once fully scrolled. Only the last one freezes at its end.
         public Array<String> textureSequence;
-        // NaN = unset -> ScrollingBackground.DEFAULT_SCROLL_SPEED, since 0 is a valid (static) speed.
+        // NaN = ScrollingBackground.DEFAULT_SCROLL_SPEED (0 is a valid static speed).
         public float scrollSpeed = Float.NaN;
 
         public BackgroundLayerDef() {}
@@ -23,64 +17,33 @@ public class StageDefinition {
 
     public String id;
     public String name;
-    // Only actually consulted for gameplay when triggerFile is null (see that field's own doc) -
-    // GameController.loadStage() doesn't even construct a SpawnScheduler for a stage that has a
-    // triggerFile, so the level editor (which only ever reads/writes triggerFile) and gameplay stay
-    // in full parity. Kept around (rather than removed) purely so SpawnScheduleEditor's debug tool
-    // still has something to point at for a stage already carrying old schedule content.
+    // Legacy time-based schedule; only used when triggerFile is null.
     public String spawnSchedule;
-    // Path to a camera-position-driven trigger file (see whitelabeltest.gamemanagers.trigger.
-    // TriggerManager) for this stage's enemy spawns/sound/sprite/text cues - EXCLUSIVE with
-    // spawnSchedule once set (see that field's own doc): every stage as of this session has one, so
-    // spawnSchedule no longer drives any actual gameplay. null (the default) is the fallback path
-    // for some hypothetical future stage authored entirely the old way.
+    // The stage's trigger file (see TriggerManager). When set, spawnSchedule is ignored.
     public String triggerFile = null;
-    // Overrides ScrollingBackground's own kaleidoscopeTransitionTime/groundScrollSpeed defaults
-    // (see ScrollingBackground.DEFAULT_SCROLL_SPEED/Stage2KaleidoscopeShader.DEFAULT_TRANSITION_TIME)
-    // for a triggerFile-driven stage - the trigger-file equivalent of SpawnScheduler.ScheduleFile's
-    // same-named fields, which a stage with no SpawnScheduler running can no longer source these
-    // from. null (the default) means "use the engine default", same meaning SpawnScheduler's own
-    // null/unset schedule fields already had.
+    // Optional overrides of ScrollingBackground's defaults; null = engine default.
     public Float kaleidoscopeTransitionTime;
-    // Camera distance at which the "kaleidoscope" shader background has finished fading from
-    // monochrome to its colour palette (see Stage2KaleidoscopeShader.setDistances()). null means
-    // "the boss trigger's distance" - the whole stage.
+    // Distance by which the "kaleidoscope" background has faded from monochrome to color.
+    // null = the boss trigger's distance.
     public Float kaleidoscopeColorFadeDistance;
-    // Camera distance at which the "kaleidoscope" shader background swaps from the phosphene to the
-    // tentacles tunnel. null means "a few units before the boss trigger" (see GameController.loadStage()).
+    // Distance at which the "kaleidoscope" background swaps from phosphene to tentacles tunnel.
+    // null = a few units before the boss trigger.
     public Float kaleidoscopeTransitionDistance;
-    // Camera distance at which the "mandelbulb" shader background's camera starts diving from orbiting
-    // the bulb into its interior (see MandelbulbShader.setDiveDistance()). null means "a few units
-    // before the boss trigger" (see GameController.loadStage()).
+    // Distance at which the "mandelbulb" background starts diving into the bulb.
+    // null = a few units before the boss trigger.
     public Float mandelbulbDiveDistance;
     public Float groundScrollSpeed;
     public String music;
     public Array<BackgroundLayerDef> backgroundLayers;
     public String bossVideo;
-    // Stage-long looping video used as the background from the moment the stage loads - see
-    // ScrollingBackground.backgroundVideoFile. Unlike bossVideo (which cuts in later on a
-    // spawn-schedule cue), this plays immediately, so a stage using it typically leaves
-    // backgroundLayers empty (or minimal) rather than layering it under a parallax image.
+    // Looping video background from stage start (bossVideo instead cuts in later on a cue).
     public String backgroundVideo;
-    // When set, the background is a full-screen procedural shader effect (see
-    // ScrollingBackground.createShaderBackground/BackgroundShader) instead of backgroundVideo/
-    // backgroundLayers - same "plays immediately, covers the whole screen" role as backgroundVideo,
-    // just procedural rather than a decoded video file. Takes priority over backgroundVideo if both
-    // are somehow set. null (the default) means no shader background; otherwise must be one of the
-    // ids createShaderBackground() recognizes ("boxTunnel", "kaleidoscope", "mandelbulb").
+    // Full-screen procedural shader background: "boxTunnel", "kaleidoscope" or "mandelbulb". Takes
+    // priority over backgroundVideo and backgroundLayers.
     public String shaderBackground = null;
-    // When true, the stage's ordinary backgroundLayers (NOT shaderBackground/backgroundVideo, which
-    // this has no effect on) are drawn with a hue-rotating shader instead of their native colors -
-    // see HueCycleShader. The rotation's period is set to exactly
-    // SpawnScheduler.getBackgroundVideoTime() (see GameController.loadStage()), so it completes one
-    // full cycle - ending back at the image's original colors - right as the boss video cuts in.
+    // Hue-rotates backgroundLayers (see HueCycleShader), completing one cycle as the boss video starts.
     public boolean hueCycleBackground = false;
-    // When true, overlays PlayerFeedbackShader's analog "video feedback" trail (the player's own
-    // sprite endlessly re-fed into a zooming/rotating/fading accumulation buffer) on top of whatever
-    // this stage's background actually is - ordinary backgroundLayers, backgroundVideo/bossVideo, or
-    // even a shaderBackground - rather than replacing it. Independent of shaderBackground/
-    // hueCycleBackground: any combination of the three is valid, same "opt-in overlay" role as
-    // hueCycleBackground, just applied after ALL background content instead of just the layer stack.
+    // Overlays PlayerFeedbackShader's video-feedback trail of the player on top of any background.
     public boolean playerFeedbackBackground = false;
 
     public StageDefinition() {}

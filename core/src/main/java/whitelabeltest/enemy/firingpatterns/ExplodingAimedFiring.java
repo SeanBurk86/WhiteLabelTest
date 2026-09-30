@@ -12,6 +12,7 @@ import whitelabeltest.enemy.SpeedProfile;
 import whitelabeltest.enemy.bullets.EnemyBullet;
 import whitelabeltest.gamemanagers.ObjectPools;
 
+/** Every fireRate seconds, fires a ring of 8 ExplodingAimedBullets that burst outward then home in. */
 public class ExplodingAimedFiring implements FiringPattern {
     private final float fireRate;
     private final float bulletSize;
@@ -52,10 +53,7 @@ public class ExplodingAimedFiring implements FiringPattern {
         this(fireRate, bulletSize, bulletSpeed, spriteOverride, offsetX, offsetY, bulletDamage, SpeedProfile.CONSTANT_SPEED, HitboxSpec.DEFAULT);
     }
 
-    /** @param speedProfile how bulletSpeed changes over each bullet's flight - see SpeedProfile;
-     *  applies both before and after the bullet's re-aim (see ExplodingAimedBullet)
-     *  @param hitboxSpec each bullet's collision hitbox, independent of its visual size - see
-     *  HitboxSpec */
+    /** @param speedProfile,hitboxSpec see SpeedProfile and HitboxSpec */
     public ExplodingAimedFiring(float fireRate, float bulletSize, float bulletSpeed, Animation<TextureRegion> spriteOverride, float offsetX, float offsetY, int bulletDamage, SpeedProfile speedProfile, HitboxSpec hitboxSpec) {
         this.fireRate = fireRate;
         this.bulletSize = bulletSize;

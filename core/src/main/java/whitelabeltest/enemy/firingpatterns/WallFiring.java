@@ -13,30 +13,13 @@ import whitelabeltest.enemy.bullets.AimedEnemyBullet;
 import whitelabeltest.enemy.bullets.EnemyBullet;
 import whitelabeltest.gamemanagers.ObjectPools;
 
-/** Fires one or more full-width horizontal curtains of bullets straight down, laid out in
- *  world-space X (from marginX to worldWidth - marginX, every spacing units) rather than relative
- *  to the firing enemy's own position - the only other pattern here that does that is Orbiting, and
- *  even that still centers on the enemy. This is a scripted "wall with a hole" drill: the enemy
- *  driving it can sit anywhere safe (away from BaseEnemy's ceasefire zone, which silences the
- *  *enemy*, never an individual already-spawned bullet) while the curtain itself still spans the
- *  whole play area.
+/** Fires full-width curtains of bullets straight down, laid out in world X (marginX to
+ *  worldWidth - marginX, every `spacing`), independent of the enemy's position. The gap is chosen by
+ *  lane index (gapLaneStart, gapLaneCount lanes wide), so it's always exactly that many lanes.
  *
- *  The hole is carved by lane INDEX (gapLaneStart/gapLaneCount), not by a raw X-distance window -
- *  laying bullets out with a float accumulator and then excluding "anything within gapWidth of
- *  gapCenterX" only produces exactly one skipped lane when gapCenterX happens to land exactly on a
- *  lane; nudge it off-grid (as a designer hand-tuning the gap position easily can) and the window
- *  can straddle zero or two lanes instead of one, quietly leaving the wall solid. Indexing directly
- *  makes "skip exactly gapLaneCount lanes" true for any gapLaneStart.
- *
- *  gapLaneSequence (optional) fires one volley per array entry, fireRate seconds apart, each with
- *  that entry as its gapLaneStart - since every volley falls at the same bulletSpeed from the same
- *  Y, closely-spaced volleys stack into one continuous, vertically dense column with the gap
- *  sliding smoothly between rows (e.g. left, left, center, right, right, center, left... traces a
- *  weave the player has to physically follow to stay in the safe lane, rather than a single flat
- *  wall). Without it, fires a single volley from gapLaneStart, immediately - the original
- *  single-shot behavior, unchanged for every pattern authored before gapLaneSequence existed.
- *
- *  reset() re-arms the whole sequence for pooled reuse. */
+ *  With gapLaneSequence, fires one volley per entry, fireRate apart, each using that entry as its
+ *  gap start; close volleys stack into a dense column with a weaving gap. Without it, fires a single
+ *  volley. The first volley fires immediately. */
 public class WallFiring implements FiringPattern {
     private final float bulletSize;
     private final float bulletSpeed;
@@ -62,9 +45,7 @@ public class WallFiring implements FiringPattern {
             spacing, gapLaneStart, gapLaneCount, null, 0f);
     }
 
-    /** @param gapLaneSequence null/empty for the original single-volley behavior (uses
-     *  gapLaneStart); otherwise one volley per entry, fireRate seconds apart, each entry becoming
-     *  that volley's gapLaneStart (gapLaneCount stays the same width throughout). */
+    /** @param gapLaneSequence null/empty = one volley at gapLaneStart; else one volley per entry. */
     public WallFiring(float bulletSize, float bulletSpeed, int bulletDamage, Animation<TextureRegion> spriteOverride,
                        SpeedProfile speedProfile, HitboxSpec hitboxSpec, float worldWidth, float marginX,
                        float spacing, int gapLaneStart, int gapLaneCount, int[] gapLaneSequence, float fireRate) {
@@ -88,8 +69,7 @@ public class WallFiring implements FiringPattern {
         int totalVolleys = (gapLaneSequence != null && gapLaneSequence.length > 0) ? gapLaneSequence.length : 1;
         if (volleysFired >= totalVolleys) return;
 
-        // First volley fires immediately (matches the original single-shot pattern's timing); only
-        // volleys after that wait fireRate apart.
+        // First volley fires immediately, then every fireRate seconds.
         if (volleysFired > 0) {
             timer += delta;
             if (timer < fireRate) return;
@@ -102,8 +82,7 @@ public class WallFiring implements FiringPattern {
         Animation<TextureRegion> animation = spriteOverride != null ? spriteOverride : bulletAnimation;
         float originY = sprite.getY() + sprite.getHeight() / 2f;
 
-        // +1 so a curtain that divides evenly still includes its final lane (e.g. margin 0.25,
-        // spacing 0.4, span 8.5 -> 21.25 steps -> 22 lanes, indices 0..21).
+        // +1 so an evenly dividing curtain still includes its last lane (e.g. span 8.5 / 0.4 -> 22 lanes).
         int laneCount = (int) ((worldWidth - marginX * 2f) / spacing + 0.0001f) + 1;
         for (int i = 0; i < laneCount; i++) {
             if (i >= currentGapStart && i < currentGapStart + gapLaneCount) continue;

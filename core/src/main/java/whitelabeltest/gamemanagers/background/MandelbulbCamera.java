@@ -3,25 +3,17 @@ package whitelabeltest.gamemanagers.background;
 import com.badlogic.gdx.math.MathUtils;
 import com.badlogic.gdx.math.Vector3;
 
-/** The flying camera for MandelbulbShader - a small stateful, collision-safe autopilot rather than a
- *  closed-form path, because the shader's world isn't empty space you can just fly a curve through.
+/** MandelbulbShader's camera: a collision-safe autopilot rather than a fixed path, since the scene
+ *  is full of walls. The rendered surface has a thin solid skin, leaving two open regions: outside,
+ *  and a hollow chamber inside. The camera orbits outside, then on the dive punches straight through
+ *  the skin (the one time it ignores walls) and flies around the chamber.
  *
- *  What the shader marches (see map() in mandelbulb.frag) is the fractal's surface with a thin solid
- *  SKIN around it, which leaves two separate regions of open space: the OUTSIDE, and a hollow
- *  CHAMBER inside (the Mandelbulb's solid core, seen from within). The camera starts outside orbiting
- *  the bulb, then when the dive begins it heads for the middle, punches through the skin, and from
- *  then on flies around the inside chamber.
+ *  Steering heads for a goal while sliding along and leaning away from walls, at a speed
+ *  proportional to wall clearance so it can't overshoot into one. Everything is integrated frame to
+ *  frame with a smoothed heading, so nothing snaps when parameters change.
  *
- *  Steering is the same in both regions: head for a goal point while sliding along/away from walls,
- *  with speed proportional to the clearance from the nearest wall - so it slows as walls close in
- *  (an exponential approach that can't overshoot into one). Being integrated frame to frame with a
- *  low-pass filtered heading is what keeps the motion smooth: nothing here is a function of absolute
- *  time that could snap when a parameter changes. The one deliberate exception to "never touch a wall"
- *  is the skin crossing, which drives straight through it.
- *
- *  distance() must stay in step with field() in mandelbulb.frag - same iteration count, same twist,
- *  same formula - and SHELL with the shader's SHELL, since the shader renders the very walls this
- *  camera avoids. */
+ *  distance() must match field() in mandelbulb.frag (iterations, twist, formula), and SHELL must
+ *  match the shader's SHELL. */
 final class MandelbulbCamera {
     // Must match BULB_ITERATIONS in mandelbulb.frag.
     private static final int BULB_ITERATIONS = 6;
@@ -46,10 +38,8 @@ final class MandelbulbCamera {
     private static final float DIVE_THRESHOLD = 0.5f;
     private static final float CROSS_TRIGGER_DISTANCE = 0.06f;
     private static final float CROSS_SPEED = 0.6f;
-    // The crossing ends once the camera is this close to the centre AND has this much room around it -
-    // i.e. it has reached the smooth open ball in the middle of the bulb, not merely a thin pocket just
-    // behind the skin (there are internal ridges near the wall, so the first open space past it is
-    // often a sliver between the wall and one of them).
+    // The crossing ends near the center with room around it: the open middle, not a thin pocket
+    // between the skin and an internal ridge.
     private static final float CROSS_DONE_RADIUS = 0.5f;
     private static final float CROSS_DONE_CLEARANCE = 0.05f;
     // Long enough to cross the whole ridge zone at CROSS_SPEED.
@@ -80,8 +70,7 @@ final class MandelbulbCamera {
         orbitGoal(0f, pos);
         orbitGoal(0.35f, a);
         moveDir.set(a).sub(pos).nor();
-        // Start the view where step() will be steering it, not along the orbit - otherwise the first
-        // half second is spent swinging it around to the bulb.
+        // Start the view where step() will steer it, so it doesn't swing around at the start.
         float lookAtBulb = MathUtils.lerp(0.4f, 0.95f, smoothstep(0.9f, 1.9f, pos.len()));
         view.set(pos).nor().scl(-lookAtBulb).mulAdd(moveDir, 1f - lookAtBulb).nor();
         lastGood.set(pos);
@@ -97,10 +86,9 @@ final class MandelbulbCamera {
     boolean isInsideBulb() { return insideBulb; }
     boolean isCrossing() { return crossing; }
 
-    /** @param orbitTime clock for the outside orbit goal
-     *  @param diveTime clock for the interior goal - kept separate so blending the two goals never
-     *  changes either one's own speed (blending SPEEDS instead makes the phase sweep wildly)
-     *  @param inside 0 = orbit the bulb from outside ... 1 = dive into it */
+    /** @param orbitTime,diveTime separate clocks for the two goals, so blending goals never changes
+     *  either one's speed
+     *  @param inside 0 = orbit outside ... 1 = dive in */
     void update(float delta, float orbitTime, float diveTime, float inside, float power, float twist) {
         float remaining = Math.min(delta, 0.1f);
         while (remaining > 0f) {
@@ -125,8 +113,7 @@ final class MandelbulbCamera {
             stepFlying(h, orbitTime, diveTime, inside, power, twist);
         }
 
-        // Look where it's going; when it's out in the open, blend that toward the bulb so the view
-        // never drifts off into empty space. Once diving it just looks ahead.
+        // Look ahead, blended toward the bulb when outside so the view never drifts into empty space.
         float lookAtBulb = insideBulb || crossing ? 0.15f
             : MathUtils.lerp(MathUtils.lerp(0.4f, 0.95f, smoothstep(0.9f, 1.9f, pos.len())), 0.15f, inside);
         b.set(pos).nor().scl(-lookAtBulb).mulAdd(moveDir, 1f - lookAtBulb).nor();
@@ -140,8 +127,7 @@ final class MandelbulbCamera {
 
         float d = clearance(pos, power, twist);
         if (d <= 0f) {
-            // A wall swept over the camera (the fractal is morphing) - go back to the last point known
-            // to be in open space and carry on from there.
+            // A morphing wall swept over the camera; return to the last open-space point.
             pos.set(lastGood);
             d = Math.max(clearance(pos, power, twist), MIN_CLEARANCE);
         }
@@ -183,10 +169,8 @@ final class MandelbulbCamera {
         if (clearance(pos, power, twist) > MIN_CLEARANCE * 0.5f) lastGood.set(pos);
     }
 
-    /** Bursts through the outer wall and on to the middle of the bulb, ignoring every wall on the way -
-     *  the skin, and the thin ridges inside it - in a straight line at the centre. It ends when it reaches
-     *  the open ball at the middle. If it never does (it timed out somewhere unlucky) it gives up, backs
-     *  out to the last point known to be in open space, and tries again from somewhere else later. */
+    /** Drives straight at the center through the skin and ridges until it reaches the open middle.
+     *  On timeout it backs out to the last open point and retries later. */
     private void stepCrossing(float h, float power, float twist) {
         crossTimer += h;
         moveDir.lerp(a.set(pos).nor().scl(-1f), 1f - (float) Math.exp(-6f * h)).nor();
@@ -204,10 +188,8 @@ final class MandelbulbCamera {
         }
     }
 
-    /** The outside orbit: an orbit whose radius swings in and out and whose pitch wanders. It stays
-     *  clear of the bulb's surface layer (which reaches out to about radius 1.2): a goal that dips into
-     *  the solid pins the camera against the wall at minimum speed while the goal slides underneath
-     *  it, and the heading whips around - the jerkiness this used to have before the dive. */
+    /** Outside orbit goal with a swinging radius and wandering pitch. Stays outside the surface
+     *  (radius ~1.2): a goal inside the solid pins the camera to the wall and makes it jerk. */
     static Vector3 orbitGoal(float t, Vector3 out) {
         float yaw = t * 0.5f;
         float pitch = 0.95f * MathUtils.sin(t * 0.37f);
@@ -215,8 +197,7 @@ final class MandelbulbCamera {
         return out.set(MathUtils.cos(pitch) * MathUtils.sin(yaw), MathUtils.sin(pitch), MathUtils.cos(pitch) * MathUtils.cos(yaw)).scl(radius);
     }
 
-    /** The dive goal: a point toward the middle of the bulb that slowly sweeps around, so once inside the
-     *  camera keeps working its way around the chamber instead of parking in one spot. */
+    /** Interior goal: a slowly sweeping point near the middle, so the camera keeps touring the chamber. */
     static Vector3 diveGoal(float t, Vector3 out) {
         float yaw = t * 0.45f;
         float pitch = 0.9f * MathUtils.sin(t * 0.31f + 1.0f);
@@ -228,9 +209,8 @@ final class MandelbulbCamera {
         return t * t * (3f - 2f * t);
     }
 
-    /** Mandelbulb field at p (mirrors field() in mandelbulb.frag): positive outside the fractal,
-     *  negative inside it. Computed in double - it's only a handful of calls per frame, and the extra
-     *  precision keeps the clearance tests steady. */
+    /** The field at p, mirroring field() in mandelbulb.frag: positive outside, negative inside.
+     *  Computed in double for steady clearance tests. */
     static float distance(Vector3 p, float power, float twist) {
         double px = p.x, py = p.y, pz = p.z;
         double wx = px, wy = py, wz = pz;
@@ -258,8 +238,7 @@ final class MandelbulbCamera {
         return (float) (0.25 * Math.log(m) * Math.sqrt(m) / dz);
     }
 
-    /** Unit normal of the wall in the camera's current region, pointing INTO the open space (away from
-     *  the wall): the gradient of the clearance. eps scales with the local clearance. */
+    /** Unit wall normal pointing into the open region (the clearance gradient). */
     private void wallNormal(Vector3 p, float d, float power, float twist, Vector3 out) {
         gradient(p, d, power, twist, out);
         if (insideBulb) out.scl(-1f);

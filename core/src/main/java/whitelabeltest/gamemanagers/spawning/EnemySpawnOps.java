@@ -17,11 +17,8 @@ import whitelabeltest.enemy.GenericEnemy;
 import whitelabeltest.enemy.HealthPhase;
 import whitelabeltest.gamemanagers.trigger.Trigger;
 
-/** Enemy-instantiation and sprite-cue mechanics shared by SpawnScheduler (wall-clock-timed spawn
- *  events) and TriggerManager (camera-position-timed triggers - see whitelabeltest.gamemanagers.
- *  trigger.Trigger) - both fire the same handful of things (spawn an enemy, silence/despawn one by
- *  definition id, drop a waypoint gem, play a scripted sprite cue), so the actual pooling/init work
- *  lives here once instead of twice. */
+/** Spawn / silence / despawn / waypoint-gem / sprite-cue actions shared by SpawnScheduler and
+ *  TriggerManager. */
 public final class EnemySpawnOps {
     private EnemySpawnOps() {}
 
@@ -32,11 +29,8 @@ public final class EnemySpawnOps {
             movementPattern, firingPattern, inverseMovement, powerup, null, 0f);
     }
 
-    /** @param entranceTrigger non-null only from TriggerManager.fire() - lets GenericEnemy build its
-     *  own EnemyEntranceMovement.build() call once the real spawn sprite's true size is known (see
-     *  that method's own doc on why it can't be built any earlier than that), using entranceTrigger's
-     *  own fields (x/y/distance/spawnLead/enterFromAbove) plus cameraSpeed (the camera's speed AT
-     *  FIRE TIME, unused/irrelevant when entranceTrigger is null). */
+    /** @param entranceTrigger TriggerManager only: GenericEnemy builds the enterFromAbove entrance from
+     *  it once the real sprite size is known. cameraSpeed is the camera speed at fire time. */
     public static void spawnEnemy(EntityManager entityManager, ObjectMap<String, EnemyDefinition> enemyDefinitions, AssetManager assets,
                                    float worldWidth, float worldHeight, String type, float x, float y, float offsetX, float offsetY,
                                    String movementPattern, String firingPattern, boolean inverseMovement, Integer powerup,
@@ -45,7 +39,7 @@ public final class EnemySpawnOps {
             movementPattern, firingPattern, inverseMovement, powerup, entranceTrigger, cameraSpeed, null);
     }
 
-    /** @param healthPhases see HealthPhase/Trigger.healthPhases - null or empty for none. */
+    /** @param healthPhases null or empty for none. */
     public static void spawnEnemy(EntityManager entityManager, ObjectMap<String, EnemyDefinition> enemyDefinitions, AssetManager assets,
                                    float worldWidth, float worldHeight, String type, float x, float y, float offsetX, float offsetY,
                                    String movementPattern, String firingPattern, boolean inverseMovement, Integer powerup,
@@ -69,16 +63,14 @@ public final class EnemySpawnOps {
         entityManager.getEnemies().add(enemy);
     }
 
-    /** Stops every currently active enemy whose EnemyDefinition id matches defId from firing any
-     *  further, without otherwise touching it. */
+    /** Stops every active enemy of definition defId from firing. */
     public static void silenceMatching(EntityManager entityManager, String defId) {
         for (Enemy enemy : entityManager.getEnemies()) {
             if (enemy.isActive() && defId.equals(enemy.getDefinitionId())) enemy.silenceFiring();
         }
     }
 
-    /** Silently removes every currently active enemy whose EnemyDefinition id matches defId, with
-     *  no death animation/score/drops - scripted cleanup, not a kill. */
+    /** Removes every active enemy of definition defId with no death animation, score or drops. */
     public static void despawnMatching(EntityManager entityManager, String defId) {
         Array<Enemy> enemies = entityManager.getEnemies();
         for (int i = enemies.size - 1; i >= 0; i--) {
@@ -90,8 +82,7 @@ public final class EnemySpawnOps {
         }
     }
 
-    /** Drops a stationary PointGem at (x, y), same animation as a gem an enemy would drop, but
-     *  without that gem's pop/gravity/homing. */
+    /** Places a stationary PointGem at (x, y) (no pop, gravity or homing). */
     public static void spawnWaypointGem(EntityManager entityManager, AssetManager assets, float worldWidth, float worldHeight, float x, float y) {
         Animation<TextureRegion> gemAnimation =
             AnimationCache.get(assets.pointGemTexture, 6, 4, 24, 0.05f, Animation.PlayMode.LOOP);
@@ -100,10 +91,8 @@ public final class EnemySpawnOps {
         entityManager.getPointGems().add(gem);
     }
 
-    /** Plays a one-off scripted sprite/animation at a fixed world position - texturePath/columns/
-     *  rows/frameCount/frameDuration describe the sprite sheet the same way EnemyDefinition's
-     *  animations do. size sets the draw height; width is derived from the sheet's per-frame aspect
-     *  ratio so non-square art isn't squashed into a square. */
+    /** Plays a one-off sprite-sheet animation at (x, y). size is the draw height; width follows the
+     *  frame's aspect ratio. */
     public static void spawnSpriteCue(EntityManager entityManager, AssetManager assets, String texturePath, float x, float y, float size,
                                        int columns, int rows, int frameCount, float frameDuration) {
         Texture texture = assets.ensureTexture(texturePath);

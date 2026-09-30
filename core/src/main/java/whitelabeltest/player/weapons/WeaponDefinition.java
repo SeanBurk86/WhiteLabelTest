@@ -3,9 +3,10 @@ package whitelabeltest.player.weapons;
 import com.badlogic.gdx.graphics.g2d.Animation;
 import com.badlogic.gdx.graphics.g2d.TextureRegion;
 
+/** One weapons.json entry. */
 public class WeaponDefinition {
     public String id;
-    public String type; // e.g., "Direct", "Spline", "Orbit"
+    public String type;
     public String texture;
     public int frameCount;
     public int columns = 0;
@@ -25,43 +26,30 @@ public class WeaponDefinition {
     public float radius;
     public float rotationSpeed;
 
-    // BasicWeapon's Hyper Attack (see Player's halo-dash state machine) - the graze halo launches
-    // forward haloDashDistance at haloDashSpeed. Basic's own re-press reattaches at
-    // haloFastReturnSpeed, noticeably snappier than a fizzled recall (switching weapons away
-    // mid-flight) or Thunderbolt's return leg, both of which glide back at haloReturnSpeed instead.
+    // Basic Hyper Attack. A re-press returns at haloFastReturnSpeed; other recalls use haloReturnSpeed.
     public float haloDashDistance;
     public float haloDashSpeed;
     public float haloReturnSpeed;
     public float haloFastReturnSpeed;
     public int haloDashDamage;
-    // How big the halo-collision burst is (images/weapons/halo-collision.png, played where the dashing halo hits an
-    // enemy - see CollisionManager.spawnHaloCollisionEffect()), as a multiple of the halo's own diameter: 1 = as
-    // tall as the halo, 0.5 = half that.
+    // Dash-hit burst size as a multiple of the halo's diameter.
     public float haloCollisionScale = 0.75f;
 
-    // Chain-lightning arcs (Thunderbolt): when one of this weapon's bolts hits an enemy it also arcs out to the
-    // arcTargets nearest OTHER enemies within arcRange world units of the one it hit, each taking that bolt's
-    // damage times arcDamageMultiplier - see CollisionManager.arcLightning(). 0 targets (the default) = no arcs, so
-    // every other weapon is unaffected.
+    // Chain lightning: a hit also arcs to the arcTargets nearest other enemies within arcRange for
+    // damage * arcDamageMultiplier. 0 = no arcs.
     public int arcTargets = 0;
     public float arcDamageMultiplier = 0.5f;
     public float arcRange = 3.5f;
 
-    // Thunderbolt's Hyper Attack (see Player's thunderbolt charge/detonate state machine) - the
-    // halo hovers thunderboltHaloFrontDistance in front of the ship, charging through one damage/
-    // blast-radius tier every thunderboltChargeLevelTime seconds it's held (both arrays indexed by
-    // tier, same length, capped at the last tier once fully charged).
+    // Thunderbolt Hyper Attack. The tier arrays have the same length; one tier per
+    // thunderboltChargeLevelTime held.
     public float thunderboltHaloFrontDistance;
     public float thunderboltHaloMoveSpeed;
     public float thunderboltChargeLevelTime;
     public int[] thunderboltChargeDamageByTier;
     public float[] thunderboltBlastRadiusByTier;
 
-    // Impact effect played wherever this weapon's bullet lands a hit - hitTexture null (the
-    // default) means no hit effect. See AssetManager, which resolves hitTexture into
-    // hitAnimation once at load time (not JSON-backed - never a key in weapons.json - so every
-    // bullet spawned from this definition can share the one prebuilt Animation instead of each
-    // rebuilding it from hitTexture/hitColumns/hitRows/hitFrameCount/hitFrameDuration).
+    // Optional impact effect. hitAnimation is built once by AssetManager (not from JSON).
     public String hitTexture;
     public float hitSize;
     public int hitFrameCount;

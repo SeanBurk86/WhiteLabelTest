@@ -8,11 +8,8 @@ import com.badlogic.gdx.graphics.g2d.SpriteBatch;
 import com.badlogic.gdx.graphics.glutils.ShaderProgram;
 import com.badlogic.gdx.utils.Disposable;
 
-/** Draws a circular ring-shaped progress meter (0..1 fraction, filling clockwise from the top),
- *  as an alternative to UIManager's rectangular meters. Renders as a hollow ring between
- *  innerRadius and outerRadius (both 0..0.5, relative to the drawn quad) via a small shader
- *  rather than ShapeRenderer, so it can be drawn inline within UIManager's existing SpriteBatch
- *  session - same custom-shader-in-SpriteBatch approach as ChainFireEffect. */
+/** A ring progress meter (fraction 0..1, clockwise from the top) between innerRadius and outerRadius
+ *  (0..0.5 of the quad), drawn with a shader inside the UI's SpriteBatch. */
 public class CircleMeterEffect implements Disposable {
     private final ShaderProgram shader;
 

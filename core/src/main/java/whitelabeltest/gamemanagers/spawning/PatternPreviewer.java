@@ -34,19 +34,14 @@ import java.util.function.Consumer;
 import java.util.function.Predicate;
 import java.util.function.Supplier;
 
-/** Debug-only tool: pick any enemy from the JSON-loaded registry (or create a brand-new one),
- *  edit its stats and its movement/firing pattern trees - including switching a pattern's type
- *  and adding/removing nested Sequence/Combined/Squadron sub-patterns - and watch a dedicated
- *  preview enemy replay the result live. Every edit installs the working copy into
- *  PatternRegistry/AssetManager (see applyChange) and fully respawns the preview enemy, so the
- *  change is visible immediately. Nothing is written to the JSON files until the "Save All To
- *  Disk" row is confirmed. */
+/** Debug-menu editor for enemies, movement/firing pattern trees and bullets, with a live preview
+ *  enemy. Every edit is installed into the registries and respawns the preview; nothing is written
+ *  to JSON until "Save All To Disk". */
 public class PatternPreviewer {
     private static final String[] MOVEMENT_TYPES = {"None", "Straight", "ZigZag", "Seeking", "MoveToPoint", "Spline", "Sequence", "Squadron"};
     private static final String[] FIRING_TYPES = {"None", "SelfDestruct", "ExplodingAimed", "BurstAimed", "Sweep", "SineWave", "Feather", "Orbiting", "Wall", "PolkaDot", "RadialNearMiss", "SpawnEnemy", "Aimed", "QuarterCircle", "AimedAtPoint", "Laser", "Shape", "Sequence", "Combined"};
     private static final String NONE_LABEL = "(none)";
-    // See HitboxSpec.Shape - NONE_LABEL here means "null", i.e. let the bullet class's own default
-    // shape stand (see each bullet class's getHitRadius()) rather than forcing one.
+    // NONE_LABEL = null: keep the bullet class's default hitbox shape.
     private static final Array<String> HITBOX_SHAPE_OPTIONS = Array.with(NONE_LABEL, "Circle", "Rectangle");
 
     private interface FloatGetter { float get(); }
@@ -91,9 +86,7 @@ public class PatternPreviewer {
     private EnemyDefinition workingEnemy;
     private MovementPatternDef workingMovement;
     private FiringPatternDef workingFiring;
-    // Independent of the selected enemy/movement/firing trio above - bullets aren't referenced by
-    // id from EnemyDefinition, only from a FiringPatternDef's own bulletId, so this section is
-    // browsed on its own instead of following enemy selection.
+    // Browsed independently of the enemy: bullets are referenced by firing patterns, not enemies.
     private BulletDef workingBullet;
     private GenericEnemy previewEnemy;
     private final Array<Row> rows = new Array<>();
@@ -103,11 +96,9 @@ public class PatternPreviewer {
     private float statusMessageTimer;
     private Array<String> textureFilesCache;
 
-    // ---- In-menu text entry (new enemy/movement/firing id prompts) ----------------------------
-    // Gdx.input.getTextInput is a no-op on the lwjgl3 desktop backend (it just calls canceled()
-    // immediately, no dialog is shown), so id entry is done with a small text field built into
-    // this screen instead: a temporary InputProcessor captures keystrokes while active, and the
-    // normal row navigation in handleInput() is suppressed until it's confirmed or cancelled.
+    // ---- In-menu text entry ---------------------------------------------------------------------
+    // Gdx.input.getTextInput is a no-op on lwjgl3 desktop, so a temporary InputProcessor captures
+    // keystrokes instead while row navigation is suspended.
     private boolean textEntryActive;
     private String textEntryTitle;
     private StringBuilder textEntryBuffer;
@@ -141,11 +132,8 @@ public class PatternPreviewer {
         this.selectedRow = 0;
         this.textureFilesCache = null;
 
-        // workingBullet must be populated before selectEnemy() below, since selectEnemy() ends in
-        // applyChange() -> rebuildRows(), and rebuildRows() always builds the bullet section
-        // (appendBulletFieldRows) too, regardless of what triggered the rebuild. loadBulletDef()
-        // (unlike selectBulletId()) only sets workingBullet without itself calling applyChange(),
-        // so it doesn't force a premature rebuild while workingEnemy is still unset.
+        // Load the bullet first: selectEnemy() rebuilds rows, which include the bullet section.
+        // loadBulletDef() doesn't rebuild, so it's safe before workingEnemy is set.
         Array<String> bulletIds = PatternRegistry.getBulletIds();
         loadBulletDef(bulletIds.size > 0 ? bulletIds.first() : null);
 
@@ -164,15 +152,12 @@ public class PatternPreviewer {
         }
     }
 
-    /** @return true if the delete key was consumed by the selected row (e.g. removing a
-     *  sub-pattern) rather than falling through to closing the whole screen. */
+    /** @return true if the selected row consumed the delete key (instead of it closing the screen). */
     public boolean handleInput(InputManager input) {
         if (textEntryActive) return false;
         if (suppressNextMenuInput) {
-            // The same physical Enter press that just confirmed/cancelled the text field would
-            // otherwise also register as a menu confirm this frame (both the InputProcessor
-            // callback and InputManager's polling see the same keypress) and immediately re-fire
-            // whichever row opened the prompt.
+            // The Enter that closed the text field is also seen by InputManager's polling; skip it
+            // so it doesn't re-fire the row that opened the prompt.
             suppressNextMenuInput = false;
             return false;
         }
@@ -192,9 +177,8 @@ public class PatternPreviewer {
         return false;
     }
 
-    /** Steps the preview enemy (and any bullets its firing pattern spawns) each frame, since the
-     *  rest of the game is frozen while the debug menu is open. Respawns from a clean starting
-     *  point once its pattern carries it off-screen, so the demo keeps replaying. */
+    /** Steps the preview enemy and its bullets (the rest of the game is frozen while the debug menu
+     *  is open), respawning it once it leaves the screen so the demo loops. */
     public void tick(float delta, EntityManager entities) {
         if (!active) return;
 
@@ -208,12 +192,7 @@ public class PatternPreviewer {
 
         if (previewEnemy == null) return;
 
-        // No background scroll to sync a ground enemy against in this isolated preview - 0 leaves
-        // even a ground-flagged enemy's own movement pattern as the only thing moving it, same as
-        // every non-ground enemy here.
-        // No AudioManager in this isolated preview either - a WaypointPath's per-waypoint sound cue
-        // (see BaseEnemy.resolveMovementCue()) is simply skipped here, same as it would be for any
-        // other movement pattern that doesn't queue one.
+        // No ground scroll and no AudioManager in the preview (waypoint sound cues are skipped).
         previewEnemy.update(delta, entities.getEnemyBullets(), entities.getPlayer().getHitbox(), entities.getPlayer().getGrazeHitbox(), false, 0f, null);
 
         Array<EnemyBullet> enemyBullets = entities.getEnemyBullets();
@@ -235,9 +214,7 @@ public class PatternPreviewer {
         this.enemyId = id;
         EnemyDefinition src = id != null ? assets.getEnemyDefinition(id) : null;
         workingEnemy = cloneEnemy(src, id);
-        // Movement isn't part of EnemyDefinition (see that class's own doc) - this preview always
-        // starts from a blank slate, decoupled from whichever enemy is selected, rather than
-        // inheriting anything enemy-specific.
+        // Movement isn't part of EnemyDefinition, so the preview starts with none.
         loadMovementDef("None");
         loadFiringDef(workingEnemy.firingPattern);
         applyChange();
@@ -309,9 +286,7 @@ public class PatternPreviewer {
         promptTextEntry(title, c -> Character.isLetterOrDigit(c) || c == '_' || c == '-', onEntered);
     }
 
-    /** Same text-field prompt as promptNewId, but the character filter only lets through digits,
-     *  '.' and '-' (a leading minus, or a decimal point for non-integer fields) - used by numberRow
-     *  so stat values can be typed exactly instead of only nudged with left/right. */
+    /** Typed numeric entry for numberRow (digits, '-', and '.' for non-integers). */
     private void promptNumber(String name, float current, boolean isInt, FloatSetter setter) {
         String title = "Enter value for " + name + " (current: " + (isInt ? String.valueOf(Math.round(current)) : formatFloat(current)) + ")";
         Predicate<Character> filter = isInt
@@ -335,9 +310,8 @@ public class PatternPreviewer {
         textEntryCallback = onEntered;
         previousInputProcessor = Gdx.input.getInputProcessor();
         Gdx.input.setInputProcessor(new InputAdapter() {
-            // A single input drain can deliver multiple queued events against this same
-            // processor instance (e.g. Enter fires both KEY_DOWN and KEY_TYPED('\r')), so every
-            // callback must no-op once finishTextEntry() has already run and cleared the buffer.
+            // One input drain can deliver several events (Enter = KEY_DOWN + KEY_TYPED), so every
+            // callback must no-op once finishTextEntry() has run.
             @Override
             public boolean keyTyped(char character) {
                 if (!textEntryActive) return false;
@@ -380,32 +354,21 @@ public class PatternPreviewer {
 
     // ---- Apply / respawn / save ---------------------------------------------------------------
 
-    /** Commits the working copies into the live registries, rebuilds the editable row list (its
-     *  structure can change - a type switch or add/remove sub-pattern changes which rows exist)
-     *  and fully respawns the preview enemy from the edited definition. Called after every single
-     *  edit; this is a debug tool, not a hot path, so simplicity wins over incremental updates. */
+    /** After every edit: installs the working copies into the registries, rebuilds the rows (their
+     *  structure can change) and respawns the preview. Simple over incremental; it's a debug tool. */
     private void applyChange() {
         dirty = true;
-        // Movement isn't part of EnemyDefinition - respawnPreview() passes workingMovement.id
-        // straight to EnemySpawnRegistry.spawn()'s override param instead, so there's nothing to
-        // stamp onto workingEnemy here the way firingPattern still is.
+        // Movement is passed to the spawn directly (see respawnPreview()), not stored on the enemy.
         workingEnemy.firingPattern = workingFiring.id;
         PatternRegistry.putMovement(workingMovement.id, workingMovement);
         PatternRegistry.putFiring(workingFiring.id, workingFiring);
-        // workingBullet is set up independently of the enemy/movement/firing trio above (see
-        // open()) but shares this same applyChange() - every row-building helper (numberRow,
-        // toggleRow, idPickRow, promptNumber's typed-entry path) already hardcodes a call to this
-        // method, so folding the bullet section in here is what actually lets those rows persist
-        // its edits, rather than needing a parallel applyBulletChange() the row helpers don't know
-        // to call.
         if (workingBullet != null) PatternRegistry.putBullet(workingBullet.id, workingBullet);
         assets.putEnemyDefinition(workingEnemy);
         rebuildRows();
         respawnPreview();
     }
 
-    // Left/right-nudge or typed-entry target for the "-- Preview Position --" rows - clamped to
-    // stay on the visible play field, since respawnPreview() always spawns here next.
+    // Preview spawn position, clamped to the play field.
     private void setSpawnX(float v) { spawnX = MathUtils.clamp(v, 0f, worldWidth); }
     private void setSpawnY(float v) { spawnY = MathUtils.clamp(v, 0f, worldHeight); }
 
@@ -426,25 +389,19 @@ public class PatternPreviewer {
         previewEnemy = EnemySpawnRegistry.spawn(workingEnemy.id, spawnX, spawnY, workingMovement.id);
     }
 
-    /** Writes every registered movement pattern, firing pattern, enemy definition and bullet
-     *  definition (including whatever's been live-edited this session) back to the real assets/
-     *  JSON files. Only
-     *  resolves to the true source files when launched via `gradlew run`/`:lwjgl3:run`, which
-     *  pins the working directory to assets/ (see lwjgl3/build.gradle) - the same mechanism
-     *  DebugSaveStateManager already relies on for debug_savestates.json. */
+    /** Writes every movement/firing pattern, enemy and bullet definition back to assets/ JSON. Only
+     *  reaches the real source files under `:lwjgl3:run`, whose working directory is assets/. */
     private void saveAll() {
         Json json = new Json();
         json.setOutputType(JsonWriter.OutputType.json);
 
-        // One file per movement pattern (filename == id) instead of one shared array - see
-        // PatternRegistry.load()'s matching read side for why.
+        // One file per pattern (filename == id).
         FileHandle movementDir = Gdx.files.local("data/movement_patterns");
         movementDir.mkdirs();
         for (String id : PatternRegistry.getMovementIds()) {
             MovementPatternDef def = PatternRegistry.getMovement(id);
             movementDir.child(id + ".json").writeString(json.prettyPrint(json.toJson(def, MovementPatternDef.class)), false);
         }
-        // Same per-file split for firing patterns.
         FileHandle firingDir = Gdx.files.local("data/firing_patterns");
         firingDir.mkdirs();
         for (String id : PatternRegistry.getFiringIds()) {
@@ -611,9 +568,8 @@ public class PatternPreviewer {
         return d;
     }
 
-    /** Materializes "use the default" sentinels (-1, NaN) into concrete numbers so the field
-     *  steppers below have something real to adjust from, and seeds an empty Sequence/Squadron
-     *  with a first sub-pattern so switching to that type immediately has something editable. */
+    /** Replaces "use default" sentinels (-1, NaN) with concrete values for the steppers, and seeds
+     *  an empty Sequence/Squadron with one sub-pattern. */
     private void resolveMovementSentinels(MovementPatternDef d) {
         if (d.speed <= 0) d.speed = 1.5f;
         if (Float.isNaN(d.movementAngle)) d.movementAngle = MovementPattern.DEFAULT_ANGLE_DEG;
@@ -630,9 +586,7 @@ public class PatternPreviewer {
                 d.patterns.add(first);
             }
         } else {
-            // Clears sub-patterns left over from switching away from Sequence/Squadron - otherwise
-            // a cloned/leftover patterns or pattern array dangles on the def and gets serialized
-            // into a leaf node that never reads it (see saveAll).
+            // Drop sub-patterns left from a previous type so they aren't saved on a leaf node.
             d.patterns = null;
         }
         if ("Squadron".equals(d.type)) {
@@ -680,8 +634,7 @@ public class PatternPreviewer {
                 d.patterns.add(first);
             }
         } else {
-            // Clears sub-patterns left over from switching away from Sequence/Combined - see the
-            // matching comment in resolveMovementSentinels.
+            // Drop sub-patterns left from a previous type.
             d.patterns = null;
         }
     }
@@ -733,11 +686,7 @@ public class PatternPreviewer {
         return textureFilesCache;
     }
 
-    /** Recurses through assets/ collecting every .png as a path relative to assets/ root (e.g.
-     *  "images/enemies/ICE000.png") - the same relative-path format assets.ensureTexture()/
-     *  Gdx.files.internal() expect elsewhere, since assets/ was reorganized into subfolders
-     *  instead of sitting flat. Skips assets/unused/, which holds art nothing in the game
-     *  references. */
+    /** Collects every .png under assets/ as an assets-relative path, skipping assets/unused/. */
     private void collectPngFiles(FileHandle dir, String prefix, Array<String> out) {
         if (!dir.exists() || !dir.isDirectory()) return;
         for (FileHandle f : dir.list()) {
@@ -852,12 +801,7 @@ public class PatternPreviewer {
         rows.add(numberRow(2, "Offset Y", () -> d.hitboxOffsetY, v -> d.hitboxOffsetY = v, 0.05f, false));
     }
 
-    /** Mirrors appendSpeedPhaseRows below, but for a BulletDef's own bulletAcceleration/
-     *  bulletMinSpeed/bulletMaxSpeed/bulletSpeedPhases/bulletSpeedPhasesLoop - the same fields,
-     *  same fallback role, just on the class a firing pattern's own fields fall back to (see
-     *  PatternFactory.speedProfile). Kept as a separate method rather than a shared generic one:
-     *  BulletDef and FiringPatternDef aren't related types, so there's no common supertype to
-     *  write one method against without adding an abstraction neither class otherwise needs. */
+    /** appendSpeedPhaseRows() for a BulletDef (the two classes share these fields but no supertype). */
     private void appendBulletSpeedPhaseRows(BulletDef d, int indent) {
         rows.add(numberRow(indent, "Bullet Accel", () -> d.bulletAcceleration, v -> d.bulletAcceleration = v, 0.1f, false));
         rows.add(numberRow(indent, "Bullet Min Speed", () -> d.bulletMinSpeed, v -> d.bulletMinSpeed = v, 0.25f, false));
@@ -887,10 +831,7 @@ public class PatternPreviewer {
         }));
     }
 
-    /** @param showDuration whether to show the "Duration" field - only meaningful for a Sequence's
-     *  own array elements (SequenceMovement advances through them on a timer); Squadron's single
-     *  wrapped pattern runs continuously and never reads its own duration, so that call site passes
-     *  false to avoid showing a field that would silently do nothing. */
+    /** @param showDuration true only for Sequence elements (the only place duration is read). */
     private void appendMovementRows(MovementPatternDef node, int indent, Runnable removeSelf, boolean showDuration) {
         rows.add(typeRow(indent, () -> node.type, MOVEMENT_TYPES,
             t -> { node.type = t; resolveMovementSentinels(node); applyChange(); },
@@ -947,10 +888,7 @@ public class PatternPreviewer {
                     node.pattern.type = "Straight";
                 }
                 rows.add(headerRow(indent, "==== Wrapped pattern ===="));
-                // Del on the wrapped pattern's Type row clears it back to null - the null-check just
-                // above recreates a fresh default "Straight" the next time rows rebuild, so this is
-                // Squadron's version of "remove sub-pattern" (it always needs exactly one, so a full
-                // detach isn't meaningful - reset-to-default is the equivalent operation).
+                // Squadron always needs one wrapped pattern, so Del resets it to a default Straight.
                 appendMovementRows(node.pattern, indent + 1, () -> node.pattern = null, false);
                 rows.add(headerRow(indent, ""));
                 break;
@@ -1067,10 +1005,8 @@ public class PatternPreviewer {
         }
     }
 
-    // Shared by every bullet-firing type that offsets its emission point from the enemy's own
-    // position (most of them). Wall/PolkaDot/RadialNearMiss don't - see PatternFactory's "Wall"/
-    // "PolkaDot"/"RadialNearMiss" cases, none of which pass offsetX/offsetY to their constructors -
-    // so those three call appendCoreBulletRows directly instead, skipping the offset rows.
+    // Core bullet rows plus emission offset. Wall/PolkaDot/RadialNearMiss ignore offsets and use
+    // appendCoreBulletRows() directly.
     private void appendCommonBulletRows(FiringPatternDef node, int indent) {
         appendCoreBulletRows(node, indent);
         rows.add(numberRow(indent, "Offset X", () -> node.offsetX, v -> node.offsetX = v, 0.1f, false));
@@ -1085,11 +1021,8 @@ public class PatternPreviewer {
         appendSpeedPhaseRows(node, indent);
     }
 
-    /** See FiringPatternDef.bulletAcceleration/bulletMinSpeed/bulletMaxSpeed/bulletSpeedPhases -
-     *  a constant ramp (bulletAcceleration, clamped by bulletMinSpeed/bulletMaxSpeed) or, if any
-     *  phases are added below, a scripted accelerate/decelerate sequence that wholly overrides the
-     *  constant ramp. -1 on Min/Max Speed means "unclamped", matching the sentinel the JSON schema
-     *  already uses elsewhere in this def. */
+    /** Constant acceleration (clamped by min/max speed, -1 = unclamped), or speed phases, which
+     *  override it when present. */
     private void appendSpeedPhaseRows(FiringPatternDef node, int indent) {
         rows.add(numberRow(indent, "Bullet Accel", () -> node.bulletAcceleration, v -> node.bulletAcceleration = v, 0.1f, false));
         rows.add(numberRow(indent, "Bullet Min Speed", () -> node.bulletMinSpeed, v -> node.bulletMinSpeed = v, 0.25f, false));
@@ -1137,13 +1070,7 @@ public class PatternPreviewer {
         return new Row(indent, label, dec, inc, typeIn, null);
     }
 
-    // Repeated stepper +=/-= on a float accumulates binary floating-point error over many presses
-    // (e.g. nudging by 0.1 sixteen times lands on 1.5999999 instead of 1.6 - this is exactly where
-    // the "1.1500001"/"0.70000005"/"1.4901161E-8"-style noise already sitting in the pattern JSON
-    // came from). Snapping to the nearest 0.01 on every edit - stepper and typed entry alike - keeps
-    // that from accumulating in the first place; 2 decimals is already finer than any existing field
-    // needs. Row labels also show full (unrounded) precision now, so any noise a value already has
-    // stays visible instead of being silently hidden by a "%.2f" display.
+    // Snap edits to 0.01 so repeated float steps don't accumulate error (e.g. 1.5999999).
     private static float snap(float value) {
         return Math.round(value * 100f) / 100f;
     }

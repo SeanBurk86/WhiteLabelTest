@@ -14,6 +14,7 @@ import whitelabeltest.enemy.bullets.AimedEnemyBullet;
 import whitelabeltest.enemy.bullets.EnemyBullet;
 import whitelabeltest.gamemanagers.ObjectPools;
 
+/** Fires a fan of numBullets across spreadDegrees, centered on the player (or a fixed angle). */
 public class QuarterCircleFiring implements FiringPattern {
     private final float fireRate;
     private final float bulletSize;
@@ -32,14 +33,10 @@ public class QuarterCircleFiring implements FiringPattern {
     private final float targetOffsetY;
     private final SpeedProfile speedProfile;
     private final HitboxSpec hitboxSpec;
-    // Overrides the fan's aim direction to a fixed world-space angle (degrees, standard atan2
-    // convention) instead of tracking the player - NaN (the default) keeps the original live
-    // tracking behavior. Lets a scripted volley blanket one side of the arena regardless of where
-    // the player happens to be standing, e.g. alternating fixed left/right angles across
-    // successive volleys to force the player to relocate to whichever side is clear next, rather
-    // than always converging back on wherever they're already standing.
+    // Fixed aim angle in degrees instead of tracking the player (NaN = track), e.g. to blanket one
+    // side of the arena.
     private final float fixedAimAngleDeg;
-    // Reused for the aim and each bullet's direction instead of a new Vector2 per shot - same maths, no garbage.
+    // Scratch vector (no per-shot allocation).
     private final Vector2 scratchDir = new Vector2();
 
     public QuarterCircleFiring(float fireRate) {
@@ -59,9 +56,8 @@ public class QuarterCircleFiring implements FiringPattern {
         this(fireRate, bulletSize, bulletSpeed, spriteOverride, DEFAULT_SPREAD_DEGREES, DEFAULT_NUM_BULLETS);
     }
 
-    /** @param spriteOverride pass null to use the enemy's default bullet animation
-     *  @param spreadDegrees total angular width of the fan, centered on the aim direction
-     *  @param numBullets how many bullets make up the fan (must be >= 2) */
+    /** @param spreadDegrees total fan width, centered on the aim direction
+     *  @param numBullets bullets in the fan (>= 2) */
     public QuarterCircleFiring(float fireRate, float bulletSize, float bulletSpeed, Animation<TextureRegion> spriteOverride, float spreadDegrees, int numBullets) {
         this(fireRate, bulletSize, bulletSpeed, spriteOverride, spreadDegrees, numBullets, 0f, 0f);
     }
@@ -75,21 +71,17 @@ public class QuarterCircleFiring implements FiringPattern {
         this(fireRate, bulletSize, bulletSpeed, spriteOverride, spreadDegrees, numBullets, offsetX, offsetY, bulletDamage, 0f, 0f);
     }
 
-    /** @param targetOffsetX, targetOffsetY offset from the player's position that the fan is
-     *  centered on, in world units - lets the spread lead/trail the player or center on a point
-     *  near them instead of dead-on */
+    /** @param targetOffsetX,targetOffsetY aim point offset from the player, in world units */
     public QuarterCircleFiring(float fireRate, float bulletSize, float bulletSpeed, Animation<TextureRegion> spriteOverride, float spreadDegrees, int numBullets, float offsetX, float offsetY, int bulletDamage, float targetOffsetX, float targetOffsetY) {
         this(fireRate, bulletSize, bulletSpeed, spriteOverride, spreadDegrees, numBullets, offsetX, offsetY, bulletDamage, targetOffsetX, targetOffsetY, SpeedProfile.CONSTANT_SPEED, HitboxSpec.DEFAULT);
     }
 
-    /** @param speedProfile how bulletSpeed changes over each bullet's flight - see SpeedProfile
-     *  @param hitboxSpec each bullet's collision hitbox, independent of its visual size - see
-     *  HitboxSpec */
+    /** @param speedProfile,hitboxSpec see SpeedProfile and HitboxSpec */
     public QuarterCircleFiring(float fireRate, float bulletSize, float bulletSpeed, Animation<TextureRegion> spriteOverride, float spreadDegrees, int numBullets, float offsetX, float offsetY, int bulletDamage, float targetOffsetX, float targetOffsetY, SpeedProfile speedProfile, HitboxSpec hitboxSpec) {
         this(fireRate, bulletSize, bulletSpeed, spriteOverride, spreadDegrees, numBullets, offsetX, offsetY, bulletDamage, targetOffsetX, targetOffsetY, speedProfile, hitboxSpec, Float.NaN);
     }
 
-    /** @param fixedAimAngleDeg see the field doc - Float.NaN keeps tracking the player live */
+    /** @param fixedAimAngleDeg fixed aim in degrees, or NaN to track the player */
     public QuarterCircleFiring(float fireRate, float bulletSize, float bulletSpeed, Animation<TextureRegion> spriteOverride, float spreadDegrees, int numBullets, float offsetX, float offsetY, int bulletDamage, float targetOffsetX, float targetOffsetY, SpeedProfile speedProfile, HitboxSpec hitboxSpec, float fixedAimAngleDeg) {
         this.fireRate = fireRate;
         this.bulletSize = bulletSize;

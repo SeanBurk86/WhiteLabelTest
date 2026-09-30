@@ -13,6 +13,7 @@ import whitelabeltest.enemy.bullets.AimedEnemyBullet;
 import whitelabeltest.enemy.bullets.EnemyBullet;
 import whitelabeltest.gamemanagers.ObjectPools;
 
+/** Fires single bullets at the player (plus targetOffset) every fireRate seconds. */
 public class AimedFiring implements FiringPattern {
     private final float fireRate;
     private final float bulletSize;
@@ -51,22 +52,17 @@ public class AimedFiring implements FiringPattern {
         this(fireRate, bulletSize, bulletSpeed, spriteOverride, offsetX, offsetY, 1);
     }
 
-    /** @param bulletDamage damage dealt to the player on hit (and reflected back at the source
-     *  enemy at the same value, if the player's shield bounces this bullet) */
+    /** @param bulletDamage damage to the player (and to the source enemy if reflected) */
     public AimedFiring(float fireRate, float bulletSize, float bulletSpeed, Animation<TextureRegion> spriteOverride, float offsetX, float offsetY, int bulletDamage) {
         this(fireRate, bulletSize, bulletSpeed, spriteOverride, offsetX, offsetY, bulletDamage, 0f, 0f);
     }
 
-    /** @param targetOffsetX, targetOffsetY offset from the player's position that bullets are
-     *  aimed at, in world units - lets shots lead/trail the player or aim at a point near them
-     *  instead of dead-on */
+    /** @param targetOffsetX,targetOffsetY aim point offset from the player, in world units */
     public AimedFiring(float fireRate, float bulletSize, float bulletSpeed, Animation<TextureRegion> spriteOverride, float offsetX, float offsetY, int bulletDamage, float targetOffsetX, float targetOffsetY) {
         this(fireRate, bulletSize, bulletSpeed, spriteOverride, offsetX, offsetY, bulletDamage, targetOffsetX, targetOffsetY, SpeedProfile.CONSTANT_SPEED, HitboxSpec.DEFAULT);
     }
 
-    /** @param speedProfile how bulletSpeed changes over each bullet's flight - see SpeedProfile
-     *  @param hitboxSpec each bullet's collision hitbox, independent of its visual size - see
-     *  HitboxSpec */
+    /** @param speedProfile,hitboxSpec see SpeedProfile and HitboxSpec */
     public AimedFiring(float fireRate, float bulletSize, float bulletSpeed, Animation<TextureRegion> spriteOverride, float offsetX, float offsetY, int bulletDamage, float targetOffsetX, float targetOffsetY, SpeedProfile speedProfile, HitboxSpec hitboxSpec) {
         this.fireRate = fireRate;
         this.bulletSize = bulletSize;

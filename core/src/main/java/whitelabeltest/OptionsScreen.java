@@ -41,29 +41,16 @@ import java.util.Map;
 import java.util.function.Consumer;
 import java.util.function.Supplier;
 
-/** Options is a small menu tree: a top-level page with entries that open the Key Bindings and
- *  Audio pages (plus the Background Shaders quality toggle), each of which returns to the top level on Back rather than leaving Options
- *  outright. All three pages share one row/column focus-navigation system (keyboard click,
- *  mouse click and gamepad D-Pad+A all resolve to the same per-cell Runnable - see
- *  {@link #rowActivators}) so moveRow/moveCol/activateFocused/handleControllerNavigation don't
- *  need to know which page is showing. */
+/** Options (scene2d): a top page (Key Bindings, Audio, Background Shaders quality) with sub-pages
+ *  that go back to it. Every page is a grid of buttons with a Runnable per cell, so keyboard,
+ *  mouse and gamepad navigation share one code path. */
 public class OptionsScreen implements Disposable {
-    // ScrollPane.updateActorPosition() (private, can't be overridden) truncates the scrolled
-    // widget's position to the nearest *whole stage unit* - a pixel-snapping optimization that's
-    // invisible when 1 stage unit is roughly 1 screen pixel, but this screen's stage otherwise
-    // used the game's own 9x12 world-unit space, where a whole unit is nearly two entire row
-    // heights. That truncation - not any bug in the Table layout itself - was the real source of
-    // the "phantom blank row"/misaligned-focus symptoms: depending on the exact fractional part
-    // of wherever a row's scroll target landed, up to a full unit of vertical position (~2 rows)
-    // could vanish. Every dimension below is scaled up by this factor from its originally-designed
-    // 9x12-space value so that truncating to a whole stage unit becomes sub-pixel and negligible,
-    // exactly like ScrollPane assumes - the on-screen appearance is unchanged.
+    // The stage is 100x the 9x12 world size because ScrollPane snaps positions to whole stage
+    // units, which at world scale would shift rows by up to ~2 row heights.
     private static final float UI_SCALE = 100f;
     private static final float VOLUME_STEP = 0.1f;
 
-    // Selection-box styling for the focused row - see updateSelectionBox(). Thickness is in the
-    // same UI_SCALE-d stage-unit space as everything else here, chosen to match the other menus'
-    // 0.025-world-unit-thick box once scaled by UI_SCALE.
+    // Green box around the focused button.
     private static final Color SELECTION_BOX_COLOR = new Color(0.35f, 1f, 0.55f, 1f);
     private static final float SELECTION_BOX_THICKNESS = 0.025f * UI_SCALE;
 
@@ -75,18 +62,10 @@ public class OptionsScreen implements Disposable {
     private final BitmapFont font;
     private final Texture pixel;
     private final Skin skin;
-    // Menu SFX: backSound on any back input (Escape, the dedicated gamepad Back/Select button, or
-    // the new gamepad B - see triggerBack()), confirmSound on any confirm input (mouse click or
-    // gamepad A - see onClick()/activateFocused()), selectSound whenever focus actually moves to a
-    // different row/column (see moveRow()/moveCol()).
     private final Sound backSound;
     private final Sound confirmSound;
     private final Sound selectSound;
-    // The green box "surrounding" the focused row - four thin Images added directly to the stage
-    // (not inside root's Table layout) so they can float over whichever button is focused,
-    // repositioned every frame from that button's live stage coordinates (see updateSelectionBox())
-    // rather than laid out once, since the Key Bindings page's ScrollPane moves its buttons around
-    // as focus scrolls the list.
+    // Four thin Images floating over the focused button, repositioned every frame.
     private final Image selectionTop, selectionBottom, selectionLeft, selectionRight;
     private final Map<Action, TextButton> keyButtons = new EnumMap<>(Action.class);
     private final Map<Action, TextButton> gamepadBindingButtons = new EnumMap<>(Action.class);
@@ -99,9 +78,7 @@ public class OptionsScreen implements Disposable {
     private Label musicValueLabel;
     private Label sfxValueLabel;
 
-    // Every page's row/activator lists, built once in the constructor. rows/rowActivators/
-    // activeScroll are simply re-pointed at one of these three pairs on switchPage() - see the
-    // class doc.
+    // Each page's rows/activators; switchPage() points rows/rowActivators at one pair.
     private final Array<TextButton[]> menuRows = new Array<>();
     private final Array<Runnable[]> menuActivators = new Array<>();
     private final Array<TextButton[]> keyBindingRows = new Array<>();
@@ -191,9 +168,7 @@ public class OptionsScreen implements Disposable {
         listeningStyle.fontColor = Color.YELLOW;
         skin.add("listening", listeningStyle);
 
-        // Background stays the same as idle - the green box overlay (see updateSelectionBox()) is
-        // what "surrounds" the focused row now, matching StartScreen's/WeaponSelectScreen's menus;
-        // only the text color still changes, same yellow those two use for their selected row.
+        // Focus is shown by the selection box and yellow text, like the other menus.
         TextButton.TextButtonStyle focusedStyle = new TextButton.TextButtonStyle(buttonStyle);
         focusedStyle.fontColor = Color.YELLOW;
         skin.add("focused", focusedStyle);
@@ -253,8 +228,7 @@ public class OptionsScreen implements Disposable {
         menuRows.add(new TextButton[]{audioButton, null});
         menuActivators.add(new Runnable[]{openAudio, null});
 
-        // Cycles High -> Medium -> Low in place (no sub-page). Read when a stage's background is built, so it applies from
-        // the next stage - see GraphicsSettings.
+        // Cycles High -> Medium -> Low; applies from the next stage.
         TextButton shaderQualityButton = new TextButton(shaderQualityText(), skin);
         Runnable toggleShaderQuality = () -> {
             GraphicsSettings.setShaderQuality(GraphicsSettings.getShaderQuality().next());
@@ -315,12 +289,7 @@ public class OptionsScreen implements Disposable {
         bindingsScroll = new ScrollPane(bindingsTable);
         bindingsScroll.setScrollingDisabled(true, false);
         bindingsScroll.setFadeScrollBars(false);
-        // Smooth scrolling animates the visible scroll position toward its target over several
-        // frames, but setFocus()'s highlight restyle is instant - so right after a D-pad press,
-        // the newly-focused button is already shown highlighted while the still-catching-up
-        // scroll position renders the rest of the list as if it belongs to the previous target,
-        // making a focused row look detached/misaligned from its neighbors until the animation
-        // settles a few frames later. Disabled so scrollTo() takes effect immediately instead.
+        // Instant scrolling, so the focus highlight never lags behind the list.
         bindingsScroll.setSmoothScrolling(false);
     }
 
@@ -345,9 +314,7 @@ public class OptionsScreen implements Disposable {
         return table;
     }
 
-    /** One "Name   -   80%   +" row, with the "-"/"+" buttons taking the same two focus columns
-     *  the Key Bindings page's Keyboard/Gamepad buttons occupy - so moveCol/moveRow work on this
-     *  page without any page-specific navigation logic. */
+    /** "Name  -  80%  +"; the -/+ buttons are focus columns 0 and 1. */
     private void addVolumeRow(Table table, String name, Label valueLabel, Supplier<Float> get, Consumer<Float> set) {
         TextButton minusButton = new TextButton("-", skin);
         TextButton plusButton = new TextButton("+", skin);
@@ -485,9 +452,6 @@ public class OptionsScreen implements Disposable {
             return true; // swallow keyboard input while capturing a gamepad button
         }
 
-        // Plain menu navigation - mirrors handleControllerNavigation()'s D-Pad/A handling (moveRow/
-        // moveCol/activateFocused already play selectSound/confirmSound themselves) so keyboard-only
-        // players can actually reach every page/row/column, not just Back.
         switch (keycode) {
             case Input.Keys.UP:
             case Input.Keys.W:
@@ -600,8 +564,7 @@ public class OptionsScreen implements Disposable {
             if (dpadLeft && !prevGamepadButtonDown[GamepadButton.DPAD_LEFT.ordinal()]) moveCol(-1);
             if (dpadRight && !prevGamepadButtonDown[GamepadButton.DPAD_RIGHT.ordinal()]) moveCol(1);
             if (confirm && !prevGamepadButtonDown[GamepadButton.A.ordinal()]) activateFocused();
-            // B doubles as Back alongside the dedicated gamepad Back/Select button Main already
-            // wires to handleControllerBackPressed() - the more familiar of the two on most pads.
+            // B also acts as Back.
             if (back && !prevGamepadButtonDown[GamepadButton.B.ordinal()]) triggerBack();
         }
 
@@ -617,10 +580,7 @@ public class OptionsScreen implements Disposable {
         }
     }
 
-    /** Shared by keyboard Escape, the dedicated gamepad Back/Select button, and the new gamepad B
-     *  (see handleKeyDown()/handleControllerBackPressed()/handleControllerNavigation()): cancels an
-     *  in-progress key/button capture if one is active, steps back up one page level if one is
-     *  open, otherwise requests leaving Options entirely. */
+    /** Escape / gamepad Back / B: cancels a capture, else goes up a page, else leaves Options. */
     private void triggerBack() {
         backSound.play(audioSettings.getEffectiveSfxVolume());
         if (listeningFor != null) {
@@ -659,10 +619,7 @@ public class OptionsScreen implements Disposable {
         stage.draw();
     }
 
-    /** Repositions the green selection box around whichever button rows.get(focusedRow)[focusedCol]
-     *  currently points at, using that button's live stage coordinates - recomputed every frame
-     *  (not just on focus change) since the Key Bindings page's ScrollPane moves its buttons
-     *  around as focus scrolls the list into view. Hidden entirely when nothing is focused. */
+    /** Every frame, since scrolling moves the buttons. */
     private void updateSelectionBox() {
         boolean visible = focusedRow >= 0 && focusedRow < rows.size;
         selectionTop.setVisible(visible);
@@ -694,13 +651,7 @@ public class OptionsScreen implements Disposable {
         return backRequested;
     }
 
-    /** Seeds prevGamepadButtonDown from the controller's actual current state - call right before
-     *  handing this screen input focus (see Main.transitionToOptions()). Whatever gamepad button
-     *  just confirmed opening Options (commonly buttonA, which is also this screen's own confirm
-     *  button) is very likely still physically held on the first frame handleControllerNavigation()
-     *  polls, and its edge-detection would otherwise misread that same held press as a fresh
-     *  confirm and instantly activate whatever's focused - same bug/fix as StartScreen.
-     *  enterMenuPhase(). */
+    /** Call on entry so the still-held button that opened Options isn't read as a new press. */
     public void syncGamepadState() {
         Controller controller = Controllers.getCurrent();
         GamepadButton[] buttons = GamepadButton.values();
@@ -709,8 +660,6 @@ public class OptionsScreen implements Disposable {
         }
     }
 
-    /** Gamepad equivalent of the Escape-key handling in {@link #handleKeyDown} - see
-     * triggerBack(). */
     public void handleControllerBackPressed() {
         triggerBack();
     }

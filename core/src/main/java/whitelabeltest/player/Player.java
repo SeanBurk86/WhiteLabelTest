@@ -17,6 +17,9 @@ import whitelabeltest.gamemanagers.audio.AudioManager;
 import whitelabeltest.gamemanagers.input.InputManager;
 import whitelabeltest.player.weapons.*;
 
+/** The player ship: movement, two weapon slots, firing, the halo (graze hitbox and the Basic /
+ *  Thunderbolt Hyper Attacks), bombs, graze points, lives, death and i-frames. See the README's
+ *  "Player" section. */
 public class Player {
     private final PlayerDefinition playerDef;
 
@@ -34,9 +37,7 @@ public class Player {
     private final OrbitWeapon orbitWeapon;
     private final ThunderboltWeapon thunderboltWeapon;
     private final WeaponDefinition orbitWeaponDef;
-    // Basic's/Thunderbolt's own Hyper Attack tuning (halo dash distance/speed, thunderbolt charge/
-    // blast tiers) - see the HALO_ARRIVE_EPSILON comment above and WeaponDefinition's halo*/
-    // thunderbolt* fields (weapons.json's "BasicWeapon"/"Thunderbolt" entries).
+    // Hyper Attack tuning (WeaponDefinition's halo* / thunderbolt* fields).
     private final WeaponDefinition basicWeaponDef;
     private final WeaponDefinition thunderboltWeaponDef;
     private final Animation<TextureRegion> shieldAnimation;
@@ -61,20 +62,12 @@ public class Player {
     private final float haloDrawWidth, haloDrawHeight;
     private float haloAnimationTime = 0;
 
-    // BasicWeapon's Hyper Attack (see triggerBasicHyperAttack()): the halo swaps to this sprite
-    // for as long as it's detached out on Basic's business - not Thunderbolt's, which uses its own
-    // sprites instead (see resolveHaloVisual()).
+    // Halo sprite while detached by Basic's Hyper Attack.
     private final Animation<TextureRegion> basicHaloDetachAnimation;
     private final float basicHaloDetachDrawWidth, basicHaloDetachDrawHeight;
 
-    // BasicWeapon's Hyper Attack (see BasicWeapon.hyperAttack/triggerBasicHyperAttack): the halo
-    // launches forward a short distance, dealing damage to anything it clips along the way, then
-    // rests there - detached from the player, firing BasicWeapon's own stream on its own cadence
-    // for as long as it's detached - until Hyper Attack is pressed again, at which point it glides
-    // back to wherever the player currently is instead of snapping there. Tuning values (dash
-    // distance/speed, return speed(s), dash damage) come from basicWeaponDef (weapons.json's
-    // "BasicWeapon" entry - see haloDashDistance/haloDashSpeed/haloReturnSpeed/haloFastReturnSpeed/
-    // haloDashDamage on WeaponDefinition), set below once assets is available.
+    // Basic Hyper Attack: the halo dashes forward (hitting enemies), then rests detached, firing
+    // part of Basic's pattern, until pressed again, when it glides back.
     private static final float HALO_ARRIVE_EPSILON = 0.05f;
 
     private boolean haloDetached;
@@ -87,30 +80,14 @@ public class Player {
     private final Circle haloHitbox = new Circle();
     private final Array<Enemy> haloDashHitEnemies = new Array<>(false, 8);
 
-    // ThunderboltWeapon's Hyper Attack (see ThunderboltWeapon.hyperAttack/triggerThunderboltHyperAttack):
-    // the halo launches out to hover in front of the ship - tracking it, rather than resting at a
-    // fixed spot like Basic's dash does - where it charges a bomb through this weapon's damage
-    // tiers (see thunderboltChargeDamageByTier below), gaining a tier every
-    // thunderboltChargeLevelTime seconds it's held. Releasing the button detonates it at whatever
-    // tier it reached - see CollisionManager.checkThunderboltDetonation for the actual area damage
-    // and green-lightning visual this only queues up - then sends the halo gliding back to the
-    // player the same way Basic's does (shares haloReturning/haloDetached with it; see
-    // updateHaloMovement()). Tuning values come from thunderboltWeaponDef (weapons.json's
-    // "Thunderbolt" entry - see thunderboltHaloFrontDistance/thunderboltHaloMoveSpeed/
-    // thunderboltChargeLevelTime/thunderboltChargeDamageByTier/thunderboltBlastRadiusByTier on
-    // WeaponDefinition), set below once assets is available. Blast radius grows with charge tier,
-    // same as damage does - the last tier is the full radius the detonation has always used at max
-    // charge; earlier tiers are smaller.
-    // One animation per charge tier (ThunderHyperHaloShrink1-4.png, indexed by thunderboltChargeLevel)
-    // shown on the halo while it's out charging, plus a one-shot ThunderHaloBomb.png played in place
-    // once released - see resolveHaloVisual()/updateThunderboltDetonationAnim().
+    // Thunderbolt Hyper Attack: the halo moves out in front of the ship and tracks it, charging a
+    // bomb up a tier every thunderboltChargeLevelTime. Releasing detonates it at that tier's damage
+    // and radius (applied by CollisionManager), plays the bomb animation in place, then reattaches.
+    // One halo animation per charge tier, plus the one-shot bomb animation.
     private final Animation<TextureRegion>[] thunderShrinkAnimations;
     private final float[] thunderShrinkDrawWidth, thunderShrinkDrawHeight;
     private final Animation<TextureRegion> thunderHaloBombAnimation;
-    // player.json's thunderHaloBomb.size is the sprite's size at the top charge tier (full blast
-    // radius, the last entry of thunderboltWeaponDef.thunderboltBlastRadiusByTier) -
-    // resolveHaloVisual() scales it down by thunderboltDetonationVisualScale for lower tiers, so
-    // the drawn explosion always matches how big the actual blast was.
+    // Bomb sprite size at the top tier; scaled down for lower tiers to match the actual blast.
     private final float thunderHaloBombDrawWidth, thunderHaloBombDrawHeight;
 
     private boolean thunderboltHaloActive;
@@ -123,21 +100,12 @@ public class Player {
     private float thunderboltDetonationX, thunderboltDetonationY;
     private int thunderboltDetonationDamage;
     private float thunderboltDetonationRadius;
-    // thunderboltDetonationRadius expressed as a fraction of the full (last-tier) blast radius -
-    // how much to scale thunderHaloBombDrawWidth/Height down by so the explosion sprite matches
-    // this particular detonation's actual (smaller-if-not-fully-charged) blast size - see
-    // resolveHaloVisual().
+    // This detonation's radius as a fraction of the full radius (scales the bomb sprite).
     private float thunderboltDetonationVisualScale = 1f;
-    // True from the moment the charge is released until the ThunderHaloBomb animation finishes
-    // playing in place - see updateThunderboltDetonationAnim(). The area damage itself already
-    // applied the instant the charge was released (see CollisionManager.checkThunderboltDetonation);
-    // this only delays the halo's snap-back to the player so the explosion has a visual.
+    // True while the bomb animation plays after release (damage has already been applied).
     private boolean thunderboltDetonating;
     private float thunderboltDetonationAnimTime;
-    // Set when Hyper Attack is pressed while thunderboltDetonating is still true (see
-    // handleHyperAttack()) - consumed by updateThunderboltDetonationAnim() the moment the halo
-    // reattaches, immediately starting Thunderbolt charging again instead of requiring a second,
-    // separately-timed press.
+    // A Hyper Attack press during the bomb animation, replayed when the halo reattaches.
     private boolean thunderboltHyperAttackBuffered;
 
     private float invincibleFrameTime = 2f;
@@ -152,9 +120,7 @@ public class Player {
     private float grazeFlashTimer;
     private static final float GRAZE_FLASH_DURATION = 0.12f;
 
-    // BasicWeapon's Hyper Attack dash (see CollisionManager.checkHaloDashCollisions): flashes the
-    // halo red for a moment each time it lands a hit, the same way grazeFlashTimer flashes it blue
-    // on a graze.
+    // Red halo flash on a dash hit (graze flashes it blue).
     private float haloBashFlashTimer;
     private static final float HALO_BASH_FLASH_DURATION = 0.15f;
 
@@ -222,8 +188,7 @@ public class Player {
         thunderHaloBombDrawWidth = bombDims[0];
         thunderHaloBombDrawHeight = bombDims[1];
 
-        // Initialize weapons using the new dynamic AssetManager - before the hitboxes below,
-        // since updateHitbox() reads orbitWeapon's shield radius.
+        // Weapons before hitboxes: updateHitbox() reads the orbit shield radius.
         WeaponDefinition bDef = assets.getWeaponDefinition("BasicWeapon");
         basicWeaponDef = bDef;
         basicWeapon = new BasicWeapon();
@@ -262,9 +227,7 @@ public class Player {
         isInvincible = false;
     }
 
-    /** Builds a player.json-driven halo animation the same way haloAnimation/basicHaloDetachAnimation
-     *  are built above, writing its {width, height} into dimsOut so callers can assign their own
-     *  final fields from it. */
+    /** Builds a halo animation from player.json, writing {width, height} into dimsOut. */
     private Animation<TextureRegion> buildHaloAnimation(Texture texture, PlayerDefinition.SpriteDef sprite, Animation.PlayMode mode, float[] dimsOut) {
         Animation<TextureRegion> anim = AnimationCache.get(texture, sprite.columns > 0 ? sprite.columns : sprite.frameCount,
             sprite.rows, sprite.frameCount, 1f / 24f, mode);
@@ -300,15 +263,8 @@ public class Player {
             recallHaloOnWeaponSwitch(audio);
         }
 
-        // weaponsDisabled only withholds actually firing (this local, used below) - everything
-        // else that reads the raw isShooting() (movement's focus-fire slowdown, the orbit ring,
-        // EntityManager's gem-homing suppression, replay recording) is untouched, so a tutorial
-        // window that disables weapons doesn't have side effects on any of those - see
-        // SpawnScheduler.isWeaponsDisabled()'s doc. hyperAttackDisabled is the same idea, kept as
-        // its own separate flag (see SpawnScheduler.isHyperAttackDisabled()) since a tutorial
-        // teaches normal fire well before Hyper Attack - gating it here rather than inside
-        // handleHyperAttack() keeps that method's own "was it just pressed" contract untouched, so
-        // a press that lands while disabled is simply dropped, not buffered for later.
+        // Disabled windows only block firing / Hyper Attack; the raw shoot input still drives the
+        // focus slowdown, orbit ring and gem homing. A press while disabled is dropped, not buffered.
         boolean canShoot = input.isShooting() && !weaponsDisabled;
         handleMovement(delta, input.getMoveDirection(), input.isShooting());
         handleShooting(delta, canShoot, assets, audio, bullets, enemies);
@@ -324,9 +280,7 @@ public class Player {
         resolveInvincibility(delta);
     }
 
-    // The orbit ring is up only while OrbitWeapon is both the actively selected slot and the fire
-    // button is held - see OrbitWeapon's class comment for why the prototype/ring-member split is
-    // safe despite sharing a class.
+    // The orbit ring exists only while OrbitWeapon is active and fire is held.
     private void maintainOrbitRing(Array<Weapon> bullets, AssetManager assets, AudioManager audio, boolean isShooting) {
         if (getCurrentWeapon() == orbitWeapon && isShooting) {
             orbitWeapon.maintainRing(bullets, assets.getTexture(orbitWeaponDef.texture), this, audio);
@@ -335,16 +289,8 @@ public class Player {
         }
     }
 
-    // Hyper Attack triggers whichever weapon is currently active's own ability (a no-op for
-    // weapons that don't define one yet - see Weapon.hyperAttack), independent of the fire button.
-    // Blocked for every weapon but Basic while the halo hasn't reattached, so a different
-    // weapon's Hyper Attack can't start - or, for Thunderbolt, restart - while the halo's still
-    // out on some other ability's business. Basic's own re-press still goes through, since that's
-    // what reattaches it (see triggerBasicHyperAttack()); Thunderbolt has no re-press step of its
-    // own since releasing the button is what detonates/recalls it (see updateThunderboltCharge()).
-    // A press that lands specifically while the ThunderHaloBomb animation is still playing out is
-    // buffered instead of dropped, so Thunderbolt immediately starts charging again the instant the
-    // halo reattaches - see updateThunderboltDetonationAnim().
+    // Triggers the active weapon's Hyper Attack. While the halo is detached only Basic's re-press
+    // (which recalls it) goes through. A press during the bomb animation is buffered.
     private void handleHyperAttack(boolean hyperAttackJustPressed, Array<Weapon> bullets, Array<Enemy> enemies, AssetManager assets, AudioManager audio) {
         if (!hyperAttackJustPressed) return;
         if (thunderboltDetonating) {
@@ -352,23 +298,15 @@ public class Player {
             return;
         }
         Weapon currentWeapon = getCurrentWeapon();
-        // Briefly true right after a death wipes both weapon slots (see resetWeaponsOnDeath()),
-        // until the restore powerup re-equips one - nothing to trigger a Hyper Attack with yet.
         if (currentWeapon == null) return;
         if (haloDetached && currentWeapon != basicWeapon) return;
         currentWeapon.hyperAttack(this, bullets, enemies, assets, audio);
     }
 
-    /** Switching weapons recalls a still-detached halo immediately, interrupting an in-progress
-     *  dash if needed, instead of leaving it stranded away from the player while a different
-     *  weapon is equipped. No-op once it's already heading back, or while the ThunderHaloBomb
-     *  animation is playing out - see updateThunderboltDetonationAnim(), which reattaches it on
-     *  its own moments later regardless. */
+    /** Switching weapons recalls a detached halo (a Thunderbolt charge fizzles without detonating). */
     private void recallHaloOnWeaponSwitch(AudioManager audio) {
         if (!haloDetached || haloReturning || thunderboltDetonating) return;
         haloDashing = false;
-        // Cancels a mid-flight Thunderbolt charge without detonating it - switching away is
-        // treated as a fizzle, not a release.
         thunderboltMoving = false;
         thunderboltCharging = false;
         haloReturning = true;
@@ -376,11 +314,8 @@ public class Player {
         audio.playHaloReturn();
     }
 
-    /** BasicWeapon's Hyper Attack (see BasicWeapon.hyperAttack), toggled by each press: while
-     *  attached, launches the halo forward a short distance - see updateHaloMovement() for the
-     *  damage dealt along the way - where it then rests, detached, until this is called again,
-     *  which starts it gliding back to the player instead of snapping there. Ignored mid-launch
-     *  or mid-return so a rapid second press can't restart either motion. */
+    /** Basic Hyper Attack toggle: launch the halo forward, or (once resting) start its return.
+     *  Ignored mid-dash or mid-return. */
     public void triggerBasicHyperAttack(AudioManager audio) {
         if (!haloDetached) {
             haloDetached = true;
@@ -399,12 +334,8 @@ public class Player {
         }
     }
 
-    /** ThunderboltWeapon's Hyper Attack (see ThunderboltWeapon.hyperAttack): launches the halo out
-     *  in front of the ship, detached, where it hovers - tracking the ship, unlike Basic's dash,
-     *  which rests wherever it lands - until this is called again. Ignored while the halo's
-     *  already out on either ability's business (mirrors triggerBasicHyperAttack's own re-press
-     *  guard) - Thunderbolt has no "press again" step of its own, since releasing the button (see
-     *  updateThunderboltCharge()) is what detonates and recalls it instead. */
+    /** Thunderbolt Hyper Attack: sends the halo out in front of the ship to charge. Releasing the
+     *  button detonates it (see updateThunderboltCharge()). */
     public void triggerThunderboltHyperAttack() {
         if (haloDetached) return;
 
@@ -421,21 +352,10 @@ public class Player {
         haloDetachedY = attachedHaloY();
     }
 
-    /** Advances the Thunderbolt bomb's charge tier while the halo is holding position in front of
-     *  the ship (see updateHaloMovement()'s thunderboltMoving branch, which flips thunderboltCharging
-     *  on once it arrives), playing thunderbolthyperlevel.wav/-001/-002/-003 in order as it climbs
-     *  through each tier - including the base tier the instant the attack starts, not just the
-     *  three tiers above it - and, on release, queues the actual detonation for
-     *  CollisionManager.checkThunderboltDetonation to apply next - this method only decides
-     *  where/how hard, not who it hits, since that needs the enemies list CollisionManager already
-     *  has wired up. Also watches for a release during the brief move-out (a quick tap, released
-     *  before the halo ever reaches its charge position) - the charge timer never started ticking
-     *  in that case, so it still detonates, just at the base tier, rather than silently swallowing
-     *  the release and leaving the halo charging forever with the button already let go. Starts the
-     *  ThunderHaloBomb animation in place on release, rather than snapping the halo straight back
-     *  onto the player - see updateThunderboltDetonationAnim(), which handles the actual snap-back
-     *  once that animation finishes. The area damage itself still applies instantly, on release -
-     *  only the halo's visual return is delayed for the explosion. */
+    /** Raises the charge tier while charging (with a sound per tier, including the base tier). On
+     *  release, queues the detonation for CollisionManager at the current tier's damage and radius
+     *  and starts the bomb animation. A release during the move-out (a quick tap) detonates at the
+     *  base tier. */
     private void updateThunderboltCharge(float delta, boolean hyperAttackJustReleased, AudioManager audio) {
         if (!thunderboltMoving && !thunderboltCharging) return;
 
@@ -464,17 +384,9 @@ public class Player {
         }
     }
 
-    /** Plays the ThunderHaloBomb animation once, in place at wherever the halo detonated, before
-     *  finally reattaching it to the player - see updateThunderboltCharge()'s release branch, which
-     *  starts this instead of reattaching immediately. If Hyper Attack was pressed while this was
-     *  still playing (see handleHyperAttack()'s thunderboltHyperAttackBuffered branch), immediately
-     *  starts Thunderbolt charging again the instant it reattaches - unless the player switched off
-     *  Thunderbolt in the meantime, in which case the buffered press is just dropped. That buffered
-     *  press was a single tap already completed (pressed and released) before this replay fires, so
-     *  if the button isn't still held right now, there's no future release edge left for
-     *  updateThunderboltCharge() to catch - detonating immediately at the base tier here instead
-     *  (same as its own "quick tap" handling) avoids leaving the bomb charging forever with nothing
-     *  left to end it. */
+    /** Plays the bomb animation in place, then reattaches the halo. A buffered press restarts the
+     *  charge (if Thunderbolt is still active); if the button is no longer held there will be no
+     *  release, so it detonates at the base tier immediately. */
     private void updateThunderboltDetonationAnim(float delta, boolean hyperAttackHeld, AudioManager audio) {
         if (!thunderboltDetonating) return;
 
@@ -495,14 +407,8 @@ public class Player {
         }
     }
 
-    /** Fires BasicWeapon's pattern - split with whatever the player's own gun is firing (see
-     *  handleShooting()) so the two firing points don't double the total bullet count - from
-     *  wherever the halo currently is: dashing out, resting, or gliding back, on the weapon's own
-     *  fire-rate cadence, for as long as it's detached, but only while the player is actually
-     *  holding Shoot (mirrors handleShooting's own gating). The cooldown still accumulates in the
-     *  background while not shooting, same as a normal weapon's, so it's ready to fire the instant
-     *  Shoot is pressed again. Skipped entirely while the halo is out on Thunderbolt's business
-     *  instead of Basic's - haloDetached alone doesn't say which ability sent it out there. */
+    /** While Basic's halo is detached and fire is held, the halo fires its share of Basic's pattern
+     *  (split with the ship, not doubled) on the weapon's cadence. */
     private void updateHaloFiring(float delta, boolean isShooting, Array<Weapon> bullets, AssetManager assets, AudioManager audio) {
         if (!haloDetached || thunderboltHaloActive) return;
 
@@ -528,9 +434,7 @@ public class Player {
             }
             haloHitbox.set(haloCenterX(), haloCenterY(), Math.min(haloDrawWidth, haloDrawHeight) / 2f);
         } else if (thunderboltMoving) {
-            // Chases a moving target (the ship keeps moving while this plays out) rather than a
-            // fixed point - the gap is small and this only runs for the brief trip out, so it
-            // converges close enough well before any real drift could accumulate.
+            // Chases the (moving) point in front of the ship.
             float targetX = attachedHaloX();
             float targetY = attachedHaloY() + thunderboltWeaponDef.thunderboltHaloFrontDistance;
             float dx = targetX - haloDetachedX;
@@ -549,9 +453,7 @@ public class Player {
                 haloDetachedY += dy / dist * step;
             }
         } else if (thunderboltCharging) {
-            // Rigidly tracks the ship's front while charging, rather than drifting toward it like
-            // the move-in phase above - the ship's own per-frame movement is already smooth, so
-            // snapping here doesn't introduce any visible jitter.
+            // Locked to the ship's front while charging.
             haloDetachedX = attachedHaloX();
             haloDetachedY = attachedHaloY() + thunderboltWeaponDef.thunderboltHaloFrontDistance;
         } else if (haloReturning) {
@@ -574,17 +476,9 @@ public class Player {
         }
     }
 
-    // The weapon's focus-fire movement slowdown (getShootSpeedMultiplier()) also applies for as
-    // long as a Hyper Attack has the halo detached - Basic's dash/rest/return or Thunderbolt's
-    // move-out/charge - not just while actually holding Shoot, so aiming the halo's dash/charge
-    // position gets the same precision movement firing does. Excludes thunderboltDetonating: the
-    // area damage already applied the instant the charge was released (see
-    // updateThunderboltCharge()), and there's nothing left to aim once the halo's just replaying
-    // its explosion animation in place before reattaching, so movement speed snaps back to normal
-    // immediately on detonation instead of staying slowed until the animation finishes.
+    // Focus movement: the weapon's slowdown applies while firing and while a Hyper Attack has the
+    // halo out (for precise aiming), but not during the bomb animation.
     private void handleMovement(float delta, Vector2 moveDirection, boolean isShooting) {
-        // No weapon at all briefly after a death wipe (see resetWeaponsOnDeath()) falls back to
-        // full movement speed rather than dereferencing a null current weapon.
         Weapon currentWeapon = getCurrentWeapon();
         float speed = (currentWeapon != null && (isShooting || (haloDetached && !thunderboltDetonating)))
             ? movementSpeed * currentWeapon.getShootSpeedMultiplier() : movementSpeed;
@@ -600,7 +494,6 @@ public class Player {
         advanceWeaponTimers(delta, audio);
 
         Weapon currentWeapon = getCurrentWeapon();
-        // No weapon at all briefly after a death wipe - see resetWeaponsOnDeath().
         if (currentWeapon == null) return;
         if (isShooting && currentWeapon.getShootTimer() > currentWeapon.getFireRate()) {
             currentWeapon.resetShootTimer();
@@ -608,7 +501,7 @@ public class Player {
             Texture bulletTex = resolveActiveTexture(assets);
             Vector2 spawnPoint = getBulletSpawnPoint();
             if (currentWeapon == basicWeapon && haloDetached) {
-                // Split the pattern with the halo (see updateHaloFiring()) instead of doubling it.
+                // Split the pattern with the detached halo instead of doubling it.
                 basicWeapon.spawnPlayerPortion(bullets, bulletTex, spawnPoint.x, spawnPoint.y);
             } else {
                 currentWeapon.spawn(bullets, bulletTex, spawnPoint.x, spawnPoint.y, this, enemies, assets);
@@ -617,13 +510,11 @@ public class Player {
         }
     }
 
-    // Both equipped weapons' cooldowns tick every frame, whether or not their slot is active, so
-    // a weapon is ready to fire based on real elapsed time since it last fired - not reset by
-    // switching to it, and not fast-forwardable by rapidly toggling slots back and forth.
+    // Both slots' cooldowns tick every frame, so switching can't reset or skip a cooldown.
     private void advanceWeaponTimers(float delta, AudioManager audio) {
         if (weaponSlots[0] != null) weaponSlots[0].addShootTimer(delta);
         if (weaponSlots[1] != null && weaponSlots[1] != weaponSlots[0]) weaponSlots[1].addShootTimer(delta);
-        // The orbit weapon's reflect shield just finished recharging (only ticks while it's equipped).
+        // Orbit reflect shield recharged.
         if (orbitWeapon.consumeShieldReady() && audio != null) audio.playShieldsReady();
     }
 
@@ -660,10 +551,7 @@ public class Player {
         shieldHitbox.set(getCenterX(), getCenterY(), orbitWeapon.getShieldRadius());
     }
 
-    // The graze halo's hitbox - grazing enemy bullets, picking up weapon powerups, and collecting
-    // point gems (see CollisionManager's checkGrazeCollisions/checkPlayerPowerupCollisions/
-    // checkPlayerGemCollisions, all keyed on getGrazeHitbox()) - follows the halo itself, not the
-    // player, whenever BasicWeapon's Hyper Attack has it detached.
+    // The graze hitbox (grazes, powerups, gems) follows the halo, even when detached.
     private void updateGrazeHitbox() {
         float radius = Math.min(sprite.getWidth(), sprite.getHeight()) * playerDef.haloHitboxSize;
         if (haloDetached) {
@@ -701,9 +589,7 @@ public class Player {
             return;
         }
 
-        // Halo drawn under the player sprite, centered on the player - unless a Hyper Attack has
-        // detached it, in which case it's wherever that ability's motion currently has it instead,
-        // and it swaps to that ability's own sprite - see resolveHaloVisual().
+        // Halo under the ship (or wherever a Hyper Attack has it), in the current state's sprite.
         HaloVisual haloVisual = resolveHaloVisual();
         TextureRegion haloFrame = haloVisual.frame;
         float haloDrawW = haloVisual.width;
@@ -712,8 +598,7 @@ public class Player {
         float drawHaloY = haloDrawY(haloVisual);
         boolean grazeFlashing = grazeFlashTimer > 0;
         boolean bashFlashing = haloBashFlashTimer > 0;
-        // Bash-flash (red, on a Hyper Attack dash hit) takes priority over graze-flash (blue, on a
-        // grazed bullet) if both happen to be active at once.
+        // Red bash flash beats blue graze flash.
         float haloR = bashFlashing ? 1f : (grazeFlashing ? 0.3f : 1f);
         float haloG = bashFlashing ? 0.15f : (grazeFlashing ? 0.6f : 1f);
         float haloB = bashFlashing ? 0.15f : 1f;
@@ -744,12 +629,8 @@ public class Player {
         }
     }
 
-    /** Starts (or restarts) a run with the given starting loadout - see WeaponSelectScreen, which
-     *  picks it before the run begins, and GameController, which holds onto it across debug
-     *  restarts so those don't force a re-pick. Only the two chosen weapons start at level 1 and
-     *  equipped; everything else (including WaveBlastWeapon, never a starting choice, and whichever
-     *  of Basic/Thunderbolt/Orbit wasn't picked) starts at level 0 and unequipped, same as any
-     *  weapon the player hasn't collected a powerup for yet. */
+    /** Starts a run with the chosen loadout: those two weapons equipped at level 1, all others at
+     *  level 0 and unequipped. */
     public void reset(WeaponLoadout loadout) {
         sprite.setPosition(worldWidth / 2f - sprite.getWidth() / 2f, 0);
         updateHitbox();
@@ -781,11 +662,8 @@ public class Player {
         deathRestoreLevel = 0;
     }
 
-    /** Puts the player back at reset()'s own start position with the halo attached and both
-     *  equipped weapons back at level 1 - run when a new stage begins (see GameController.
-     *  advanceToNextStage()) so each stage opens the same way regardless of how the last one
-     *  ended. Unlike reset(), this keeps the run's lives/bombs/loadout: it only touches position,
-     *  halo and weapon level (a weapon that's not equipped is left alone, since it's already at 0). */
+    /** At each new stage: start position, halo attached, equipped weapons back to level 1. Lives,
+     *  bombs and loadout carry over. */
     public void resetForNewStage() {
         sprite.setPosition(worldWidth / 2f - sprite.getWidth() / 2f, 0);
         updateHitbox();
@@ -797,11 +675,7 @@ public class Player {
         deathRestoreLevel = 0;
     }
 
-    /** Snaps the halo straight back onto the player, canceling whatever hyper attack ability
-     *  currently has it detached (Basic's dash/return, or Thunderbolt's move-out/charge/return)
-     *  instead of leaving it stranded mid-flight - used by reset() on a full game restart, and by
-     *  startDeath() so losing a life doesn't otherwise require an extra Hyper Attack press just to
-     *  recall a halo that was already out when the hit landed. */
+    /** Snaps the halo back onto the ship, cancelling any Hyper Attack (on reset and death). */
     private void reattachHaloImmediately() {
         haloDetached = false;
         haloDashing = false;
@@ -834,26 +708,17 @@ public class Player {
     public float getThunderboltDetonationX() { return thunderboltDetonationX; }
     public float getThunderboltDetonationY() { return thunderboltDetonationY; }
     public int getThunderboltDetonationDamage() { return thunderboltDetonationDamage; }
-    // The radius actually applied on detonation, captured at release time alongside the damage/X/Y
-    // above - see CollisionManager.checkThunderboltDetonation.
+    // Radius captured at release.
     public float getThunderboltDetonationRadius() { return thunderboltDetonationRadius; }
-    // The radius a release would detonate at *right now*, given the current charge tier - grows
-    // with thunderboltChargeLevel the same way the damage does (see
-    // thunderboltWeaponDef.thunderboltBlastRadiusByTier), reaching the full radius only at the top
-    // tier. Used by the debug hitbox overlay (Main.drawDebug) to preview where/how big the blast
-    // will be.
+    // Radius a release would use right now (debug overlay preview).
     public float getThunderboltBlastRadius() { return thunderboltWeaponDef.thunderboltBlastRadiusByTier[thunderboltChargeLevel]; }
-    // The full (top-tier) blast radius - thunderboltDetonationVisualScale's divisor, and the size
-    // player.json's thunderHaloBomb sprite is authored at (see the field comment above).
+    // The top-tier radius (the size the bomb sprite is authored at).
     private float thunderboltFullBlastRadius() {
         float[] radii = thunderboltWeaponDef.thunderboltBlastRadiusByTier;
         return radii[radii.length - 1];
     }
     public void clearPendingThunderboltDetonation() { thunderboltDetonationPending = false; }
-    // True from the moment the bomb launches out until it detonates (moving out or holding
-    // position and charging) - i.e. for as long as a release would actually detonate it - see
-    // debug hitbox overlay (Main.drawDebug), which uses this plus
-    // getHaloCenterX/Y/getThunderboltBlastRadius to show where the bomb will go off.
+    // True while a release would detonate the bomb (moving out or charging).
     public boolean isThunderboltBombActive() { return thunderboltMoving || thunderboltCharging; }
     public float getHaloCenterX() { return haloCenterX(); }
     public float getHaloCenterY() { return haloCenterY(); }
@@ -874,11 +739,8 @@ public class Player {
     public TextureRegion getHaloFrame() { return resolveHaloVisual().frame; }
     public float getHaloX() { return haloDrawX(resolveHaloVisual()); }
     public float getHaloY() { return haloDrawY(resolveHaloVisual()); }
-    // haloDetachedX/Y track the halo's logical center (via haloCenterX/Y below), not any particular
-    // sprite's bottom-left corner - the different Hyper Attack sprites (basicHaloDetach, the
-    // Thunderbolt shrink tiers, the bomb) all differ in size, so the actual draw-space bottom-left
-    // has to be re-derived from whichever one is currently active, or it'll render off-center from
-    // wherever the halo actually is (see resolveHaloVisual()).
+    // The detached position is the halo's logical center; the draw corner depends on the current
+    // sprite's size.
     private float haloDrawX(HaloVisual visual) { return haloDetached ? haloCenterX() - visual.width / 2f : attachedHaloX(); }
     private float haloDrawY(HaloVisual visual) { return haloDetached ? haloCenterY() - visual.height / 2f : attachedHaloY(); }
     private float attachedHaloX() { return sprite.getX() + sprite.getWidth() / 2f - haloDrawWidth / 2f; }
@@ -898,12 +760,8 @@ public class Player {
         }
     }
 
-    /** Picks which sprite the halo is currently wearing: the ThunderHaloBomb one-shot while its
-     *  detonation animation plays, the charge-tier ThunderHyperHaloShrink while Thunderbolt's Hyper
-     *  Attack has it out charging, basicHaloDetachAnimation while Basic's Hyper Attack has it out
-     *  dashing/resting/returning, or the regular attached haloAnimation otherwise - both Hyper
-     *  Attacks share the haloDetached flag itself (see triggerThunderboltHyperAttack()), so the
-     *  more specific states have to be checked first. */
+    /** The halo's current sprite: bomb, Thunderbolt charge tier, Basic detached, or attached
+     *  (most specific first, since both Hyper Attacks set haloDetached). */
     private HaloVisual resolveHaloVisual() {
         if (thunderboltDetonating) {
             TextureRegion frame = thunderHaloBombAnimation.getKeyFrame(thunderboltDetonationAnimTime);
@@ -923,10 +781,7 @@ public class Player {
     public String getSlotWeaponId(int slot) { return weaponId(weaponSlots[slot]); }
     public String getCurrentWeaponId() { return weaponId(getCurrentWeapon()); }
 
-    /** A normal weapon powerup (see WeaponPowerup.apply()) levels up both currently equipped
-     *  weapons at once by the same amount, instead of a single specific weapon - there's no more
-     *  "collect this weapon's own powerup to equip/level it" path, so a slot left empty (only one
-     *  weapon equipped) is simply skipped rather than being filled. */
+    /** A powerup levels up both equipped weapons (capped at maxWeaponLevel). */
     public void levelUpEquippedWeapons(int amount) {
         for (Weapon w : weaponSlots) {
             if (w != null) w.setLevel(Math.min(w.getLevel() + amount, playerDef.maxWeaponLevel));
@@ -949,7 +804,7 @@ public class Player {
         };
     }
 
-    // Debug-only: sets a weapon's level directly (unlike levelUpWeapon, doesn't equip it into a slot).
+    // Sets a weapon's level directly without equipping it (debug, starting loadouts).
     public void setWeaponLevel(String weaponId, int level) {
         Weapon target = weaponById(weaponId);
         if (target != null) target.setLevel(MathUtils.clamp(level, 0, playerDef.maxWeaponLevel));
@@ -958,6 +813,8 @@ public class Player {
     public int getMaxWeaponLevel() { return playerDef.maxWeaponLevel; }
     public int getStartingLives() { return playerDef.startingLives; }
 
+    /** Puts a weapon in a slot (moving it out of the other slot, raising it to level 1). null clears
+     *  the slot unless that would leave both empty. */
     public void setSlotWeapon(int slot, String weaponId) {
         Weapon target = weaponById(weaponId);
         int other = 1 - slot;
@@ -993,9 +850,8 @@ public class Player {
         maxBombs++;
     }
 
-    /** Dying strips both equipped weapons down to level 1 - still equipped, just back to their
-     *  base level - capturing the level being lost first, so GameController.applyPlayerHit() can
-     *  size a restore powerup to add it back (see getDeathRestoreLevel()). */
+    /** Dying drops both equipped weapons to level 1, remembering the highest level for the restore
+     *  powerup. */
     private void resetWeaponsOnDeath() {
         deathRestoreLevel = Math.max(
             weaponSlots[0] != null ? weaponSlots[0].getLevel() : 0,
@@ -1017,8 +873,7 @@ public class Player {
     public int getNumBombs() { return numBombs;}
     public int getMaxBombs() { return maxBombs; }
 
-    // Debug/tutorial-only: raises (or lowers) the bomb cap directly, bypassing the normal "gain one
-    // permanently on death" progression - see StartingLoadoutDefinition.maxBombs.
+    // Sets the bomb cap directly (normally it grows by one per death).
     public void setMaxBombs(int maxBombs) { this.maxBombs = Math.max(0, maxBombs); }
 
     public void setNumBombs(int numBombs) {

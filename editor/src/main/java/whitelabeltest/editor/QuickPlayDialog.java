@@ -26,29 +26,13 @@ import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
 
-/** "Quick Play" - launches the real game (a separate LWJGL3/GL process; it cannot run inside this
- *  JavaFX process) directly into gameplay on whichever stage is currently open in the editor,
- *  starting at the TimelineBar's current scrub distance, with a player-chosen starting weapon
- *  loadout - skipping the start menu/weapon-select screens entirely. See
- *  GameController.quickStartAtStage()/Main.QuickPlayConfig/Lwjgl3Launcher.readQuickPlayConfig() for
- *  how the launched process actually receives these three things.
- *
- * Two tabs: "Launch" (a read-only summary of what's about to start, the Input combo, and the actual
- * Launch button) and "Weapons" (the two starting-slot combos, each paired with its own starting
- * LEVEL combo) - the four real weapon ids (Player.weaponById()'s own list), not just the three
- * curated WeaponLoadout presets (WaveBlastWeapon is deliberately powerup-only there) - this is a dev
- * testing tool, not real progression, so the extra freedom is fine here. Level range is read from
- * player.json's own maxWeaponLevel (see loadMaxWeaponLevel()) rather than hardcoded, so it never
- * drifts out of sync with what Player.setWeaponLevel() itself actually allows.
- *
- * The Input combo (Keyboard/Gamepad) exists because Quick Play skips StartScreen entirely - see
- * Main.transitionToQuickPlay()'s own doc - so there's no "press any key/button" step to auto-detect
- * the device from the way an ordinary run does; without this a Quick Play session was always stuck
- * polling keyboard regardless of what the tester actually wanted to play with. */
+/** Quick Play: launches the game (a separate process) straight into the open stage at the
+ *  timeline distance. The Launch tab has a summary and the input device (the start screen's
+ *  detection is skipped). The Weapons tab has any weapon and level (up to player.json's
+ *  maxWeaponLevel) per slot. */
 public final class QuickPlayDialog {
     private static final List<String> WEAPON_IDS = List.of("BasicWeapon", "WaveBlastWeapon", "OrbitWeapon", "Thunderbolt");
-    // Matches player.json's own current maxWeaponLevel - used only if that file can't be read for
-    // some reason (see loadMaxWeaponLevel()), so the level combos always have SOME sane range.
+    // Used if player.json can't be read.
     private static final int FALLBACK_MAX_WEAPON_LEVEL = 4;
 
     private QuickPlayDialog() {}
@@ -121,20 +105,13 @@ public final class QuickPlayDialog {
         dialog.showAndWait();
     }
 
-    /** Forks the real game via `gradlew(.bat) :lwjgl3:run` (reusing that task's own already-working
-     *  classpath/natives resolution rather than hand-assembling one here - the editor module doesn't
-     *  even depend on :lwjgl3) with quickPlay* Gradle project properties - see lwjgl3/build.gradle's
-     *  run task, which translates them into the "-DquickPlay.*" system properties
-     *  Lwjgl3Launcher.readQuickPlayConfig() reads. Fire-and-forget (no waitFor()) so the editor's own
-     *  UI thread never blocks on the forked game's lifetime; inheritIO() surfaces Gradle/game output
-     *  in the editor's own console for troubleshooting a failed launch. */
+    /** Runs `gradlew :lwjgl3:run -PquickPlay...` (turned into -DquickPlay.* system properties by
+     *  lwjgl3/build.gradle) without waiting; output goes to the editor's console. */
     private static void launchProcess(String stageId, float distance, String slotA, String slotB,
                                        int slotALevel, int slotBLevel, InputType inputType) {
         boolean isWindows = System.getProperty("os.name", "").toLowerCase().contains("win");
         String gradlew = isWindows ? "gradlew.bat" : "./gradlew";
-        // The editor's own run task sets its working directory to assets/ (see editor/build.gradle) -
-        // the same convention lwjgl3's own run task relies on for its asset paths - so the repo root
-        // where gradlew(.bat) actually lives is this process's cwd's PARENT, not the cwd itself.
+        // The working directory is assets/, so the repo root is its parent.
         Path repoRoot = Path.of(System.getProperty("user.dir")).getParent();
         try {
             ProcessBuilder pb = new ProcessBuilder(
@@ -156,12 +133,7 @@ public final class QuickPlayDialog {
         }
     }
 
-    /** player.json's own maxWeaponLevel - the same ceiling Player.setWeaponLevel() itself clamps
-     *  to - read fresh every time this dialog opens (a plain, uncached Files.readString() + Json
-     *  parse, same technique EditorDocument/StageLibrary already use for their own JSON reads) so a
-     *  tuning change to that file shows up here without an editor restart. Falls back to
-     *  FALLBACK_MAX_WEAPON_LEVEL if the file is missing/unparseable, rather than failing to open
-     *  this dialog at all over what's ultimately just a cosmetic range on a dev testing tool. */
+    /** player.json's maxWeaponLevel, read each time the dialog opens. */
     private static int loadMaxWeaponLevel() {
         try {
             String text = Files.readString(Path.of("data/player.json"));

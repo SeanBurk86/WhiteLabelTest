@@ -14,6 +14,7 @@ import whitelabeltest.enemy.bullets.AimedEnemyBullet;
 import whitelabeltest.enemy.bullets.EnemyBullet;
 import whitelabeltest.gamemanagers.ObjectPools;
 
+/** Fires a stream whose direction sweeps back and forth between startAngle and endAngle. */
 public class SweepFiring implements FiringPattern {
     private final float bulletInterval;
     private final float bulletSize;
@@ -26,7 +27,7 @@ public class SweepFiring implements FiringPattern {
     private final float sweepDuration;
     private final float startAngle;
     private final float endAngle;
-    // Reused for each shot's direction instead of a new Vector2 per bullet - same maths, no garbage.
+    // Scratch vector (no per-shot allocation).
     private final Vector2 scratchDir = new Vector2();
 
     private float bulletTimer;
@@ -66,15 +67,13 @@ public class SweepFiring implements FiringPattern {
         this(fireRate, bulletSize, bulletSpeed, spriteOverride, offsetX, offsetY, DEFAULT_SWEEP_DURATION, DEFAULT_START_ANGLE, DEFAULT_END_ANGLE, bulletDamage);
     }
 
-    /** @param speedProfile how bulletSpeed changes over each bullet's flight - see SpeedProfile
-     *  @param hitboxSpec each bullet's collision hitbox, independent of its visual size - see
-     *  HitboxSpec */
+    /** @param speedProfile,hitboxSpec see SpeedProfile and HitboxSpec */
     public SweepFiring(float fireRate, float bulletSize, float bulletSpeed, Animation<TextureRegion> spriteOverride, float offsetX, float offsetY, int bulletDamage, SpeedProfile speedProfile, HitboxSpec hitboxSpec) {
         this(fireRate, bulletSize, bulletSpeed, spriteOverride, offsetX, offsetY, DEFAULT_SWEEP_DURATION, DEFAULT_START_ANGLE, DEFAULT_END_ANGLE, bulletDamage, speedProfile, hitboxSpec);
     }
 
-    /** @param sweepDuration seconds for one full pass from startAngle to endAngle (and back)
-     *  @param startAngle, endAngle sweep bounds in degrees, standard math convention (0 = right, 90 = up) */
+    /** @param sweepDuration seconds for one pass from startAngle to endAngle
+     *  @param startAngle,endAngle sweep bounds in degrees (0 = right, 90 = up) */
     public SweepFiring(float fireRate, float bulletSize, float bulletSpeed, Animation<TextureRegion> spriteOverride, float offsetX, float offsetY, float sweepDuration, float startAngle, float endAngle) {
         this(fireRate, bulletSize, bulletSpeed, spriteOverride, offsetX, offsetY, sweepDuration, startAngle, endAngle, 1);
     }
@@ -83,9 +82,7 @@ public class SweepFiring implements FiringPattern {
         this(fireRate, bulletSize, bulletSpeed, spriteOverride, offsetX, offsetY, sweepDuration, startAngle, endAngle, bulletDamage, SpeedProfile.CONSTANT_SPEED, HitboxSpec.DEFAULT);
     }
 
-    /** @param speedProfile how bulletSpeed changes over each bullet's flight - see SpeedProfile
-     *  @param hitboxSpec each bullet's collision hitbox, independent of its visual size - see
-     *  HitboxSpec */
+    /** @param speedProfile,hitboxSpec see SpeedProfile and HitboxSpec */
     public SweepFiring(float fireRate, float bulletSize, float bulletSpeed, Animation<TextureRegion> spriteOverride, float offsetX, float offsetY, float sweepDuration, float startAngle, float endAngle, int bulletDamage, SpeedProfile speedProfile, HitboxSpec hitboxSpec) {
         this.bulletInterval = fireRate;
         this.bulletSize = bulletSize;

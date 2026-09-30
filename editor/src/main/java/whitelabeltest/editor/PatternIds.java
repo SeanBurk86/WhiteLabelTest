@@ -12,12 +12,8 @@ import java.util.Comparator;
 import java.util.List;
 import java.util.stream.Stream;
 
-/** Movement/firing/explosion pattern ids for the properties panels' combo boxes - one file per id
- *  under data/movement_patterns/ and data/firing_patterns/ (filename == id), same convention
- *  whitelabeltest.enemy.PatternRegistry.load() already relies on in the game itself. Explosion
- *  patterns are the odd one out (one array in data/explosion_patterns.json, each entry carrying its
- *  own "id" field, and ExplosionPatternDef implements a custom Json.Serializable) - read as a raw
- *  JsonValue tree instead of deserializing, since all that's needed here is the id list. */
+/** Id and asset path lists for the editor's combo boxes: movement and firing pattern files,
+ *  explosion and bullet ids (read from their JSON arrays), sound effects and textures. */
 public final class PatternIds {
     private PatternIds() {}
 
@@ -33,15 +29,12 @@ public final class PatternIds {
         return listJsonIds(Path.of("data/explosion_patterns.json"));
     }
 
-    /** Bullet ids for FiringPatternDef.bulletId's own combo - same "one array, each entry carrying
-     *  its own id" shape as explosion_patterns.json above (see BulletDef), just a different file. */
+    /** Ids from data/bullets.json. */
     public static List<String> bulletIds() {
         return listJsonIds(Path.of("data/bullets.json"));
     }
 
-    /** Sound-effect asset paths (e.g. "audio/sfx/hawkscreech.mp3") for the sound combos - relative
-     *  to the assets folder, the same form Trigger.sound / MovementPatternDef.soundName already store
-     *  and AudioManager.playCueSound() loads through Gdx.files.internal(). */
+    /** Sound effect paths relative to assets/, e.g. "audio/sfx/hawkscreech.mp3". */
     public static List<String> sfxPaths() {
         Path dir = Path.of("audio/sfx");
         if (!Files.isDirectory(dir)) return new ArrayList<>();
@@ -57,14 +50,12 @@ public final class PatternIds {
         }
     }
 
-    /** Enemy sprite-sheet texture paths (e.g. "images/enemies/ICE006.png") for
-     *  EnemyDefinitionPanel's "Texture" combo - same form EnemyDefinition.texture already stores. */
+    /** e.g. "images/enemies/ICE006.png". */
     public static List<String> enemyTexturePaths() {
         return listImagePaths(Path.of("images/enemies"), "images/enemies/");
     }
 
-    /** Bullet texture paths (e.g. "images/bullets/enemybullet.png") for EnemyDefinitionPanel's
-     *  "Bullet texture" combo - same form EnemyDefinition.bulletTexture already stores. */
+    /** e.g. "images/bullets/enemybullet.png". */
     public static List<String> bulletTexturePaths() {
         return listImagePaths(Path.of("images/bullets"), "images/bullets/");
     }

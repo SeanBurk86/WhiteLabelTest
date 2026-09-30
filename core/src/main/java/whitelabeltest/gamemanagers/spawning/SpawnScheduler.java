@@ -17,79 +17,45 @@ import whitelabeltest.enemy.EnemyDefinition;
 import java.util.Comparator;
 import java.util.Objects;
 
+/** Legacy time-based stage script (a *_schedule.json). Only used by stages without a trigger file;
+ *  see TriggerManager for the current distance-based system. */
 public class SpawnScheduler {
     public static class SpawnEvent {
         public float time;
         public String type;
         public float x = Float.NaN;
         public float y = Float.NaN;
-        // Guaranteed weapon-powerup tier (1-3) this spawn drops on death - see
-        // Enemy.setGuaranteedPowerup()/GameController.spawnPowerup(). Null means no guarantee.
+        // Guaranteed weapon-powerup tier (1-3) dropped on death; null = none.
         public Integer powerup;
         public boolean inverseMovement = false;
         public boolean spawned = false;
 
-        // This spawn's slot in a squad formation - see PatternFactory.createMovement's javadoc.
-        // NaN (the default) means "not a formation member", so a Squadron-type movement pattern
-        // falls back to whatever offsetX/offsetY it has baked in.
+        // Squad formation slot (see PatternFactory.createMovement). NaN = not a formation member.
         public float offsetX = Float.NaN;
         public float offsetY = Float.NaN;
 
-        // Overrides the enemy definition's own movementPattern when set - lets several spawn
-        // events share one enemy definition while steering each toward a different movement
-        // pattern (e.g. two waves of the same squad with different rally points/exits).
+        // Override the enemy definition's movement/firing pattern for this spawn.
         public String movementPattern;
-
-        // Same idea as movementPattern above, but for firingPattern - e.g. several WallFiring
-        // spawns sharing one enemy definition while each cuts its hole at a different gapCenterX.
         public String firingPattern;
 
-        // When true, this "event" doesn't spawn anything - at its scheduled time it instead calls
-        // Enemy.silenceFiring() on every currently active enemy whose EnemyDefinition id matches
-        // `type`. Lets a scripted enemy whose firing pattern has no fixed duration of its own (e.g.
-        // TutorialStreamShot, which must fire continuously for as long as its drill takes - see
-        // SpawnScheduler's gate-freeze doc on GateCue) still be told to stop the instant the drill
-        // actually finishes, by scheduling this a hair after the gate that completion clears -
-        // since the schedule clock stays frozen at that gate's time for however long the drill
-        // really takes, this event only fires once time resumes past it, however long that is.
+        // Instead of spawning: stop every active enemy of definition `type` from firing.
         public boolean silence = false;
 
-        // When true, this "event" spawns a stationary PointGem at (x, y) instead of an enemy - see
-        // spawnWaypointGem(). Reuses PointGem's existing graze-hitbox collection and the
-        // "gemsCollected" gate condition to let a drill be scored as "fly through this series of
-        // points" (e.g. the bullet-restreaming drill) without a bespoke waypoint/scoring system.
+        // Instead of spawning: place a stationary PointGem at (x, y), for "fly through these points"
+        // drills scored by a gemsCollected gate.
         public boolean waypointGem = false;
 
-        // When true, this "event" doesn't spawn anything - at its scheduled time it instead
-        // silently removes (no death animation, no score, no drops) every currently active enemy
-        // whose EnemyDefinition id matches `type` - see despawnMatching(). Lets a scripted demo
-        // target (e.g. the weapons section's practice dummy) be cleaned up on a schedule instead of
-        // either lingering on-screen for the rest of the stage or requiring the player to actually
-        // kill it - the latter is its own race condition (see gemsAtLastWaypointSpawn's doc for the
-        // same class of bug): if the player deals enough damage during earlier, ungated practice
-        // fire that the dummy dies before an "enemiesDestroyed" gate even engages, that gate's
-        // baseline snapshot already includes the kill and can never see the "+1 more" it's waiting
-        // on.
+        // Instead of spawning: remove every active enemy of definition `type` (no death, score or drops).
         public boolean despawn = false;
 
-        // When set, this "event" doesn't spawn anything - at its scheduled time it instead calls
-        // Player.setSlotWeapon(weaponSlot, swapWeaponId), swapping that slot to a different weapon
-        // (ids match Player.weaponById(): "BasicWeapon", "WaveBlastWeapon", "OrbitWeapon",
-        // "Thunderbolt"). Lets a scripted stage (e.g. the tutorial) hand the player a new weapon
-        // mid-run without them picking up a powerup for it - if the replaced slot happens to be the
-        // active one, the new weapon becomes active in its place immediately (see setSlotWeapon()),
-        // otherwise it just waits in that slot until they switch to it. Null (the default) means
-        // this isn't a weapon-swap event.
+        // Instead of spawning: put weapon swapWeaponId in slot weaponSlot (see Player.setSlotWeapon()).
         public String swapWeaponId = null;
         public int weaponSlot = 0;
 
         public SpawnEvent() {}
     }
 
-    // A scripted one-off sound effect - lets a level trigger SFX (alarms, environmental stingers,
-    // dialogue blips, etc.) purely from spawn_schedule.json, the same way SpawnEvent triggers
-    // enemies. "sound" is an asset path relative to assets/ (e.g. "audio/sfx/alarm.mp3"), lazily
-    // loaded and cached the first time it's played - see AudioManager.playCueSound().
+    // One-off sound effect; `sound` is a path relative to assets/, loaded on first play.
     public static class SoundCue {
         public float time;
         public String sound;
@@ -98,10 +64,8 @@ public class SpawnScheduler {
         public SoundCue() {}
     }
 
-    // A scripted one-off sprite/animation played at a fixed world position - see
-    // ScheduledSpriteEffect. frameCount/columns/rows/frameDuration describe the sprite sheet the
-    // same way EnemyDefinition's animations do; frameCount == 1 (the default) plays a single
-    // static image for frameDuration seconds instead of animating.
+    // One-off sprite-sheet animation at a fixed position; frameCount 1 shows a static image for
+    // frameDuration seconds.
     public static class SpriteCue {
         public float time;
         public String texture;
@@ -117,117 +81,54 @@ public class SpawnScheduler {
         public SpriteCue() {}
     }
 
-    // A condition-gated checkpoint - see SpawnScheduler.update()/isGateSatisfied(). Once the
-    // schedule clock reaches this gate's time, it freezes there (nothing else in the schedule -
-    // spawns, text/sound/sprite cues, the background-video/music-fade cues - advances or fires)
-    // until condition is satisfied, then resumes counting from exactly gate.time. Lets a tutorial
-    // stage pace itself on "do X to continue" instead of a fixed clock. Live gameplay (movement,
-    // collisions, entities already on screen) is NOT paused by this - only the schedule is.
+    // When the schedule clock reaches `time`, it freezes there until `condition` is satisfied. Live
+    // gameplay keeps running; only the schedule is paused.
     public static class GateCue {
         public float time;
-        // "shoot" (shoot input freshly pressed), "bomb" (bomb just used), "weaponSwitch" (the
-        // correct weapon - see weaponId below - is the one currently equipped), "moved" (movement
-        // freshly started), "movedLeft"/"movedRight" (movement freshly started specifically in that
-        // X direction - e.g. a left/right/left micro-dodging drill chains three of these), or
-        // "enemiesDestroyed" (see count) - see isGateSatisfied(). Every condition but weaponSwitch is
-        // edge-triggered (not "currently held") so it can't be trivially satisfied by input the
-        // player was already holding from before the gate engaged - see InputManager's
-        // ...JustPressed()/isMoveJustStarted(). weaponSwitch is deliberately a level check instead
-        // (see weaponId) - it cares whether the right weapon ends up equipped, not whether a switch
-        // input happened to fire, so it clears immediately if that weapon was already equipped
-        // (nothing to switch away from and back to) and stays satisfied if the player keeps
-        // switching around after clearing it. An unrecognized/null condition is treated as already
-        // satisfied, so a typo here can't soft-lock the stage.
+        // Same condition names as Condition.type, minus enemyTypeDestroyed/spawnDestroyed.
+        // Input conditions are edge-triggered (held input doesn't count); weaponSwitch is a level
+        // check on the equipped weapon. Unknown/null counts as satisfied.
         public String condition;
-        // Only used when condition == "enemiesDestroyed": how many enemies the player must destroy
-        // after this gate engages (not a running stage total) to clear it.
+        // enemiesDestroyed/gemsCollected/grazed: how many since the gate engaged.
         public int count = 1;
-        // Only used when condition == "weaponSwitch": which weapon (id string - see
-        // Player.getCurrentWeaponId()/setSlotWeapon(), e.g. "BasicWeapon", "Thunderbolt",
-        // "OrbitWeapon", "WaveBlastWeapon") must be the currently equipped one to clear this gate.
+        // weaponSwitch: the weapon id that must be equipped.
         public String weaponId;
         public boolean triggered = false;
 
         public GateCue() {}
     }
 
-    // Public so SpawnScheduleEditor can load/edit/save the whole file directly (not just the
-    // events list this class exposes via getSchedule()) without losing every other cue type it
-    // doesn't edit - see that class's open()/saveToDisk().
+    // The JSON shape of a schedule file (also loaded/saved whole by SpawnScheduleEditor).
     public static class ScheduleFile {
         public Array<TextCue> textCues;
         public Array<SpawnEvent> events;
         public Array<SoundCue> soundCues;
         public Array<SpriteCue> spriteCues;
         public Array<GateCue> gates;
-        // Optional cue time (seconds) for handing the scrolling background off to the boss video -
-        // see ScrollingBackground.triggerBossVideo(). Null means no schedule-driven trigger.
+        // Optional time to start the boss video.
         public Float backgroundVideoTime;
-        // Optional cue time (seconds) for fading out the stage music - see
-        // AudioManager.fadeOutStageMusic(). Null means no schedule-driven trigger. Independent of
-        // backgroundVideoTime so the two can be timed apart (e.g. music fading ahead of/behind the
-        // video hand-off).
+        // Optional time to fade out the stage music (independent of backgroundVideoTime).
         public Float musicFadeOutTime;
-        // Optional cue time (seconds) marking the whole schedule as finished - see
-        // isScheduleEndTriggered(). Null means no schedule-driven end (the normal case: an arcade
-        // stage's completion is instead driven by GameController's boss-kill levelComplete flow).
-        // Exists for a schedule that has no boss to kill at all (e.g. the tutorial) but still needs
-        // a defined ending - GameController surfaces this so its caller can decide what "done" means
-        // (the tutorial's case: hand control back to the start screen).
+        // Optional time marking the schedule complete, for stages with no boss (e.g. the tutorial).
         public Float scheduleEndTime;
-        // Optional seconds of u_time this stage's Stage2KaleidoscopeShader background plays the
-        // phosphene kaleidoscope effect before switching to the tentacles tunnel - see
-        // ScrollingBackground.setKaleidoscopeTransitionTime()/getKaleidoscopeTransitionTime()
-        // below. Null (the default, and the only sensible value for a stage that isn't using that
-        // shader background) falls back to Stage2KaleidoscopeShader.DEFAULT_TRANSITION_TIME.
+        // Optional overrides; null = Stage2KaleidoscopeShader.DEFAULT_TRANSITION_TIME /
+        // ScrollingBackground.DEFAULT_SCROLL_SPEED.
         public Float kaleidoscopeTransitionTime;
-        // Optional world-units/sec the background scrolls (negative = downward, matching the
-        // direction enemies move toward the player) - see ScrollingBackground's own per-layer
-        // scrollSpeed for the parallax visuals, and getGroundScrollSpeed()/EnemyDefinition.isGround
-        // for what this drives: a ground enemy is shifted by this same amount every frame on top of
-        // its own movement pattern, so it stays visually planted on the terrain instead of sliding
-        // relative to it as the world scrolls past. Null (the default) falls back to
-        // ScrollingBackground.DEFAULT_SCROLL_SPEED, matching that class's own default layer speed.
         public Float groundScrollSpeed;
-        // Zero or more [start, end) schedule-time windows - see isInPracticeSection(). A schedule
-        // can have several independent drills (e.g. a movement dodge, then later a stand-still
-        // dodge), each with its own restart-on-hit range.
+        // [start, end) time windows; see the matching isXxx() methods.
         public Array<PracticeCheckpoint> practiceCheckpoints;
-        // Zero or more [start, end) schedule-time windows - see isPlayerInvincible(). Deliberately
-        // separate from Player.isInvincible() (the post-hit i-frame flag): that flag also tells
-        // EntityManager to pause every enemy's firing (see its firingPaused computation), which
-        // would silence the very enemy fire a scripted "safe to stand in bullets" drill needs kept
-        // alive. This only suppresses the hit's consequence in GameController, nothing else.
         public Array<InvincibilityWindow> invincibilityWindows;
-
-        // Zero or more [start, end) schedule-time windows - see isWeaponsDisabled(). Lets a stage
-        // withhold both firing and bombing (e.g. the tutorial, before it's actually taught the
-        // player how to shoot) without touching input handling itself - see GameController's use
-        // of it, which only gates whether a press takes effect, not whether it's detected.
         public Array<WeaponsDisabledWindow> weaponsDisabledWindows;
-
-        // Same [start, end) shape and gating style as weaponsDisabledWindows, but independent of it
-        // - a tutorial teaches normal fire, Hyper Attack, and bombing at three different points, so
-        // each capability needs its own "not taught yet" window rather than sharing one flag that
-        // would either withhold fire too long or let Hyper Attack/bomb through too early. See
-        // isHyperAttackDisabled()/isBombDisabled().
         public Array<WeaponsDisabledWindow> hyperAttackDisabledWindows;
         public Array<WeaponsDisabledWindow> bombDisabledWindows;
 
-        // When true, every text cue in this schedule freezes the schedule clock the instant it
-        // triggers - same "nothing else advances or fires" freeze as an active GateCue - until the
-        // player presses confirm (see update()'s cue-await-confirm block), instead of auto-hiding
-        // after its own `duration`. Lets a schedule with lots of reading (e.g. the tutorial)
-        // guarantee every message actually gets read instead of racing a fixed timer against
-        // whatever's simultaneously happening on screen. False (the default) keeps every existing
-        // schedule's original fixed-duration cue behavior unchanged.
+        // True: every text cue freezes the schedule until the player confirms, instead of hiding
+        // after its duration.
         public boolean textCuesRequireConfirm = false;
 
         public ScheduleFile() {}
     }
 
-    // A [start, end) schedule-time window during which a hit restarts the drill instead of costing
-    // a life - see isInPracticeSection()/GameController.restartPracticeSection().
     public static class PracticeCheckpoint {
         public float start;
         public float end;
@@ -235,8 +136,6 @@ public class SpawnScheduler {
         public PracticeCheckpoint() {}
     }
 
-    // A [start, end) schedule-time window during which the player takes no damage at all - see
-    // isPlayerInvincible().
     public static class InvincibilityWindow {
         public float start;
         public float end;
@@ -244,8 +143,6 @@ public class SpawnScheduler {
         public InvincibilityWindow() {}
     }
 
-    // A [start, end) schedule-time window during which the player can't fire their weapon or use a
-    // bomb - see isWeaponsDisabled().
     public static class WeaponsDisabledWindow {
         public float start;
         public float end;
@@ -253,10 +150,9 @@ public class SpawnScheduler {
         public WeaponsDisabledWindow() {}
     }
 
+    // Schedule clock; freezes at gates and confirm-gated text cues.
     private float totalTime;
-    // Real elapsed time - unlike totalTime, never freezes at a gate. Exists purely to time text
-    // cues' own display duration against (see TextCue.triggeredAtRealTime) so a gate stalling
-    // totalTime doesn't also stall a cue's typewriter reveal partway through.
+    // Never-frozen clock used for text cue display timing.
     private float realTime;
     private final float worldWidth;
     private final float worldHeight;
@@ -265,26 +161,14 @@ public class SpawnScheduler {
     private Array<SoundCue> soundCues = new Array<>();
     private Array<SpriteCue> spriteCues = new Array<>();
     private Array<GateCue> gates = new Array<>();
-    // The one gate currently blocking the schedule clock, or null if none is - see update()/
-    // isGateSatisfied(). Only ever the earliest untriggered entry in gates (they clear in order).
+    // The gate currently freezing the schedule (gates clear in order), or null.
     private GateCue activeGate;
-    // ScoreManager.getEnemiesDestroyed()/getGemsCollected()/Player.getGrazePoints() snapshotted at
-    // the moment activeGate engaged - see isGateSatisfied(), which counts each since then, not the
-    // stage's running total.
+    // Counters when activeGate engaged, so gate counts measure progress since then.
     private int enemiesDestroyedAtGateStart;
     private int gemsCollectedAtGateStart;
     private float grazePointsAtGateStart;
-    // gemsCollected as of the most recent waypointGem SpawnEvent (see spawnWaypointGem()), or -1 if
-    // none has fired since the last gate consumed it - see update()'s gate-engagement snapshot,
-    // which prefers this over the live gemsCollected value when set. A "gemsCollected count: 1"
-    // gate immediately following a waypointGem spawn (the tutorial's bullet-restreaming drill
-    // chains several of these) would otherwise snapshot its baseline at ENGAGEMENT time - if the
-    // player grabs the just-spawned gem in the gap between it spawning and the gate reaching that
-    // point in the schedule (trivial for a stationary pickup the player might already be standing
-    // on), the baseline captured at engagement already includes that collection, so the "+1 more"
-    // requirement can never be satisfied and the chain softlocks. Snapshotting instead at spawn
-    // time - necessarily before the gem could possibly be collected - closes that race regardless
-    // of how fast the player grabs it.
+    // Gem count taken when the latest waypoint gem spawned (-1 = none). Used as the next gate's
+    // baseline so a gem grabbed before the gate engages still counts.
     private int gemsAtLastWaypointSpawn = -1;
     private Float backgroundVideoTime;
     private boolean backgroundVideoTriggered;
@@ -292,28 +176,15 @@ public class SpawnScheduler {
     private boolean musicFadeOutTriggered;
     private Float scheduleEndTime;
     private boolean scheduleEndTriggered;
-    // See ScheduleFile.kaleidoscopeTransitionTime.
     private float kaleidoscopeTransitionTime = Stage2KaleidoscopeShader.DEFAULT_TRANSITION_TIME;
-    // See ScheduleFile.groundScrollSpeed.
     private float groundScrollSpeed = ScrollingBackground.DEFAULT_SCROLL_SPEED;
-    // See isInPracticeSection() - lets a scripted section (e.g. a tutorial dodge drill) tell
-    // GameController "a death in here doesn't cost a life, just rewind to the start of this
-    // window" instead of the normal hit-handling.
     private Array<PracticeCheckpoint> practiceCheckpoints = new Array<>();
-    // See isPlayerInvincible() - lets a scripted section (e.g. "safely stand in this stream of
-    // enemy fire") tell GameController to skip the normal hit-consequence entirely, without
-    // touching Player.isInvincible()/EntityManager's firingPaused (see InvincibilityWindow's doc).
     private Array<InvincibilityWindow> invincibilityWindows = new Array<>();
-    // See isWeaponsDisabled().
     private Array<WeaponsDisabledWindow> weaponsDisabledWindows = new Array<>();
-    // See isHyperAttackDisabled()/isBombDisabled().
     private Array<WeaponsDisabledWindow> hyperAttackDisabledWindows = new Array<>();
     private Array<WeaponsDisabledWindow> bombDisabledWindows = new Array<>();
-    // See ScheduleFile.textCuesRequireConfirm.
     private boolean textCuesRequireConfirm = false;
-    // The cue currently freezing the schedule clock while textCuesRequireConfirm is on, waiting on
-    // a confirm press - see update(). Only one at a time: totalTime can't reach a second cue's
-    // trigger time while frozen at the first's.
+    // The text cue freezing the schedule while awaiting confirm (at most one at a time).
     private TextCue awaitingConfirmCue;
     private final ObjectMap<String, EnemyDefinition> enemyDefinitions;
     private final AssetManager assets;
@@ -330,13 +201,10 @@ public class SpawnScheduler {
         loadSchedule(scheduleFilePath);
     }
 
-    /** Asset-relative path (e.g. "data/stages/stage1_schedule.json") this schedule was loaded
-     *  from - see StageDefinition.spawnSchedule. Lets SpawnScheduleEditor edit whichever stage is
-     *  currently loaded without GameController needing to separately track it. */
+    /** Asset-relative path this schedule was loaded from (used by SpawnScheduleEditor). */
     public String getScheduleFilePath() { return scheduleFilePath; }
 
-    /** The enemy definitions this schedule already parsed from data/enemies.json - handed to
-     *  TriggerManager so it doesn't need to parse that file a second time for the same stage. */
+    /** Enemy definitions parsed from enemies.json, shared with TriggerManager. */
     public ObjectMap<String, EnemyDefinition> getEnemyDefinitions() { return enemyDefinitions; }
 
     private void loadDefinitions() {
@@ -399,15 +267,12 @@ public class SpawnScheduler {
 
     public float getTotalTime() { return totalTime; }
 
-    /** The gate currently freezing the schedule, or null if none is - see update(). Exposed for UI
-     *  (e.g. a debug overlay showing what the stage is waiting on). */
+    /** The gate currently freezing the schedule, or null (for the debug overlay). */
     public GateCue getActiveGate() { return activeGate; }
 
     public Array<SpawnEvent> getSchedule() { return schedule; }
 
-    /** Scheduled spawn time of the stage's boss (the first SpawnEvent whose EnemyDefinition sets
-     *  isBoss), or -1 if the schedule has no boss - see GameController's boss-takedown time bonus,
-     *  which measures the fight against this rather than the whole stage's elapsed time. */
+    /** Time of the first boss spawn, or -1. The boss time bonus measures the fight from here. */
     public float getBossSpawnTime() {
         for (SpawnEvent event : schedule) {
             EnemyDefinition def = enemyDefinitions.get(event.type);
@@ -416,59 +281,35 @@ public class SpawnScheduler {
         return -1f;
     }
 
-    /** True once the schedule clock has crossed backgroundVideoTime - a permanent latch (only
-     *  cleared by reset()/seekTo()) that GameController edge-detects to trigger the boss video
-     *  hand-off exactly once - see GameController.update(). */
+    /** Latched once the clock passes backgroundVideoTime; GameController edge-detects it. */
     public boolean isBackgroundVideoTriggered() { return backgroundVideoTriggered; }
 
-    // Fallback for getBackgroundVideoTime() when a schedule has no backgroundVideoTime at all (most
-    // don't, and hueCycleBackground - the only current consumer - is meaningless without a boss
-    // video to sync against anyway) - an arbitrary but reasonable cycle length rather than 0, which
-    // would make every frame flash back to the image's native colors.
+    // Hue-cycle period when a schedule has no backgroundVideoTime (0 would flash every frame).
     private static final float DEFAULT_BACKGROUND_VIDEO_TIME = 60f;
 
-    /** Seconds until this schedule's boss video cue (see isBackgroundVideoTriggered()) fires, or
-     *  DEFAULT_BACKGROUND_VIDEO_TIME if this schedule has none. Currently only consumed by
-     *  ScrollingBackground.setHueCyclePeriod() - see StageDefinition.hueCycleBackground - so a hue
-     *  cycle always completes its one full rotation exactly as the boss video cuts in, without
-     *  needing its own separately-authored duration that could drift out of sync with the actual cue. */
+    /** backgroundVideoTime, or a default. Used as the hue-cycle background's period so one full
+     *  cycle ends as the boss video starts. */
     public float getBackgroundVideoTime() {
         return backgroundVideoTime != null ? backgroundVideoTime : DEFAULT_BACKGROUND_VIDEO_TIME;
     }
 
-    /** True once the schedule clock has crossed musicFadeOutTime - same permanent-latch pattern as
-     *  isBackgroundVideoTriggered(), edge-detected by GameController to fade out the stage music
-     *  exactly once - see GameController.update(). */
+    /** Latched once the clock passes musicFadeOutTime. */
     public boolean isMusicFadeOutTriggered() { return musicFadeOutTriggered; }
 
-    /** True once the schedule clock has crossed scheduleEndTime - same permanent-latch pattern as
-     *  isBackgroundVideoTriggered(), but for a schedule with no boss to drive GameController's usual
-     *  levelComplete flow (e.g. the tutorial). Always false when the schedule doesn't set
-     *  scheduleEndTime, so this is a no-op for every ordinary arcade stage. */
+    /** Latched once the clock passes scheduleEndTime (stage complete without a boss). */
     public boolean isScheduleEndTriggered() { return scheduleEndTriggered; }
 
-    /** See ScheduleFile.kaleidoscopeTransitionTime - Stage2KaleidoscopeShader.DEFAULT_TRANSITION_TIME
-     *  unless this stage's own schedule overrides it. Meaningless (and unread) for a stage whose
-     *  shaderBackground isn't "kaleidoscope". */
     public float getKaleidoscopeTransitionTime() { return kaleidoscopeTransitionTime; }
 
-    /** See ScheduleFile.groundScrollSpeed - ScrollingBackground.DEFAULT_SCROLL_SPEED unless this
-     *  stage's own schedule overrides it. Meaningless (and unread) for a stage with no ground
-     *  enemies (EnemyDefinition.isGround) in its schedule. */
     public float getGroundScrollSpeed() { return groundScrollSpeed; }
 
-    /** True while the schedule clock sits inside any [start, end) practice checkpoint - see
-     *  GameController.applyPlayerHit(), which checks this before applying the normal
-     *  life-loss/game-over consequences of a hit: inside a window, a hit instead rewinds the
-     *  schedule back to that window's start (via seekTo()) and costs nothing, so a scripted drill
-     *  (e.g. "dodge these bullet walls") can be retried freely instead of eating into the player's
-     *  real run. */
+    /** True inside a practice checkpoint, where a hit rewinds to the checkpoint start instead of
+     *  costing a life. */
     public boolean isInPracticeSection(float time) {
         return findCheckpoint(time) != null;
     }
 
-    /** Where a hit at time (while isInPracticeSection(time)) rewinds the schedule back to - returns
-     *  time itself if no checkpoint currently contains it. */
+    /** Start of the checkpoint containing `time`, or `time` itself if none. */
     public float getPracticeCheckpointStart(float time) {
         PracticeCheckpoint checkpoint = findCheckpoint(time);
         return checkpoint != null ? checkpoint.start : time;
@@ -481,11 +322,8 @@ public class SpawnScheduler {
         return null;
     }
 
-    /** True while the schedule clock sits inside any [start, end) invincibility window - see
-     *  GameController.update(), which skips a hit's normal consequence entirely while this is true
-     *  (life loss, practice-section restart, everything) - unlike Player.isInvincible(), enemies
-     *  keep firing normally throughout, so a scripted "safely stand in this stream of enemy fire"
-     *  drill can keep the fire flowing while it teaches. */
+    /** True inside an invincibility window: hits have no consequence, but unlike
+     *  Player.isInvincible() enemies keep firing. */
     public boolean isPlayerInvincible(float time) {
         for (InvincibilityWindow window : invincibilityWindows) {
             if (time >= window.start && time < window.end) return true;
@@ -493,13 +331,8 @@ public class SpawnScheduler {
         return false;
     }
 
-    /** True while the schedule clock sits inside any [start, end) weapons-disabled window - see
-     *  GameController.update(), which uses this to withhold both firing and bomb use before the
-     *  player's actually been taught to. Only gates whether a press takes effect, not whether it's
-     *  detected - InputManager's isShooting()/isBombJustPressed() keep working normally for
-     *  anything else that reads them (movement's focus-fire slowdown, the orbit ring, point-gem
-     *  homing suppression, replay recording, this same schedule's own "shoot"/"bomb" gate
-     *  conditions), so none of those are affected by this window. */
+    /** True inside a weapons-disabled window (no firing or bombs). Only the press's effect is
+     *  blocked; input is still detected for everything else (gates, focus slowdown, replays). */
     public boolean isWeaponsDisabled(float time) {
         for (WeaponsDisabledWindow window : weaponsDisabledWindows) {
             if (time >= window.start && time < window.end) return true;
@@ -507,11 +340,7 @@ public class SpawnScheduler {
         return false;
     }
 
-    /** True while the schedule clock sits inside any [start, end) Hyper-Attack-disabled window -
-     *  see GameController.update()/Player.update(), which use this to withhold the Hyper Attack
-     *  input before the player's actually been taught it, independent of isWeaponsDisabled() (a
-     *  tutorial teaches normal fire well before Hyper Attack). Same "gates the press, not the
-     *  detection" rule as isWeaponsDisabled(). */
+    /** Like isWeaponsDisabled(), for Hyper Attack only. */
     public boolean isHyperAttackDisabled(float time) {
         for (WeaponsDisabledWindow window : hyperAttackDisabledWindows) {
             if (time >= window.start && time < window.end) return true;
@@ -519,11 +348,7 @@ public class SpawnScheduler {
         return false;
     }
 
-    /** True while the schedule clock sits inside any [start, end) bomb-disabled window - see
-     *  GameController.update(), which uses this to withhold bomb use before the player's actually
-     *  been taught it, independent of isWeaponsDisabled() (a tutorial teaches normal fire and Hyper
-     *  Attack well before bombing). Same "gates the press, not the detection" rule as
-     *  isWeaponsDisabled(). */
+    /** Like isWeaponsDisabled(), for bombs only. */
     public boolean isBombDisabled(float time) {
         for (WeaponsDisabledWindow window : bombDisabledWindows) {
             if (time >= window.start && time < window.end) return true;
@@ -531,12 +356,9 @@ public class SpawnScheduler {
         return false;
     }
 
-    /** Debug-only: jumps the schedule clock to targetTime, marking every event on the far side of
-     *  it as (un)spawned so the normal update() loop picks back up correctly from there - forward
-     *  seeks skip past events without spawning them, rewinds let already-passed events fire again.
-     *  The background-video and music-fade cues follow the same rule: jumping past either marks it
-     *  as already fired without actually triggering it, consistent with spawn events being skipped
-     *  rather than replayed. */
+    /** Jumps the clock to targetTime. Everything before it counts as already happened without
+     *  running (skipped, not replayed), including gates and the video/music/end latches;
+     *  everything after it resets. */
     public void seekTo(float targetTime, AudioManager audio) {
         totalTime = Math.max(0f, targetTime);
         if (schedule != null) {
@@ -544,27 +366,15 @@ public class SpawnScheduler {
         }
         for (SoundCue cue : soundCues) cue.triggered = cue.time <= totalTime;
         for (SpriteCue cue : spriteCues) cue.triggered = cue.time <= totalTime;
-        // Reconstructs each cue's real-time trigger stamp for the new position, rather than just
-        // stamping every past cue with "right now" - that would make every cue before the seek
-        // target (there can be dozens, e.g. a practice checkpoint rewinding after a hit) all become
-        // simultaneously "just triggered" and pile up on screen together. Three cases: a cue whose
-        // window is entirely behind the target is marked already-finished (not just "triggered", or
-        // it would render one more time); one whose window straddles the target resumes from the
-        // same relative point within it; one still ahead of the target goes back to untriggered.
-        // Stopped unconditionally first (at most one cue is ever actively looping at a time) so a
-        // seek landing anywhere else doesn't leave it playing with nothing left tracking it; resumed
-        // below for whichever cue's reveal the new position actually falls inside of.
+        // Rebuild each text cue's real-time stamp for the new position: finished if its window is
+        // behind the target, resumed mid-window if it straddles it, untriggered if ahead. (Stamping
+        // them all "now" would pile every past cue on screen at once.)
         audio.stopTextCueLoop();
         awaitingConfirmCue = null;
         for (TextCue cue : textCues) {
             cue.typingSoundActive = false;
             if (textCuesRequireConfirm) {
-                // A confirm-gated schedule can never have its clock sitting strictly between a
-                // cue's trigger time and its resolution in real gameplay - it's frozen exactly at
-                // the trigger until dismissed - so there's no real "mid-window" case to reconstruct
-                // here the way the duration-timed branch below does. Simpler and, more importantly,
-                // never leaves the schedule frozen after a debug/practice-rewind seek lands: past
-                // the cue's time means it must already have been read and dismissed to get here.
+                // In confirm mode the clock never sits mid-cue, so a passed cue is simply dismissed.
                 cue.dismissed = cue.time <= totalTime;
                 cue.triggeredAtRealTime = cue.dismissed ? realTime : -1f;
             } else if (cue.time > totalTime) {
@@ -582,8 +392,6 @@ public class SpawnScheduler {
                 }
             }
         }
-        // Same "skip rather than replay" rule as every other cue type - a seek past a gate marks it
-        // triggered without requiring its condition, and never leaves the schedule frozen.
         for (GateCue gate : gates) gate.triggered = gate.time <= totalTime;
         activeGate = null;
         gemsAtLastWaypointSpawn = -1;
@@ -616,21 +424,14 @@ public class SpawnScheduler {
             }
         }
 
-        // Freezes the schedule clock exactly like an active GateCue below, until the player
-        // confirms past the message that just triggered above - see ScheduleFile.textCuesRequireConfirm.
-        // Checked ahead of the gate block since totalTime can never reach a gate's own trigger time
-        // while stuck here, so the two can't contend over the same frame's input.
+        // Confirm-gated text cue: frozen until SHOOT/RESTART. The first press during a typewriter
+        // reveal completes it; the next press dismisses.
         if (awaitingConfirmCue != null) {
             if (input.isRestartJustPressed() || input.isShootJustPressed()) {
                 float revealDuration = "typewriter".equals(awaitingConfirmCue.effect) && awaitingConfirmCue.charsPerSecond > 0f
                     ? awaitingConfirmCue.text.length() / awaitingConfirmCue.charsPerSecond : 0f;
                 float cueElapsedTime = realTime - awaitingConfirmCue.triggeredAtRealTime;
                 if (cueElapsedTime < revealDuration) {
-                    // Still typing - this press force-completes the reveal instead of dismissing,
-                    // so the player never has to wait out a slow typewriter once they've already
-                    // asked to move on. Rewinding triggeredAtRealTime (rather than a separate
-                    // "forced" flag) reuses the same elapsed-time math everywhere else already reads
-                    // to decide the reveal is done. Stays frozen - the next press dismisses for real.
                     awaitingConfirmCue.triggeredAtRealTime = realTime - revealDuration;
                     if (awaitingConfirmCue.typingSoundActive) {
                         audio.stopTextCueLoop();
@@ -641,7 +442,7 @@ public class SpawnScheduler {
                     awaitingConfirmCue = null;
                 }
             } else {
-                return; // frozen - nothing below this point advances or fires this frame
+                return; // frozen
             }
         }
 
@@ -649,16 +450,10 @@ public class SpawnScheduler {
             totalTime += delta;
             GateCue nextGate = nextUntriggeredGate();
             if (nextGate != null && totalTime >= nextGate.time) {
-                // Clamp exactly at the gate rather than overshooting into whatever time delta
-                // happened to land on - keeps "how far past the gate are we" well-defined once it
-                // clears, and keeps this deterministic for replay purposes (see ReplayData).
+                // Clamp exactly at the gate (keeps replays deterministic).
                 totalTime = nextGate.time;
                 activeGate = nextGate;
                 enemiesDestroyedAtGateStart = enemiesDestroyed;
-                // Prefer the count from the most recent waypointGem spawn (necessarily taken before
-                // that gem could be collected) over the live value here, which may already include
-                // it if the player was fast enough to grab it before this gate got here - see
-                // gemsAtLastWaypointSpawn's doc.
                 gemsCollectedAtGateStart = gemsAtLastWaypointSpawn >= 0 ? gemsAtLastWaypointSpawn : gemsCollected;
                 gemsAtLastWaypointSpawn = -1;
                 grazePointsAtGateStart = grazePoints;
@@ -669,7 +464,7 @@ public class SpawnScheduler {
                 activeGate.triggered = true;
                 activeGate = null;
             } else {
-                return; // frozen - nothing below this point advances or fires this frame
+                return; // frozen
             }
         }
 
@@ -681,8 +476,6 @@ public class SpawnScheduler {
                     despawnMatching(entityManager, event.type);
                 } else if (event.waypointGem) {
                     spawnWaypointGem(entityManager, event);
-                    // Taken now, before this gem exists to be collected - see
-                    // gemsAtLastWaypointSpawn's doc for why this beats snapshotting at gate time.
                     gemsAtLastWaypointSpawn = gemsCollected;
                 } else if (event.swapWeaponId != null) {
                     entityManager.getPlayer().setSlotWeapon(event.weaponSlot, event.swapWeaponId);
@@ -727,32 +520,20 @@ public class SpawnScheduler {
         return switch (gate.condition) {
             case "shoot" -> input.isShootJustPressed();
             case "bomb" -> input.isBombJustPressed();
-            // A level check, not edge-triggered like the rest of these - see GateCue.weaponId's
-            // doc for why. gate.weaponId == null (an unauthored gate) falls through to
-            // currentWeaponId's own null-equality, which is only ever true if the player has no
-            // weapon equipped at all (mid-death-wipe) - effectively never satisfied by accident.
             case "weaponSwitch" -> Objects.equals(gate.weaponId, currentWeaponId);
             case "moved" -> input.isMoveJustStarted();
             case "movedLeft" -> input.isMoveLeftJustStarted();
             case "movedRight" -> input.isMoveRightJustStarted();
-            // Player.handleHyperAttack() fires on isHyperAttackJustPressed() regardless of which
-            // weapon is equipped - Basic's Hyper Attack is instant (dash out/back), Thunderbolt's
-            // starts a charge (see updateThunderboltCharge()) that "hyperAttackReleased" below
-            // separately confirms was actually released/detonated.
             case "hyperAttack" -> input.isHyperAttackJustPressed();
             case "hyperAttackReleased" -> input.isHyperAttackJustReleased();
             case "enemiesDestroyed" -> enemiesDestroyed - enemiesDestroyedAtGateStart >= gate.count;
             case "gemsCollected" -> gemsCollected - gemsCollectedAtGateStart >= gate.count;
-            // grazePoints increments by 0.5 per graze (see GameController.update()'s
-            // checkGrazeCollisions branch), so gate.count here is a graze-POINT total, not a raw
-            // graze-event count (count: 3 needs 6 individual grazes).
+            // Graze points (0.5 per graze), not graze events.
             case "grazed" -> grazePoints - grazePointsAtGateStart >= gate.count;
-            default -> true; // unrecognized condition string - don't soft-lock the stage over a typo
+            default -> true; // unknown condition: don't soft-lock over a typo
         };
     }
 
-    // Enemy/sprite-cue instantiation itself lives in EnemySpawnOps now, shared with TriggerManager
-    // - see that class's doc.
     private void spawnEnemy(EntityManager entityManager, SpawnEvent event) {
         EnemySpawnOps.spawnEnemy(entityManager, enemyDefinitions, assets, worldWidth, worldHeight,
             event.type, event.x, event.y, event.offsetX, event.offsetY, event.movementPattern, event.firingPattern,

@@ -1,6 +1,6 @@
 package whitelabeltest.gamemanagers.replay;
 
-/** A linear playback cursor over a loaded ReplayData - see GameController.startReplay()/update(). */
+/** A playback cursor over a loaded ReplayData. */
 public class ReplayPlayer {
     private final ReplayData data;
     private int cursor;

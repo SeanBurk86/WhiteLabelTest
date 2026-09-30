@@ -9,6 +9,7 @@ import com.badlogic.gdx.utils.Array;
 import whitelabeltest.enemy.Enemy;
 import whitelabeltest.enemy.bullets.EnemyBullet;
 
+/** Runs all sub-patterns at once. */
 public class CombinedFiringPattern implements FiringPattern {
     private final Array<FiringPattern> patterns;
 

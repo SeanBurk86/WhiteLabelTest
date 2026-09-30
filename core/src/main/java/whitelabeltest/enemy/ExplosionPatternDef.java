@@ -4,16 +4,9 @@ import com.badlogic.gdx.utils.Array;
 import com.badlogic.gdx.utils.Json;
 import com.badlogic.gdx.utils.JsonValue;
 
-/** A reusable death-explosion effect — particle textures/sprite-sheet layout, size, speed,
- *  timing and positioning spread — referenced by id from EnemyDefinition.explosionPattern, the
- *  same way FiringPatternDef/MovementPatternDef let enemies share a behavior by id.
- *
- *  Leaf patterns have type "Burst" (the default) and describe one particle burst. A pattern can
- *  also be "Combined" (its sub-patterns all play at once, each still using its own offsetX/
- *  offsetY) or "Sequence" (its sub-patterns play one at a time — each plays for its own
- *  `duration` before the next stage starts, and the final stage runs until its own particles
- *  finish rather than being cut off), letting an explosion be built out of staged sub-effects
- *  the same way Combined/Sequence firing patterns are built out of sub-patterns. */
+/** A death-explosion effect from data/explosion_patterns.json (EnemyDefinition.explosionPattern).
+ *  "Burst" = one particle burst; "Combined" = sub-patterns together (each with its own offset);
+ *  "Sequence" = sub-patterns one after another for their `duration`, the last running to the end. */
 public class ExplosionPatternDef implements Json.Serializable {
     public static final int DEFAULT_PARTICLE_COUNT = 8;
     public static final int DEFAULT_FRAME_COUNT = 9;

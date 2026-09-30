@@ -11,9 +11,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
 
-/** "Stage > Open Stage..." - picks a stage from data/stages.json by name and loads its
- *  triggerFile. A stage with no triggerFile yet (every stage but stage1, as of this session) is
- *  offered a fresh one via StageLibrary.createTriggerFileForStage() rather than just failing. */
+/** Stage > Open Stage: loads a stage's trigger file, offering to create one if it has none. */
 public class OpenStageDialog {
     private final StageLibrary library;
 

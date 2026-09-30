@@ -14,27 +14,17 @@ import com.badlogic.gdx.utils.Disposable;
 
 import java.nio.IntBuffer;
 
-/** Draws a full-screen BackgroundShader into an off-screen buffer at a fraction of the play area's real
- *  pixel size, then stretches that buffer (linearly filtered) over the play area. The stage shaders
- *  ray-march every pixel every frame (see mandelbulb.frag/kaleidoscope_source.frag/tunnel.frag), so their
- *  cost scales with pixel count - at RESOLUTION_SCALE 0.5 they do a quarter of the work, and their soft,
- *  procedural look hides the lower resolution. Every one of them computes its image from v_texCoords and
- *  u_resolution (the world size), never gl_FragCoord, so they render identically into a buffer of any size.
- *
- *  Same off-screen pass handling as PlayerFeedbackShader: the outer draw clips to the play area in real
- *  screen pixels (Main.java's scissor) and FrameBuffer.end() resets the GL viewport to the whole back
- *  buffer, so both are saved and restored around the pass, and the pass uses a tight world-space projection
- *  so the shader fills the buffer edge to edge. */
+/** Renders a BackgroundShader into an off-screen buffer at a fraction of the play area's pixel size,
+ *  then stretches it over the play area. The shaders ray-march every pixel, so cost scales with pixel
+ *  count; they use v_texCoords/u_resolution (never gl_FragCoord), so any buffer size works. The
+ *  scissor and viewport are saved and restored around the off-screen pass. */
 public class ReducedResolutionRenderer implements Disposable {
-    // Per GraphicsSettings.ShaderQuality level (see scaleFor()/redrawIntervalFor()): HIGH renders at
-    // RESOLUTION_SCALE, MEDIUM at MEDIUM_RESOLUTION_SCALE, and LOW at MEDIUM's scale but never taller than
-    // LOW_MAX_BUFFER_HEIGHT pixels - a fixed budget, since on a Retina display the play area has several
-    // times the pixels of a 1080p one and a fraction of it would still be far too much for an integrated GPU.
+    // HIGH renders at RESOLUTION_SCALE, MEDIUM at MEDIUM_RESOLUTION_SCALE, LOW at the medium scale
+    // capped to LOW_MAX_BUFFER_HEIGHT pixels.
     public static final float RESOLUTION_SCALE = 0.5f;
     public static final float MEDIUM_RESOLUTION_SCALE = 0.35f;
     public static final int LOW_MAX_BUFFER_HEIGHT = 300;
-    // LOW also only redraws the shader every this-many frames, showing the previous result in between -
-    // the backgrounds move slowly enough that half-rate updates are hard to spot, and it halves the cost.
+    // LOW redraws every other frame, reusing the last result in between.
     private static final int LOW_REDRAW_INTERVAL = 2;
 
     private final IntBuffer query = BufferUtils.newIntBuffer(16);
@@ -43,9 +33,7 @@ public class ReducedResolutionRenderer implements Disposable {
     private FrameBuffer buffer;
     private int framesSinceRedraw;
 
-    /** Renders `shader` into the reduced-resolution buffer (or, on a frame its quality level skips, keeps
-     *  the last result) and draws the result over (0, 0, worldWidth, worldHeight). Expects the batch to be
-     *  drawing (begun) and leaves it that way. */
+    /** Renders (or reuses) the buffer and draws it over the world. Expects and leaves the batch begun. */
     public void render(BackgroundShader shader, SpriteBatch batch, Texture quadTexture, float worldWidth, float worldHeight) {
         GraphicsSettings.ShaderQuality quality = shader.quality();
         boolean scissorWasEnabled = Gdx.gl.glIsEnabled(GL20.GL_SCISSOR_TEST);
@@ -98,10 +86,8 @@ public class ReducedResolutionRenderer implements Disposable {
         return quality == GraphicsSettings.ShaderQuality.LOW ? LOW_REDRAW_INTERVAL : 1;
     }
 
-    /** (Re)creates the buffer at the quality level's size (see scaleFor() and LOW_MAX_BUFFER_HEIGHT) for the
-     *  play area's current pixel size - the scissor box when the outer draw is clipping to the play area,
-     *  else the whole back buffer - so a window resize gets a correctly sized buffer on the next frame.
-     *  Returns true when it made a new (empty) buffer, which must be drawn into before it's shown. */
+    /** (Re)creates the buffer for the play area's current pixel size (scissor box, else back buffer),
+     *  so resizes are handled. Returns true for a new, empty buffer that must be drawn before showing. */
     private boolean ensureBuffer(boolean scissorEnabled, GraphicsSettings.ShaderQuality quality) {
         int areaW, areaH;
         if (scissorEnabled) {

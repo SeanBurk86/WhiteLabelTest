@@ -31,26 +31,10 @@ import static whitelabeltest.editor.FormControls.soundRow;
 import static whitelabeltest.editor.FormControls.textRow;
 import static whitelabeltest.editor.FormControls.withBlank;
 
-/** Right-hand editing form for whichever Trigger is currently selected on the StageCanvas.
- *
- * A trigger is edited in two independent parts, deliberately in this order: **Conditions** first -
- * the same gate vocabulary the tutorial stage's SpawnScheduler.GateCue already uses (shoot/bomb/
- * moved/enemiesDestroyed/etc. - see CONDITION_TYPES), which decide WHEN this trigger fires once the
- * camera reaches its distance - then the **Action** it's linked to - what actually happens once
- * those conditions are met: an enemy spawn, sound cue, sprite cue, camera-speed change, or one of
- * the scripted enemy-list actions (despawn/silence/waypoint gem/weapon swap). The Action combo lets
- * you change (or start with none - see ActionPalette's "Trigger Event" tile) which of those a
- * trigger is linked to at any time, clearing whichever fields the previous action used - so a
- * trigger's gating logic and its effect are edited/authored as separable concerns, matching how
- * TriggerManager.fire() itself already treats them (arm on distance+conditions, dispatch on action
- * fields - see that class).
- *
- * Every field commits straight back onto the live Trigger object, then tells the canvas to
- * reposition/relabel that one node and mark the document dirty - see StageCanvas.refreshTrigger().
- * See FormControls for the shared field-row builders, and EnemyDefinitionPanel for the sibling panel
- * that edits an enemy's own template stats instead of a placed instance - EditorApp swaps whichever
- * of the two is relevant into the same dock slot, depending on whether you clicked a canvas trigger
- * or a palette entry. */
+/** Form for the selected trigger: distance and flags, then Conditions (when it fires), then the
+ *  Action (what it does: spawn, sound, sprite, text, speed change or a scripted action). Changing
+ *  the action clears the previous action's fields. Edits write straight to the Trigger and call
+ *  StageCanvas.refreshTrigger(). With 2+ triggers selected it shows a bulk delete instead. */
 public class PropertiesPanel extends ScrollPane {
     private static final String[] CONDITION_TYPES = {
         "shoot", "bomb", "weaponSwitch", "moved", "movedLeft", "movedRight",
@@ -58,8 +42,7 @@ public class PropertiesPanel extends ScrollPane {
         "spawnDestroyed", "gemsCollected", "grazed"
     };
 
-    // Ordered key -> display label for the Action combo - see applyActionKind()/actionKindKey().
-    // LinkedHashMap so the combo's option order matches declaration order here.
+    // Action combo: key -> label, in display order.
     private static final Map<String, String> ACTION_KINDS = new LinkedHashMap<>();
     static {
         ACTION_KINDS.put("none", "(unlinked)");
@@ -80,12 +63,9 @@ public class PropertiesPanel extends ScrollPane {
     private final StageLibrary library;
     private final StageCanvas canvas;
     private final VBox root = new VBox(8);
-    // Persistent (not rebuilt from scratch by showTrigger()'s root.getChildren().clear()) so that
-    // canvas.setPathPointSelectionListener()/setPathEditChangeListener() can refresh just this
-    // section - see refreshMovementPathBox() - when a waypoint is selected/edited directly on the
-    // canvas, without blowing away the rest of this panel's scroll position/fields.
+    // Kept across showTrigger() so they can be refreshed alone (e.g. on canvas waypoint edits)
+    // without resetting the scroll position.
     private final VBox movementPathBox = new VBox(6);
-    // Same "persistent, rebuilt in place" reasoning as movementPathBox - see refreshWaveBox().
     private final VBox waveBox = new VBox(6);
     private Trigger trigger;
 
@@ -112,13 +92,11 @@ public class PropertiesPanel extends ScrollPane {
 
         root.getChildren().add(sectionLabel("Trigger Event"));
         root.getChildren().add(numberRow("Distance", trigger.distance, v -> { trigger.distance = v; onEdited(); }));
-        // See Trigger.gate/requireConfirm's own docs.
         root.getChildren().add(FormControls.checkBox("Gate (freezes the camera until resolved)", trigger.gate,
             v -> { trigger.gate = v; onEdited(); }));
         root.getChildren().add(FormControls.checkBox("Require confirm (waits for a FIRE press)", trigger.requireConfirm,
             v -> { trigger.requireConfirm = v; onEdited(); }));
-        // See Trigger.firstAttemptOnly/retryOnly - mutually exclusive, so checking one clears the
-        // other (showTrigger() rebuilds the form so the cleared box visibly unchecks too).
+        // Mutually exclusive; the form is rebuilt so the other box unchecks.
         root.getChildren().add(FormControls.checkBox("First attempt only (skipped on a practice retry)", trigger.firstAttemptOnly, v -> {
             trigger.firstAttemptOnly = v;
             if (v) trigger.retryOnly = false;
@@ -155,10 +133,7 @@ public class PropertiesPanel extends ScrollPane {
         root.getChildren().add(delete);
     }
 
-    /** Shown instead of showTrigger()'s usual per-field form whenever 2+ triggers are selected at
-     *  once on the canvas (Ctrl/Cmd-click - see StageCanvas.select()'s own doc) - editing several
-     *  triggers' individual fields at once isn't supported, just bulk deletion, which is the actual
-     *  point of multi-select here. */
+    /** 2+ triggers selected: only bulk delete is offered. */
     public void showMultiSelection(List<Trigger> triggers) {
         this.trigger = null;
         root.getChildren().clear();
@@ -174,8 +149,7 @@ public class PropertiesPanel extends ScrollPane {
         canvas.refreshTrigger(trigger);
     }
 
-    /** Which action-kind key a trigger's current field state represents - see ACTION_KINDS. Mirrors
-     *  TriggerManager.fire()'s own dispatch order. */
+    /** The trigger's action kind, checked in TriggerManager.fire()'s dispatch order. */
     private static String actionKindKey(Trigger trigger) {
         if (trigger.sound != null) return "sound";
         if (trigger.spriteTexture != null) return "sprite";
@@ -199,10 +173,8 @@ public class PropertiesPanel extends ScrollPane {
         return "none";
     }
 
-    /** Resets every action-defining field to "unset" then applies sensible defaults for `key` - see
-     *  the Action combo in showTrigger(). Always starts from a clean slate so switching, say, Sound
-     *  Cue -> Enemy Spawn can't leave a stale `sound` value the game would never read but that would
-     *  otherwise still win TriggerManager.fire()'s dispatch (sound is checked first). */
+    /** Clears every action field, then sets defaults for the new kind. A leftover field could
+     *  otherwise win TriggerManager.fire()'s dispatch. */
     private void applyActionKind(Trigger trigger, String key) {
         trigger.type = null;
         trigger.sound = null;
@@ -291,9 +263,7 @@ public class PropertiesPanel extends ScrollPane {
         root.getChildren().add(numberRow("Frame duration", trigger.frameDuration, v -> { trigger.frameDuration = v; onEdited(); }));
     }
 
-    /** See Trigger.text's own doc - these fields mirror whitelabeltest.gamemanagers.TextCue's
-     *  authored (non-runtime) fields exactly; TriggerManager.fireTextCue() builds a live TextCue
-     *  from them the moment this trigger fires. */
+    /** TextCue's authored fields. */
     private void buildTextCueFields() {
         root.getChildren().add(sectionLabel("Text"));
         root.getChildren().add(buildTextArea());
@@ -308,12 +278,7 @@ public class PropertiesPanel extends ScrollPane {
         root.getChildren().add(numberRow("Blinks/sec (blinking only)", trigger.textBlinksPerSecond, v -> { trigger.textBlinksPerSecond = v; onEdited(); }));
     }
 
-    /** A real multi-line TextArea rather than FormControls.textRow's single-line TextField - a
-     *  plain TextField can't produce an actual newline character (typing the two characters "\"
-     *  and "n" would just store that literal substring, not a line break), and Trigger.text needs
-     *  real newlines the same way the migrated stage1_schedule.json text cues always did (JSON's own
-     *  "\n" escape decodes to a real newline on load - see stage1_triggers.json's own text triggers
-     *  for the multi-line ones). Commits on focus-lost, same as every other field here. */
+    /** A TextArea, since cue text needs real newlines. Commits on focus lost. */
     private TextArea buildTextArea() {
         TextArea area = new TextArea(trigger.text != null ? trigger.text : "");
         area.setPrefRowCount(3);
@@ -330,34 +295,21 @@ public class PropertiesPanel extends ScrollPane {
     }
 
     private void buildEnemySpawnFields() {
-        // Changing type here only relabels the node (TriggerNode.refresh()) - its icon is built once
-        // at node-creation time, so it stays stale until the next full canvas rebuild (reload/save
-        // round trip). Acceptable for this pass: retyping an already-placed enemy is rare.
+        // Only relabels the node; its icon updates on the next full canvas rebuild.
         root.getChildren().add(comboRow("Enemy type", enemyIdOptions(), trigger.type, v -> { trigger.type = v; onEdited(); }));
-        // Names this spawn (a single enemy, or the whole wave if one is set below) so another trigger can wait for it
-        // to be destroyed in its entirety - a "spawnDestroyed" condition, see Condition. Leave blank if nothing does.
+        // Lets a spawnDestroyed condition wait for this spawn (or whole wave) to be destroyed.
         root.getChildren().add(textRow("Trigger ID (for \"spawnDestroyed\" conditions)", trigger.id,
             v -> { trigger.id = v.isBlank() ? null : v.trim(); onEdited(); }));
         root.getChildren().add(numberRow("Spawn X", trigger.x, v -> { trigger.x = v; onEdited(); }));
-        // "Spawn Y" doubles as the ARRIVAL point once "Enters from above" below is checked - see
-        // that checkbox's own doc - rather than the actual spawn position in that case.
+        // With "Enters from above", this is the arrival point instead.
         root.getChildren().add(numberRow("Spawn Y (entrance position, not stage progress)", trigger.y, v -> { trigger.y = v; onEdited(); }));
-        // See Trigger.spawnLead's own doc - this trigger still shows/drags at its own `distance`
-        // above (where it should matter/engage) - a nonzero lead just makes it actually spawn that
-        // many distance-units earlier, so it's already present (or already arrived, if it has a
-        // movement path) by the time the camera reaches this trigger's own distance.
+        // Spawns this much earlier than the trigger's distance, so the enemy is in place by then.
         root.getChildren().add(numberRow("Spawn lead (distance-units early)", trigger.spawnLead, v -> { trigger.spawnLead = v; onEdited(); }));
-        // See Trigger.enterFromAbove/EnemyEntranceMovement's own docs - together with a nonzero
-        // Spawn lead above, this is what actually stops the enemy from popping into an
-        // already-visible spot: it spawns off-screen and travels down to Spawn Y on its own, timed to
-        // land there exactly when the camera reaches this trigger's own distance. A no-op with
-        // Spawn lead at 0 (nowhere for the travel time to come from).
+        // Spawns off-screen and flies down to Spawn Y over the lead time (needs a spawn lead > 0).
         root.getChildren().add(FormControls.checkBox("Enters from above (travels down to Spawn Y)", trigger.enterFromAbove, v -> { trigger.enterFromAbove = v; onEdited(); }));
         root.getChildren().add(numberRowNullable("Offset X (formation slot)", trigger.offsetX, v -> { trigger.offsetX = v; onEdited(); }));
         root.getChildren().add(numberRowNullable("Offset Y (formation slot)", trigger.offsetY, v -> { trigger.offsetY = v; onEdited(); }));
-        // Not an "override" - see EnemyDefinition.java's own doc: movement isn't part of the enemy
-        // type at all, so this trigger's own movementPattern is the sole source, usually authored
-        // via the "Movement Path" section below rather than picked from this combo directly.
+        // Movement belongs to the trigger, not the enemy type. Usually authored via Movement Path below.
         root.getChildren().add(comboRow("Movement pattern", withBlank(PatternIds.movementPatternIds()), trigger.movementPattern,
             v -> { trigger.movementPattern = v.isEmpty() ? null : v; onEdited(); refreshWaveBox(); }));
         root.getChildren().add(comboRow("Firing pattern override", withBlank(PatternIds.firingPatternIds()), trigger.firingPattern,
@@ -379,16 +331,9 @@ public class PropertiesPanel extends ScrollPane {
         refreshWaveBox();
     }
 
-    /** Rebuilds the "Movement Path" section for the currently-shown enemy-spawn trigger - resolves
-     *  which pattern it actually uses (purely trigger.movementPattern - see
-     *  MovementPatternLibrary.resolveForTrigger()'s own doc on why there's no enemy-level fallback
-     *  anymore) and shows whichever of three states applies: no pattern resolved yet (offer to
-     *  create one), a pattern that isn't a clean waypoint list (offer to convert it), or an editable
-     *  one (the "Edit Path on Stage"
-     *  toggle plus, once active, the selected point's own fields and delete/save controls). Called
-     *  standalone (not through the full showTrigger() rebuild) from StageCanvas's own path-point-
-     *  selection/change listeners, so clicking/dragging a point on the canvas updates just this
-     *  section instead of scrolling the whole panel back to the top. */
+    /** The Movement Path section: offers to create a pattern if there's none, to convert one that
+     *  isn't a waypoint list, or else the "Edit Path on Stage" toggle with the waypoint fields and
+     *  Save. Also refreshed alone from the canvas's path listeners. */
     private void refreshMovementPathBox() {
         movementPathBox.getChildren().clear();
         if (trigger == null || !"enemy".equals(actionKindKey(trigger))) return;
@@ -446,12 +391,7 @@ public class PropertiesPanel extends ScrollPane {
         movementPathBox.getChildren().add(toggle);
         if (!editingThis) return;
 
-        // From here on, edit canvas's own cached pattern (see StageCanvas.getPathEditPattern()'s own
-        // doc) instead of the `pattern` reloaded from disk above - that reload is only good for the
-        // "what's resolved right now" checks already done above it; mutating IT would silently be
-        // thrown away on the very next refresh, which is why every field below used to look like it
-        // needed a canvas click (landing on the correctly-live canvas.getSelectedPathPoint()) before
-        // an edit would actually stick.
+        // Edit the canvas's cached pattern, not the copy loaded above (edits to that would be lost).
         MovementPatternDef live = canvas.getPathEditPattern();
         final MovementPatternDef livePattern = live != null ? live : pattern;
 
@@ -554,17 +494,8 @@ public class PropertiesPanel extends ScrollPane {
         movementPathBox.getChildren().add(save);
     }
 
-    /** Rebuilds the "Wave" section for the currently-shown enemy-spawn trigger - see Trigger.
-     *  waveShape's own doc: null (the blank combo entry) means this trigger just spawns its one
-     *  enemy normally, same as before this feature existed; picking a shape expands the rest of the
-     *  section around it. Mirrors refreshMovementPathBox()'s own "clear and rebuild in place" style -
-     *  the two sections stay independently usable together now (see TriggerManager.fireWave()'s own
-     *  doc): the Movement Path section above still authors trigger.movementPattern completely
-     *  normally, waveShape/orientation/etc. just decide WHERE/WHEN each copy of that same spawn
-     *  (movement pattern included) lands, rather than one silently disabling the other. Has no
-     *  canvas-driven refresh triggers of its own to wire up (nothing here is editable by clicking the
-     *  canvas directly the way a waypoint is), so unlike refreshMovementPathBox() this is only ever
-     *  called from buildEnemySpawnFields() and its own field callbacks below. */
+    /** The Wave section. A blank shape = a single spawn; picking a shape shows the wave fields.
+     *  Each member still uses the trigger's movement pattern. */
     private void refreshWaveBox() {
         waveBox.getChildren().clear();
         if (trigger == null || !"enemy".equals(actionKindKey(trigger))) return;
@@ -587,9 +518,7 @@ public class PropertiesPanel extends ScrollPane {
         rebuildWaveShapeFields(shapeFields);
         waveBox.getChildren().add(shapeFields);
 
-        // Rotates the whole shape's own layout around the anchor - see WaveSpawnPlanner.plan()'s own
-        // doc - independent of orientation (which only ever decides facing/movement direction, never
-        // where a member actually sits), so this stays effective regardless of hasOwnMovement below.
+        // Rotates the layout about the anchor (orientation only affects facing).
         waveBox.getChildren().add(numberRow("rotation (deg)", trigger.waveRotation, v -> { trigger.waveRotation = v; onEdited(); }));
 
         boolean hasOwnMovement = trigger.movementPattern != null && !trigger.movementPattern.isBlank();
@@ -612,10 +541,7 @@ public class PropertiesPanel extends ScrollPane {
         }
     }
 
-    /** Shape-specific rows for whichever trigger.waveShape is currently selected - rebuilt from
-     *  scratch on every shape change (see refreshWaveBox()'s own doc on why nothing is preserved
-     *  across shapes) rather than just adding a new row for the field the new shape's own combo
-     *  callback below calls this again. */
+    /** Fields for the selected wave shape, rebuilt on every shape change. */
     private void rebuildWaveShapeFields(VBox shapeFields) {
         shapeFields.getChildren().clear();
         switch (trigger.waveShape) {
@@ -643,12 +569,7 @@ public class PropertiesPanel extends ScrollPane {
         }
     }
 
-    /** One row of the "Waypoints" list - every point on the path being edited, each with its own
-     *  editable X/Y right here in the sidebar rather than requiring a canvas click first (that click-
-     *  to-select still works too, and drives the same canvas.selectPathPoint() this row's own
-     *  "Select" button does - see StageCanvas.selectPathPoint(MovementPatternDef)). The fuller field
-     *  set (speed/tension/orientation/sound/weapon-set) stays exclusive to "Selected Waypoint" below,
-     *  reached via Select, so this list doesn't turn into an unreadable wall of fields per point. */
+    /** A Waypoints list row: X/Y plus a Select button. The other fields live under Selected Waypoint. */
     private VBox buildWaypointListRow(MovementPatternDef waypoint, int index) {
         boolean isSelected = waypoint == canvas.getSelectedPathPoint();
         VBox box = new VBox(4);
@@ -677,13 +598,9 @@ public class PropertiesPanel extends ScrollPane {
         return box;
     }
 
-    // "path"/"player"/"fixed" - see MovementPatternDef.orientation's own doc.
     private static final List<String> ORIENTATION_MODES = List.of("path", "player", "fixed");
 
-    /** The spawning enemy's own EnemyDefinition.weaponSets keys - see PropertiesPanel's "Weapon
-     *  Set" combo above and EnemyDefinitionPanel's "Weapon Sets" section, which is where these
-     *  names are actually defined. Empty (not null) when the enemy has none defined yet, so
-     *  withBlank() still produces a valid (if pointless) combo instead of throwing. */
+    /** The spawned enemy's weaponSets names (empty if none). */
     private List<String> weaponSetNames() {
         EnemyDefinition def = library.findEnemy(trigger.type);
         if (def == null || def.weaponSets == null) return new ArrayList<>();
@@ -722,9 +639,7 @@ public class PropertiesPanel extends ScrollPane {
         root.getChildren().add(add);
     }
 
-    /** Every OTHER enemy-spawn trigger in the open stage (a trigger can't wait on itself), nearest the start first -
-     *  what a "spawnDestroyed" condition can wait on. Listed by what they are rather than by Trigger.id, so there's
-     *  something to pick before anything has been named - see spawnDestroyedRow(). */
+    /** Other spawn triggers, by distance: what a spawnDestroyed condition can wait on. */
     private List<Trigger> spawnTriggerCandidates() {
         List<Trigger> candidates = new ArrayList<>();
         for (Trigger t : canvas.getDocument().getTriggers()) {
@@ -734,8 +649,7 @@ public class PropertiesPanel extends ScrollPane {
         return candidates;
     }
 
-    /** A one-line description of a spawn trigger for the dropdown: its id (if it has one), enemy type, distance and
-     *  whether it's a wave, e.g. "waveA - IceKnight @ 12.5 (wave)". */
+    /** e.g. "waveA - IceKnight @ 12.5 (wave)". */
     private static String describeSpawn(Trigger t) {
         StringBuilder sb = new StringBuilder();
         if (t.id != null && !t.id.isBlank()) sb.append(t.id).append(" - ");
@@ -744,9 +658,7 @@ public class PropertiesPanel extends ScrollPane {
         return sb.toString();
     }
 
-    /** The "Spawn trigger" picker of a spawnDestroyed condition: every other enemy-spawn trigger in the stage, by
-     *  description. Choosing one that has no Trigger.id yet gives it one automatically (its enemy type plus a number,
-     *  unique in the file), since the condition refers to it by that id - no need to go and name it first. */
+    /** The spawnDestroyed picker. Picking a trigger without an id gives it a unique one. */
     private HBox spawnDestroyedRow(Condition condition) {
         List<Trigger> candidates = spawnTriggerCandidates();
         List<String> labels = new ArrayList<>();
@@ -758,8 +670,7 @@ public class PropertiesPanel extends ScrollPane {
             labels.add(label);
             if (condition.triggerId != null && condition.triggerId.equals(t.id)) currentLabel = label;
         }
-        // A condition pointing at an id no spawn trigger has (deleted, renamed, or set on a non-spawn trigger) stays
-        // visible rather than silently showing as blank.
+        // Show a dangling id rather than a blank.
         if (condition.triggerId != null && currentLabel.isEmpty()) {
             currentLabel = "(missing) " + condition.triggerId;
             labels.add(currentLabel);
@@ -824,10 +735,8 @@ public class PropertiesPanel extends ScrollPane {
         return box;
     }
 
-    /** Health phases - see HealthPhase/Trigger.healthPhases: at each listed remaining-health percent the
-     *  spawned enemy swaps to a different movement and/or firing pattern (blank = leave that one as it
-     *  is). Only shown for an enemy-spawn trigger; the list stays null (so nothing is written to the
-     *  trigger file) until the first phase is added. */
+    /** Health phases: pattern swaps at health percentages (blank = unchanged). The list stays null
+     *  until one is added. */
     private void buildHealthPhasesSection() {
         root.getChildren().add(sectionLabel("Health phases (change patterns as it takes damage)"));
         if (trigger.healthPhases != null) {

@@ -10,10 +10,7 @@ import javafx.scene.paint.Color;
 import java.util.List;
 import java.util.function.Consumer;
 
-/** Small field-row builders shared by PropertiesPanel (edits a placed Trigger) and
- *  EnemyDefinitionPanel (edits an EnemyDefinition's own template stats) - same "label + control,
- *  commit on Enter/focus-lost" style for both, so the two panels read as one consistent editor
- *  instead of two differently-behaved forms. */
+/** Shared "label + control" rows for the editor panels; text fields commit on Enter or focus lost. */
 public final class FormControls {
     private FormControls() {}
 
@@ -78,30 +75,23 @@ public final class FormControls {
         return row;
     }
 
-    /** A blank-able combo of the available sound effects (see PatternIds.sfxPaths()). A current
-     *  value that isn't in the folder (a hand-typed path, or a placeholder like CHANGE_ME.mp3) is
-     *  kept as an extra entry so opening the panel never silently rewrites it. */
+    /** Sound effects combo (PatternIds.sfxPaths()). */
     public static HBox soundRow(String label, String initial, Consumer<String> onCommit) {
         return comboRowKeepingCurrent(label, PatternIds.sfxPaths(), initial, onCommit);
     }
 
-    /** A blank-able combo of the enemy textures under images/enemies (see
-     *  PatternIds.enemyTexturePaths()). A current value that isn't in the folder (a hand-typed path,
-     *  or art not yet dropped in) is kept as an extra entry so opening the panel never silently
-     *  rewrites it. */
+    /** Enemy textures combo (images/enemies). */
     public static HBox enemyTextureRow(String label, String initial, Consumer<String> onCommit) {
         return comboRowKeepingCurrent(label, PatternIds.enemyTexturePaths(), initial, onCommit);
     }
 
-    /** Same as enemyTextureRow but for the bullet textures under images/bullets (see
-     *  PatternIds.bulletTexturePaths()). */
+    /** Bullet textures combo (images/bullets). */
     public static HBox bulletTextureRow(String label, String initial, Consumer<String> onCommit) {
         return comboRowKeepingCurrent(label, PatternIds.bulletTexturePaths(), initial, onCommit);
     }
 
-    /** Shared by soundRow/enemyTextureRow/bulletTextureRow: a blank-able combo of the given options,
-     *  with the current value added as an extra entry when it isn't already one of them, so opening
-     *  the panel never silently rewrites a hand-typed or not-yet-present path. */
+    /** A blank-able combo. A current value not in the options is added, so opening the panel never
+     *  rewrites it. */
     private static HBox comboRowKeepingCurrent(String label, List<String> options, String initial, Consumer<String> onCommit) {
         List<String> withCurrent = withBlank(options);
         if (initial != null && !initial.isEmpty() && !withCurrent.contains(initial)) withCurrent.add(initial);

@@ -13,8 +13,7 @@ import whitelabeltest.enemy.bullets.AimedEnemyBullet;
 import whitelabeltest.enemy.bullets.EnemyBullet;
 import whitelabeltest.gamemanagers.ObjectPools;
 
-/** Like AimedFiring, but the target is a fixed world-space point set at construction time rather
- *  than the player's current position — useful for scripted shots at a known location. */
+/** Like AimedFiring, but aimed at a fixed world point instead of the player. */
 public class PointAimedFiring implements FiringPattern {
     private final float fireRate;
     private final float bulletSize;
@@ -37,9 +36,7 @@ public class PointAimedFiring implements FiringPattern {
         this(fireRate, bulletSize, bulletSpeed, spriteOverride, targetX, targetY, offsetX, offsetY, bulletDamage, SpeedProfile.CONSTANT_SPEED, HitboxSpec.DEFAULT);
     }
 
-    /** @param speedProfile how bulletSpeed changes over each bullet's flight - see SpeedProfile
-     *  @param hitboxSpec each bullet's collision hitbox, independent of its visual size - see
-     *  HitboxSpec */
+    /** @param speedProfile,hitboxSpec see SpeedProfile and HitboxSpec */
     public PointAimedFiring(float fireRate, float bulletSize, float bulletSpeed, Animation<TextureRegion> spriteOverride, float targetX, float targetY, float offsetX, float offsetY, int bulletDamage, SpeedProfile speedProfile, HitboxSpec hitboxSpec) {
         this.fireRate = fireRate;
         this.bulletSize = bulletSize;

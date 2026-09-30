@@ -1,10 +1,7 @@
 package whitelabeltest.gamemanagers.spawning;
 
-/** Letter grade summarizing a level-complete run - computed in
- *  GameController.computeRank() from the same stats UIManager.drawLevelComplete's MISSION_LOG
- *  rows already show (kill rate, peak chain, boss takedown speed, bombs/lives preserved), and
- *  displayed alongside them as the mockup's side "TACTICAL RANK" badge card. Purely a display
- *  flourish - it doesn't feed back into the score. */
+/** Display-only letter grade for a cleared stage (see GameController.computeRank()). Doesn't affect
+ *  the score. */
 public enum LevelRank {
     S("PERFECT CLEAR"),
     A("EXCELLENT CLEAR"),

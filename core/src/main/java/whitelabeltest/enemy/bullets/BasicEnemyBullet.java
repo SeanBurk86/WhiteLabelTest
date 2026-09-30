@@ -6,6 +6,7 @@ import com.badlogic.gdx.graphics.g2d.SpriteBatch;
 import com.badlogic.gdx.math.Rectangle;
 import whitelabeltest.enemy.Enemy;
 
+/** A simple bullet moving straight down. */
 public class BasicEnemyBullet implements EnemyBullet {
     private Sprite sprite;
     private Rectangle rectangle;

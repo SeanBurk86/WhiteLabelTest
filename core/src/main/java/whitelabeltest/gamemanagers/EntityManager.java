@@ -27,6 +27,8 @@ import whitelabeltest.player.weapons.GreenLightningBurst;
 import whitelabeltest.player.weapons.ThunderboltWeapon;
 import whitelabeltest.player.weapons.Weapon;
 
+/** Owns the player and every pooled entity list (enemies, bullets, pickups, effects); updates and
+ *  draws them in a fixed layer order. */
 public class EntityManager {
     private final Player player;
     private final Array<Enemy> enemies;
@@ -55,8 +57,7 @@ public class EntityManager {
         this.worldWidth = worldWidth;
         this.worldHeight = worldHeight;
 
-        // Frame size is 480×480; sprite is exported as a grid (e.g. 13 cols × 8 rows)
-        // so that the texture width stays within GPU max-texture-size limits.
+        // 480x480 frames exported as a grid to stay within GPU max texture size.
         int bombFrameWidth  = 480;
         int bombFrameHeight = 480;
         TextureRegion[][] bombGrid   = TextureRegion.split(assets.bombSpriteTexture, bombFrameWidth, bombFrameHeight);
@@ -93,23 +94,15 @@ public class EntityManager {
         bombAnimationTime = 0f;
     }
 
-    /** Spawns a scripted sprite cue - see SpawnScheduler.spawnSpriteCue(), which builds the
-     *  animation from spawn_schedule.json's SpriteCue and hands it off here. width/height (rather
-     *  than a single square size) so wide/tall sheet art like WarningSign.png draws at its true
-     *  aspect ratio instead of being squashed into a square. */
+    /** Spawns a scripted sprite cue (see EnemySpawnOps.spawnSpriteCue()). */
     public void spawnScheduledSprite(Animation<TextureRegion> animation, float x, float y, float width, float height) {
         ScheduledSpriteEffect effect = ObjectPools.scheduledSpriteEffectPool.obtain();
         effect.init(animation, x, y, width, height);
         scheduledSprites.add(effect);
     }
 
-    /** @param groundScrollSpeed the current stage schedule's default background scroll speed (see
-     *  SpawnScheduler.getGroundScrollSpeed()) - only actually used by a ground enemy (isGround())
-     *  that isn't attached to a specific background layer (EnemyDefinition.backgroundLayer == -1);
-     *  one that IS attached instead moves at THAT layer's own scrollSpeed - see
-     *  resolveGroundScrollSpeed()/background's getLayerScrollSpeed(). background may be null (e.g.
-     *  PatternPreviewer's isolated preview never reaches this method at all - see its own tick()),
-     *  in which case every ground enemy just falls back to groundScrollSpeed. */
+    /** @param groundScrollSpeed scroll applied to ground enemies not attached to a background layer;
+     *  attached ones use their layer's speed. background may be null. */
     public void update(float delta, InputManager input, AssetManager assets, AudioManager audio, boolean weaponsDisabled, boolean hyperAttackDisabled, float groundScrollSpeed, ScrollingBackground background) {
         if (bombActive) {
             bombAnimationTime += delta;
@@ -139,8 +132,7 @@ public class EntityManager {
             }
         }
 
-        // Enemies stop shooting while the player is dead or still in their post-respawn
-        // invincibility window, so nothing can hit a ship that isn't fully back in play yet.
+        // Enemies hold fire while the player is dead or in post-respawn invincibility.
         boolean firingPaused = player.isDead() || player.isInvincible();
         for (int i = enemies.size - 1; i >= 0; i--) {
             Enemy e = enemies.get(i);
@@ -218,9 +210,7 @@ public class EntityManager {
         }
     }
 
-    /** See EnemyDefinition.backgroundLayer - null (e.g. PatternPreviewer's isolated preview) or an
-     *  out-of-range index (see ScrollingBackground.getLayerScrollSpeed's own doc on why that's a
-     *  graceful fallback rather than an error) both just leave the enemy at groundScrollSpeed. */
+    /** The layer's scroll speed for a layer-attached enemy, else groundScrollSpeed. */
     private float resolveGroundScrollSpeed(Enemy e, float groundScrollSpeed, ScrollingBackground background) {
         if (background == null || e.getBackgroundLayer() < 0) return groundScrollSpeed;
         return background.getLayerScrollSpeed(e.getBackgroundLayer(), groundScrollSpeed);
@@ -230,17 +220,9 @@ public class EntityManager {
         draw(batch, 0);
     }
 
-    /** @param attachedLayerCount the stage's current background layer count while GameController.
-     *  draw() has already drawn every EnemyDefinition.backgroundLayer-attached enemy itself,
-     *  sandwiched between its layer and the next (see drawEnemiesAttachedToLayer()) - an enemy
-     *  attached to an in-range layer (0 <= backgroundLayer < attachedLayerCount) must be skipped
-     *  here to avoid a double draw. Pass 0 whenever there's no layer stack to sandwich against this
-     *  frame (a boss/background video or shader background is covering the screen instead - see
-     *  ScrollingBackground.isDrawingLayerStack()), so every enemy just draws normally regardless of
-     *  its backgroundLayer - 0 also naturally covers an enemy attached to an out-of-range layer
-     *  index (e.g. reused across a stage with fewer layers than it was authored against): such an
-     *  enemy is never visited by drawEnemiesAttachedToLayer() either, so it must fall back to this
-     *  normal pass instead of never being drawn at all. */
+    /** @param attachedLayerCount number of background layers whose attached enemies were already
+     *  drawn between layers (see drawEnemiesAttachedToLayer()); those are skipped here. Pass 0 when
+     *  no layer stack is drawn this frame (video/shader background), so every enemy draws here. */
     public void draw(SpriteBatch batch, int attachedLayerCount) {
         for (Powerup p : powerups) p.draw(batch);
         for (PointGem g : pointGems) g.draw(batch);
@@ -273,30 +255,21 @@ public class EntityManager {
         for (ScheduledSpriteEffect s : scheduledSprites) s.draw(batch);
     }
 
-    /** Draws (shadow then sprite) every enemy attached to backgroundLayers[layerIndex] - see
-     *  EnemyDefinition.backgroundLayer. Called by GameController.draw() right after it draws that
-     *  layer itself, sandwiching these enemies between it and the next layer instead of always
-     *  drawing in front of the whole background stack (draw()'s ordinary path, still used by every
-     *  enemy that leaves backgroundLayer unset). */
+    /** Draws enemies attached to background layer layerIndex, called right after that layer so they
+     *  sit between it and the next. */
     public void drawEnemiesAttachedToLayer(SpriteBatch batch, int layerIndex) {
         for (Enemy e : enemies) if (e.getBackgroundLayer() == layerIndex) e.drawShadow(batch);
         for (Enemy e : enemies) if (e.getBackgroundLayer() == layerIndex) e.draw(batch);
     }
 
-    /** True if e.getBackgroundLayer() names an in-range layer index (0 <= layer < layerCount) that
-     *  drawEnemiesAttachedToLayer() will therefore already have drawn - see draw(SpriteBatch, int). */
+    /** True if e is attached to an in-range layer (already drawn by drawEnemiesAttachedToLayer()). */
     private boolean isAttached(Enemy e, int layerCount) {
         int layer = e.getBackgroundLayer();
         return layer >= 0 && layer < layerCount;
     }
 
-    /** Draws every active Thunderbolt strike's dark outline sprites first (normal alpha blend, the
-     *  batch's existing blend state - see ThunderboltWeapon.OUTLINE_COLOR_R/G/B), then their glow
-     *  and core sprites inside one shared GL_MAX blend section, instead of each strike's own
-     *  draw() flushing the batch and toggling glBlendEquation independently (see
-     *  ThunderboltWeapon.draw()/drawOutline()/drawGlowAndCore()). A level-4 fire spawns up to 6
-     *  concurrent strikes, so batching this here turns what would be up to a dozen forced flushes
-     *  (each a GPU sync point) per frame into just two. */
+    /** Draws all Thunderbolt outlines (normal blend), then all glows/cores in one shared GL_MAX blend
+     *  section, so many concurrent strikes cost two batch flushes instead of two each. */
     private void drawThunderboltBolts(SpriteBatch batch) {
         for (Weapon b : bullets) {
             if (b instanceof ThunderboltWeapon) ((ThunderboltWeapon) b).drawOutline(batch);
@@ -349,8 +322,7 @@ public class EntityManager {
         player.reset(loadout);
     }
 
-    /** Debug-only: wipes every non-player entity so a spawn-schedule seek doesn't leave stale
-     *  enemies/bullets from the old point in time on screen. Player (weapons/score/lives) is untouched. */
+    /** Removes every non-player entity (after a seek or practice restart). The player is untouched. */
     public void clearWorld() {
         for (Enemy e : enemies) ObjectPools.freeEnemy(e);
         enemies.clear();
@@ -390,10 +362,8 @@ public class EntityManager {
         }
     }
 
-    /** Destroys every in-flight bullet fired by source - see Enemy.cancelsBulletsOnDeath()/
-     *  EnemyDefinition.bulletCancel. Must be called before source is freed back to its pool
-     *  (see GameController.destroyEnemy) - EnemyBullet.getSourceEnemy() compares by reference and
-     *  a freed enemy's pooled instance can be reused for an unrelated enemy afterward. */
+    /** Destroys every bullet fired by source (EnemyDefinition.bulletCancel). Call before source is
+     *  freed: the match is by reference, and a pooled instance can be reused. */
     public void destroyEnemyBullets(Enemy source, AssetManager assets) {
         for (int i = enemyBullets.size - 1; i >= 0; i--) {
             EnemyBullet b = enemyBullets.get(i);
@@ -404,9 +374,7 @@ public class EntityManager {
         }
     }
 
-    /** Shared by destroyAllEnemyBullets (bomb) and destroyEnemyBullets (enemy bullet-cancel death)
-     *  - the two ways a bullet is destroyed outright instead of expiring normally - see
-     *  BulletCancelEffect. */
+    /** The effect shown when a bullet is cancelled (by a bomb or its source's death). */
     private void spawnBulletCancelEffect(EnemyBullet b, AssetManager assets) {
         Rectangle rect = b.getRectangle();
         BulletCancelEffect effect = ObjectPools.bulletCancelEffectPool.obtain();
@@ -428,15 +396,12 @@ public class EntityManager {
     public Array<PointGem> getPointGems() { return pointGems; }
     public Array<GreenLightningBurst> getGreenLightningBursts() { return greenLightningBursts; }
 
-    // Scratch list of the distinct textures enemy bullets are using this frame - see drawEnemyBulletsByTexture().
+    // Scratch list of distinct enemy bullet textures this frame.
     private final Array<Texture> enemyBulletTextures = new Array<>(false, 8);
 
-    /** Draws enemy bullets one texture at a time. In spawn order a mix of bullet types (feathers, eggs'
-     *  shots, aimed pellets, shape volleys...) switches texture almost every bullet, and every switch
-     *  forces the sprite batch to flush a separate draw call - grouping by texture brings that down to one
-     *  per bullet texture on screen. Bullets of different types can now overlap in a different order than
-     *  they were fired, which isn't visible in practice. Bullets without a sprite (e.g. lasers) draw last,
-     *  in their original order. Index loops rather than for-each: libGDX Arrays can't nest iterators. */
+    /** Draws enemy bullets grouped by texture, so each texture costs one batch flush instead of one
+     *  per switch. Sprite-less bullets (lasers) draw last. Index loops because libGDX Arrays can't
+     *  nest iterators. */
     private void drawEnemyBulletsByTexture(SpriteBatch batch) {
         enemyBulletTextures.clear();
         for (int i = 0; i < enemyBullets.size; i++) {

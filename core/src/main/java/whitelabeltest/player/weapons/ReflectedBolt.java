@@ -10,17 +10,13 @@ import whitelabeltest.gamemanagers.AssetManager;
 import whitelabeltest.gamemanagers.audio.AudioManager;
 import whitelabeltest.player.Player;
 
-/** A bullet the player's reflect shield bounced back at the enemies. Never spawned through the
- *  normal fire-button path (spawn()/getFireRate() are unused) - CollisionManager builds one
- *  directly, at the point of reflection, whenever an enemy bullet touches an active shield,
- *  copying that bullet's own sprite and homing on whichever enemy fired it. */
+/** An enemy bullet bounced back by the reflect shield (created by CollisionManager), aimed at the
+ *  enemy that fired it. spawn()/getFireRate() are unused. */
 public class ReflectedBolt extends BaseWeapon {
     private static final float SPEED = 10f;
 
-    /** @param sourceSprite the reflected bullet's own current sprite, copied (not shared) so this
-     *  bolt looks exactly like what it bounced back
-     *  @param targetEnemy the enemy that fired the reflected bullet, if known and still active -
-     *  the bolt is aimed at its current position; otherwise it just flies straight up */
+    /** @param sourceSprite copied, not shared
+     *  @param targetEnemy aimed at if still active; otherwise the bolt flies straight up */
     public void init(Sprite sourceSprite, float x, float y, int damage, Enemy targetEnemy) {
         if (sprite == null) sprite = new Sprite(sourceSprite);
         else {

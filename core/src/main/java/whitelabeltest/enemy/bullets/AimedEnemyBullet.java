@@ -10,17 +10,16 @@ import whitelabeltest.enemy.Enemy;
 import whitelabeltest.enemy.HitboxSpec;
 import whitelabeltest.enemy.SpeedProfile;
 
+/** Travels in a straight line toward a target point, facing its direction; supports speed ramps. */
 public class AimedEnemyBullet implements EnemyBullet {
     private Sprite sprite;
     private final Rectangle rectangle;
-    // Direction is kept separate from velocity (unlike a plain "bake speed into the vector once"
-    // bullet) so currentSpeed can keep changing over the bullet's flight - see update()'s
-    // speed ramp - without needing to re-derive direction from anywhere.
+    // Direction kept separate from velocity so the speed can ramp.
     private final Vector2 direction = new Vector2();
     private final Vector2 velocity = new Vector2();
     private float currentSpeed;
     private final SpeedRamp speedRamp = new SpeedRamp();
-    // Null shape defaults to CIRCLE for this bullet type - see HitboxSpec.shape.
+    // A null shape defaults to CIRCLE for this bullet type.
     private HitboxSpec hitboxSpec = HitboxSpec.DEFAULT;
     private int damage = 1;
     private Enemy sourceEnemy;
@@ -41,10 +40,7 @@ public class AimedEnemyBullet implements EnemyBullet {
         init(animation, x, y, targetX, targetY, size, speed, damage, source, SpeedProfile.CONSTANT_SPEED, HitboxSpec.DEFAULT);
     }
 
-    /** @param speedProfile how currentSpeed changes over the bullet's flight - see SpeedProfile;
-     *  pass SpeedProfile.CONSTANT_SPEED for the classic constant-speed behavior
-     *  @param hitboxSpec the bullet's collision hitbox, independent of its visual size - see
-     *  HitboxSpec; pass HitboxSpec.DEFAULT for the classic "hitbox exactly fits the sprite" */
+    /** @param speedProfile,hitboxSpec see SpeedProfile and HitboxSpec */
     public void init(Animation<TextureRegion> animation, float x, float y, float targetX, float targetY, float size, float speed, int damage, Enemy source, SpeedProfile speedProfile, HitboxSpec hitboxSpec) {
         this.animation = animation;
         this.hitboxSpec = hitboxSpec != null ? hitboxSpec : HitboxSpec.DEFAULT;
@@ -119,9 +115,7 @@ public class AimedEnemyBullet implements EnemyBullet {
     @Override
     public float getRotation() { return sprite.getRotation(); }
 
-    // The rect is already centered on the sprite's true center (see init()'s use of
-    // setCenterX/Y), the same point Sprite.setOriginCenter() rotates the sprite around - so
-    // pivoting the hitbox there keeps it turning in lockstep with the sprite.
+    // Pivot at the rect center, where the sprite rotates (setOriginCenter()).
     @Override
     public float getRotationPivotX() { return rectangle.x + rectangle.width / 2f; }
 

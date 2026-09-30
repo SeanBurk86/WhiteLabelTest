@@ -7,12 +7,9 @@ import com.badlogic.gdx.graphics.g2d.TextureRegion;
 import com.badlogic.gdx.math.Rectangle;
 import whitelabeltest.enemy.Enemy;
 
-/** A persistent beam anchored at a fixed emission point that can rotate around that point over
- *  its lifetime, unlike other bullets which translate away from where they were fired. Expires
- *  after `duration` seconds rather than by leaving the screen. */
+/** A beam anchored at its emission point, optionally rotating about it; expires after `duration`. */
 public class LaserBullet implements EnemyBullet {
-    // The hitbox is narrower than the rendered beam (as SineBullet's rectangle is smaller than
-    // its sprite too) so a visually chunky beam doesn't feel unfairly wide to dodge.
+    // Hitbox narrower than the drawn beam so a chunky beam doesn't feel unfair to dodge.
     private static final float HITBOX_THICKNESS_SCALE = 0.4f;
 
     private Sprite sprite;
@@ -31,8 +28,8 @@ public class LaserBullet implements EnemyBullet {
     private Animation<TextureRegion> animation;
     private float animationTime;
 
-    /** @param startAngleDeg, angularSpeed standard math convention (0 = right, 90 = up); the beam
-     *  rotates at angularSpeed degrees/second for its whole lifetime (0 = doesn't rotate). */
+    /** @param startAngleDeg degrees (0 = right, 90 = up)
+     *  @param angularSpeed rotation in degrees/second (0 = fixed) */
     public void init(Animation<TextureRegion> animation, float originX, float originY, float startAngleDeg, float angularSpeed, float length, float thickness, float duration, int damage, Enemy source) {
         this.animation = animation;
         this.damage = damage;
@@ -54,8 +51,7 @@ public class LaserBullet implements EnemyBullet {
 
         sprite.setSize(thickness, length);
         sprite.setOrigin(thickness / 2f, 0f); // pivot at the emission point (base of the beam)
-        // The origin never moves once fired, so the un-rotated box is constant for the bullet's
-        // whole lifetime — only its rotation (see getRotation()) changes as the beam sweeps.
+        // The origin never moves, so the unrotated box is fixed; only its rotation changes.
         float hitboxThickness = thickness * HITBOX_THICKNESS_SCALE;
         rectangle.set(originX - hitboxThickness / 2f, originY, hitboxThickness, length);
         updateTransform();

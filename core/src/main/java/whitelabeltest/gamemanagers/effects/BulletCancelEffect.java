@@ -6,11 +6,8 @@ import com.badlogic.gdx.graphics.g2d.Animation;
 import com.badlogic.gdx.graphics.g2d.TextureRegion;
 import com.badlogic.gdx.math.MathUtils;
 
-/** Plays wherever an in-flight enemy bullet is destroyed outright instead of expiring normally -
- *  by a bomb (EntityManager.destroyAllEnemyBullets) or an enemy's bullet-cancel death
- *  (EntityManager.destroyEnemyBullets) - see EnemyDefinition.bulletCancel. One of the five
- *  BulletCancel0N sprite-sheet variants is picked at random each time so a bomb wiping a whole
- *  screen of bullets at once doesn't look identical everywhere. */
+/** Plays where an enemy bullet is cancelled (by a bomb or its source's death), using one of five
+ *  sheet variants at random so a screen-wide cancel doesn't look uniform. */
 public class BulletCancelEffect extends SingleShotAnimation {
     private static final int COLUMNS = 4;
     private static final int ROWS = 3;

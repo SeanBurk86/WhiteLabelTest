@@ -6,6 +6,7 @@ import com.badlogic.gdx.Preferences;
 import com.badlogic.gdx.controllers.Controller;
 import com.badlogic.gdx.controllers.ControllerMapping;
 
+/** Persisted keyboard and gamepad bindings per Action. */
 public class KeyBindings {
 
     public enum GamepadButton {

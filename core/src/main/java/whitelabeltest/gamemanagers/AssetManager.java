@@ -22,20 +22,18 @@ import whitelabeltest.enemy.PatternRegistry;
 import whitelabeltest.player.PlayerDefinition;
 import whitelabeltest.player.weapons.WeaponDefinition;
 
+/** Loads every data/*.json definition file and the textures they reference at startup, and owns
+ *  those textures. */
 public class AssetManager implements Disposable {
     private final ObjectMap<String, Texture> textures = new ObjectMap<>();
     private final ObjectMap<String, WeaponDefinition> weaponDefinitions = new ObjectMap<>();
     private final ObjectMap<String, EnemyDefinition> enemyDefinitions = new ObjectMap<>();
     private final PlayerDefinition playerDefinition;
     private final GameBalance gameBalance;
-    // Pool of every stage that exists, keyed by id - which of these play, and in what order, for a
-    // given run is a separate concern (see stageSequences/StageSequenceDefinition), so a stage can
-    // be reused across multiple sequences (e.g. a tutorial mode reusing a campaign stage).
+    // Every stage by id; which ones play, in what order, is up to stageSequences.
     private final ObjectMap<String, StageDefinition> stages = new ObjectMap<>();
     private final ObjectMap<String, StageSequenceDefinition> stageSequences = new ObjectMap<>();
-    // Pool of clips InterstitialPlayer picks randomly from before a stage starts - see
-    // GameController.startInterstitial(). Not per-stage (unlike bossVideo), so it's just a flat
-    // list rather than a field on StageDefinition.
+    // Clips InterstitialPlayer picks from at random before a stage.
     private final Array<String> interstitialVideos;
 
     public final Texture playerTexture;
@@ -50,8 +48,7 @@ public class AssetManager implements Disposable {
     public final Texture bulletTexture;
     public final Texture pixelTexture;
     public final Texture circleTexture;
-    // Index 0 = tier 1 (PowerUp1.png) ... index 2 = tier 3 (PowerUp3.png) - see WeaponPowerup's
-    // amount/GameController.powerupTextureForTier().
+    // Index 0..2 = powerup tier 1..3.
     public final Texture[] powerupTierTextures;
     public final Texture pointGemTexture;
 
@@ -140,17 +137,9 @@ public class AssetManager implements Disposable {
         };
         pointGemTexture = new Texture("images/pickups/PointGem.png");
 
-        // Stage spawn schedules can reference arbitrary textures via spriteCues (see
-        // SpawnScheduler.spawnSpriteCue), which - unlike every enemy/bullet/explosion texture
-        // above - aren't known here, so they'd otherwise only get loaded the first time a schedule
-        // actually needs them, mid-gameplay. loadTexture() is a synchronous decode + GPU upload
-        // (new Texture(path)), so hitting that cold makes for a real, visible frame-rate stutter
-        // the instant the cue fires. WarningSign.png (the tutorial's warning-sign sprite cue) is
-        // especially bad here - its source art is a 4860x1400 sheet (~27MB decoded) despite only
-        // ever being drawn at 2 world units on screen - so it's preloaded eagerly here instead,
-        // during startup loading where a hitch isn't noticeable. If a future stage's spriteCues
-        // reference a new texture, preload it here too, or (better) shrink WarningSign.png itself -
-        // this only hides the load-time cost, not the wasted decode/GPU-memory overhead.
+        // Sprite cue textures otherwise load on first use, causing a visible hitch mid-stage.
+        // WarningSign.png is a very large sheet (4860x1400), so preload it here. Preload any new
+        // sprite cue texture the same way (or shrink the art).
         loadTexture("images/ui/WarningSign.png");
 
         Pixmap pixmap = new Pixmap(1, 1, Pixmap.Format.RGBA8888);
@@ -202,10 +191,7 @@ public class AssetManager implements Disposable {
         return path != null ? textures.get(path) : null;
     }
 
-    /** Loads the texture at this asset path if it isn't already cached, then returns it — used by
-     *  the debug enemy/pattern editor when previewing an enemy whose texture wasn't referenced by
-     *  any enemy loaded at startup (e.g. a brand-new enemy definition, or one whose texture field
-     *  was just changed). */
+    /** Returns the texture, loading it first if it isn't cached. */
     public Texture ensureTexture(String path) {
         if (path == null) return null;
         loadTexture(path);
@@ -226,15 +212,12 @@ public class AssetManager implements Disposable {
         return ids;
     }
 
-    /** Registers (or overwrites) an enemy definition under an id — used by the debug enemy/pattern
-     *  editor to install a live-edited or brand-new working copy without touching the JSON-loaded
-     *  set, the same way PatternRegistry.putMovement/putFiring work for patterns. */
+    /** Registers or replaces an enemy definition in memory (used by the debug pattern editor). */
     public void putEnemyDefinition(EnemyDefinition def) {
         enemyDefinitions.put(def.id, def);
     }
 
-    /** All enemy definitions currently registered, sorted by id — used when writing enemies.json
-     *  back to disk. */
+    /** All enemy definitions sorted by id, for writing enemies.json. */
     public Array<EnemyDefinition> getAllEnemyDefinitionsSorted() {
         Array<EnemyDefinition> out = new Array<>();
         for (String id : getEnemyIds()) out.add(enemyDefinitions.get(id));
@@ -253,11 +236,7 @@ public class AssetManager implements Disposable {
         return stages.get(id);
     }
 
-    // Debug-only: every stage id that exists, regardless of which stageSequence(s) (if any)
-    // actually play it - see GameController's debug-menu stage select, which lets a dev jump
-    // straight to any of these instead of only the ones reachable through normal play. Sorted for
-    // a stable, predictable left/right cycling order in that menu (ObjectMap's own iteration order
-    // isn't guaranteed).
+    // Every stage id, sorted (for the debug menu's stage select).
     public Array<String> getStageIds() {
         Array<String> ids = new Array<>(stages.size);
         for (String id : stages.keys()) ids.add(id);

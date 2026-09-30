@@ -5,6 +5,8 @@ import com.badlogic.gdx.math.Circle;
 import com.badlogic.gdx.math.Rectangle;
 import com.badlogic.gdx.math.Vector2;
 
+/** Homes on the player (rotated by angleDeg - 270) and finishes (enemy removed) once within
+ *  stopDistance and fully on screen. */
 public class SeekingMovement implements MovementPattern {
     public static final float DEFAULT_STOP_DISTANCE = 3.0f;
 
@@ -30,16 +32,14 @@ public class SeekingMovement implements MovementPattern {
 
         float dist = tempPos.dst(playerHitbox.x, playerHitbox.y);
 
-        // Even once within stopDistance, keep advancing until the whole sprite has entered the
-        // play area - otherwise an enemy that spawns off-screen close to the player (or with a
-        // generous stopDistance) could stop while still partially off-screen.
+        // Don't stop until the whole sprite is on screen.
         if (dist <= stopDistance && isFullyOnScreen(rectangle, worldWidth, worldHeight)) {
             finished = true;
         } else {
             tempDir.set(playerHitbox.x, playerHitbox.y).sub(tempPos).nor();
             tempDir.rotateDeg(angleOffsetDeg);
             if (inverseMovement) {
-                tempDir.scl(-1); // Move away from player
+                tempDir.scl(-1); // flee instead
             }
             sprite.translate(tempDir.x * speed * delta, tempDir.y * speed * delta);
             sprite.setRotation(tempDir.angleDeg() + 90f);

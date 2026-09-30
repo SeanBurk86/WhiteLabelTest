@@ -4,18 +4,9 @@ import com.badlogic.gdx.graphics.g2d.SpriteBatch;
 import com.badlogic.gdx.graphics.glutils.ShaderProgram;
 import com.badlogic.gdx.utils.Disposable;
 
-/** Rotates the hue of whatever ScrollingBackground draws through it (its ordinary scrolling
- *  backgroundLayers, NOT a shaderBackground/backgroundVideo) - see
- *  StageDefinition.hueCycleBackground. Wraps a normal draw call with begin()/end() rather than
- *  implementing BackgroundShader: that interface's render() is for a full-screen procedural effect
- *  that ignores its input texture (see Stage2KaleidoscopeShader/TutorialBoxTunnelShader), whereas
- *  this needs to color-shift the stage's REAL background image as it's actually drawn.
- *
- *  The rotation completes exactly one full cycle - ending back at the image's native colors - over
- *  setPeriod()'s value, which ScrollingBackground sets to the stage's own
- *  SpawnScheduler.getBackgroundVideoTime(), so "cycles the hue and ends where it started right
- *  before the boss video" falls out automatically rather than needing its own separately-tuned
- *  duration that could drift out of sync with the actual cue. */
+/** Hue-rotates the background image layers drawn between begin()/end()
+ *  (StageDefinition.hueCycleBackground). One full cycle takes `period`, which is set to the time to
+ *  the boss video so the colors return to normal as it starts. */
 public class HueCycleShader implements Disposable {
     private final ShaderProgram shader;
     private float time;
@@ -25,10 +16,7 @@ public class HueCycleShader implements Disposable {
         shader = ShaderLoader.compile("HueCycleShader", "tinted.vert", "hue_cycle.frag");
     }
 
-    /** How many seconds one full hue rotation takes - see the class doc. Zero or negative is treated
-     *  as "no cycling" (begin() always applies a shift of 0 in that case) rather than dividing by
-     *  zero, so a stage that opts in without ever setting this (e.g. no backgroundVideoTime) just
-     *  shows the image's native colors instead of a NaN-corrupted draw. */
+    /** Seconds per full rotation; <= 0 disables cycling. */
     public void setPeriod(float period) {
         this.period = period;
     }
@@ -41,17 +29,12 @@ public class HueCycleShader implements Disposable {
         time = 0f;
     }
 
-    /** Unlike the FBO-based background shaders (which have real accumulated pixel state that can't
-     *  be cheaply fast-forwarded - see their own resetTime()-only seek handling), this shader is
-     *  just time % period, so a debug/replay seek can jump straight to the correct hue instead of
-     *  restarting the cycle from 0 - see ScrollingBackground.seekTo(). */
+    /** Stateless (time % period), so a seek can jump straight to the right hue. */
     public void setTime(float time) {
         this.time = time;
     }
 
-    /** Swaps in this shader with the current hue shift and returns the batch's previous shader, so
-     *  the caller can restore it (via end()) once it's done drawing with this one - same
-     *  capture/restore pattern the FBO-based background shaders use around their own draws. */
+    /** Installs this shader and returns the previous one, to pass to end(). */
     public ShaderProgram begin(SpriteBatch batch) {
         ShaderProgram previous = batch.getShader();
         float hueShift = period > 0f ? (time % period) / period : 0f;

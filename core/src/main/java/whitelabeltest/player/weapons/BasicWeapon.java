@@ -55,27 +55,18 @@ public class BasicWeapon extends BaseWeapon {
         spawnStreams(activeWeapons, texture, x, y, -1);
     }
 
-    /** Fires only this level's even-indexed streams (the center stream, plus every other spread
-     *  pair) - the player's share while the halo is out (see Player.handleShooting), so the two
-     *  firing points split the pattern instead of doubling its total bullet count. */
+    /** The ship's half of the pattern (even streams) while the halo is detached. */
     public void spawnPlayerPortion(Array<Weapon> activeWeapons, Texture texture, float x, float y) {
         spawnStreams(activeWeapons, texture, x, y, 0);
     }
 
-    /** Fires only this level's odd-indexed streams - the halo's share while detached (see
-     *  Player.updateHaloFiring). Complements spawnPlayerPortion() so together they add up to
-     *  exactly one full pattern, split rather than doubled, between the two firing points. */
+    /** The detached halo's half of the pattern (odd streams). */
     public void spawnHaloPortion(Array<Weapon> activeWeapons, Texture texture, float x, float y) {
         spawnStreams(activeWeapons, texture, x, y, 1);
     }
 
-    /** Builds this level's pattern, but every original stream now fires as two parallel copies
-     *  side by side (see spawnStreamPair()) instead of one - doubling the number of independent
-     *  streams so the parity split below always has an even number to divide, letting the player
-     *  and the detached halo split evenly even at level 1's single stream. Skips whichever half of
-     *  each pair doesn't match parity (0 or 1), or fires everything when parity is negative, the
-     *  normal single-source case. Pairs are indexed in the order listed below: center first, then
-     *  each spread pair outward, each one claiming the next two slots. */
+    /** Fires this level's pattern. Each stream is a side-by-side pair so the ship/halo split is
+     *  always even; parity 0/1 fires one copy of each pair, a negative parity fires both. */
     private void spawnStreams(Array<Weapon> activeWeapons, Texture texture, float x, float y, int parity) {
         float baseSpeed = def.getSpeed(level);
         if (level == 1) {
@@ -99,15 +90,8 @@ public class BasicWeapon extends BaseWeapon {
         return parity < 0 || (streamIndex % 2) == parity;
     }
 
-    /** One original stream, fired as two copies side by side (perpendicular to travel direction)
-     *  of where the single stream used to be - each copy is its own entry in the parity split, at
-     *  pairIndex and pairIndex + 1.
-     *  When both copies fire together (parity < 0, the attached/single-source case), they're
-     *  pushed apart by each copy's own width plus STREAM_PAIR_CLEARANCE, so the two bulletCount-
-     *  wide formations never overlap regardless of level. Once detached, only one copy of a given
-     *  pair ever fires at a time, and it fires from an entirely different point (the player's vs.
-     *  the halo's) rather than sharing this origin - so it's centered on x,y with no extra offset,
-     *  instead of staying shifted to the side it would've used as half of an attached pair. */
+    /** A stream pair (split indices pairIndex and pairIndex + 1). Together, the copies sit side by
+     *  side without overlapping; a lone copy (split firing) is centered on x,y. */
     private void spawnStreamPair(Array<Weapon> activeWeapons, Texture texture, float x, float y, float angleOffsetDeg, int bulletCount, float speed, int pairIndex, int parity) {
         Vector2 dir = new Vector2(0, 1).rotateDeg(angleOffsetDeg);
         float perpX = -dir.y, perpY = dir.x;
@@ -150,10 +134,7 @@ public class BasicWeapon extends BaseWeapon {
         audio.playBasicWeaponSound(level);
     }
 
-    /** BasicWeapon's Hyper Attack: launches the graze halo forward a short distance - dealing
-     *  damage to anything it clips along the way (see Player.triggerBasicHyperAttack()) - where
-     *  it then stays detached from the player until this fires again, gliding back instead of
-     *  snapping back into place. */
+    /** Halo dash (see Player.triggerBasicHyperAttack). */
     @Override
     public void hyperAttack(Player player, Array<Weapon> activeWeapons, Array<Enemy> enemies, AssetManager assets, AudioManager audio) {
         player.triggerBasicHyperAttack(audio);

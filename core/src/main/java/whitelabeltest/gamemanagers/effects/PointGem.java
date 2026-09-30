@@ -8,19 +8,10 @@ import com.badlogic.gdx.math.MathUtils;
 import com.badlogic.gdx.math.Rectangle;
 import com.badlogic.gdx.utils.Pool;
 
-/** A point pickup spawned when an enemy dies (see GameController.destroyEnemy - one per
- *  GameBalance.gemsPerEnemyHealth of the enemy's max health). Pops up in a random mostly-upward
- *  direction and falls under gravity;
- *  the instant the player isn't firing, it homes in on the player's graze hitbox (the "graze
- *  halo" - see CollisionManager.checkPlayerGemCollisions) instead of falling. Holding the fire
- *  button keeps it falling, so gems can still be farmed by hosing them down rather than collected
- *  automatically.
- *  Homing itself is two-phase: for its first STEERING_SWITCH_DELAY seconds it accelerates its
- *  existing velocity toward the target (the original organic swoop-in), then hands off to a
- *  speed-scalar re-aimed fresh every frame - accelerating the same vector indefinitely lets a gem
- *  that's built up enough momentum swing past the target and settle into an orbit instead of ever
- *  converging, so the switch guarantees it eventually arrives.
- *  CollisionManager.checkPlayerGemCollisions awards a flat score bonus and removes it on contact. */
+/** A point gem dropped by a dying enemy. It pops upward and falls under gravity while the player
+ *  fires; when they stop firing it homes on the graze halo. Homing first accelerates the velocity
+ *  (a swoop), then after STEERING_SWITCH_DELAY re-aims a speed scalar each frame, which can't
+ *  settle into an orbit. A stationary gem (waypoint marker) doesn't move at all. */
 public class PointGem implements Pool.Poolable {
     private static final float SIZE = 0.3f;
     private static final float GRAVITY = -9f;
@@ -32,23 +23,15 @@ public class PointGem implements Pool.Poolable {
     private Animation<TextureRegion> animation;
     private float stateTime;
     private float vx, vy;
-    // Homing speed scalar - re-applied along the fresh direction-to-player every frame (see
-    // update()) rather than accelerating the existing vx/vy vector. Accelerating the existing
-    // vector let the gem's momentum outrun the steering correction and settle into an orbit around
-    // the player instead of converging on it; re-aiming a speed scalar at the current direction
-    // each frame can't accumulate the leftover perpendicular velocity that causes that.
+    // Second-phase homing speed, re-aimed at the player every frame.
     private float homingSpeed;
     private float rotation;
     private float worldWidth, worldHeight;
-    // True for a gem placed by SpawnScheduler.spawnWaypointGem() as a fixed navigation target (e.g.
-    // the bullet-restreaming drill's markers) rather than dropped by a dying enemy - see update().
-    // Skips the pop/gravity/homing entirely so it just sits at its spawn point, waiting to be flown
-    // into, instead of drifting off wherever gravity and the player's position happen to take it.
+    // A fixed waypoint marker: no pop, gravity or homing.
     private boolean stationary;
-    // Size and point-value multiplier - see init()'s valueScale.
+    // Size and point-value multiplier.
     private float valueScale = 1f;
-    // How many gems this one stands for - more than 1 only when an enemy's gem share was capped (see
-    // GameBalance.maxGemsPerEnemy); it's worth that many gems' points and counts as that many collected.
+    // How many gems this one stands for (> 1 when an enemy's gem count was capped).
     private int represents = 1;
 
     public void init(Animation<TextureRegion> animation, float x, float y, float worldWidth, float worldHeight) {
@@ -59,13 +42,12 @@ public class PointGem implements Pool.Poolable {
         init(animation, x, y, worldWidth, worldHeight, stationary, 1f);
     }
 
-    /** @param valueScale multiplies both the gem's size and the points it's worth when collected - see
-     *  GameBalance.gemScaleForDistance() and CollisionManager.checkPlayerGemCollisions(). 1 is the base gem. */
+    /** @param valueScale size and point-value multiplier (1 = base gem). */
     public void init(Animation<TextureRegion> animation, float x, float y, float worldWidth, float worldHeight, boolean stationary, float valueScale) {
         init(animation, x, y, worldWidth, worldHeight, stationary, valueScale, 1);
     }
 
-    /** @param represents how many gems this one stands for - see the field. */
+    /** @param represents how many gems this one stands for. */
     public void init(Animation<TextureRegion> animation, float x, float y, float worldWidth, float worldHeight, boolean stationary, float valueScale, int represents) {
         this.represents = Math.max(1, represents);
         this.animation = animation;
@@ -84,7 +66,7 @@ public class PointGem implements Pool.Poolable {
             return;
         }
 
-        // Mostly-upward pop with some horizontal spread, rather than a perfectly random direction.
+        // Mostly-upward pop with some horizontal spread.
         float angle = MathUtils.random(20f, 160f);
         float speed = MathUtils.random(2.5f, 4.5f);
         vx = MathUtils.cosDeg(angle) * speed;
@@ -103,7 +85,7 @@ public class PointGem implements Pool.Poolable {
             float dist = (float) Math.sqrt(dx * dx + dy * dy);
             if (dist > 0.0001f) {
                 if (stateTime < STEERING_SWITCH_DELAY) {
-                    // Original method: accelerate the existing vector toward the target.
+                    // Accelerate the current velocity toward the target.
                     vx += (dx / dist) * HOMING_ACCEL * delta;
                     vy += (dy / dist) * HOMING_ACCEL * delta;
                     float speed = (float) Math.sqrt(vx * vx + vy * vy);
@@ -112,11 +94,8 @@ public class PointGem implements Pool.Poolable {
                         vy = vy / speed * HOMING_MAX_SPEED;
                     }
                 } else {
-                    // New method: re-aim a speed scalar at the target fresh every frame instead of
-                    // accelerating the vector above, so no leftover perpendicular velocity can
-                    // build up into an orbit. Seeds from the current speed the first time this
-                    // phase runs (homingSpeed == 0 only ever holds then, since it's otherwise
-                    // monotonically increasing) so the handoff doesn't visibly snap.
+                    // Re-aim a speed scalar each frame so no orbit can form. Seeded from the current
+                    // speed on the first frame of this phase so the handoff doesn't snap.
                     if (homingSpeed <= 0f) homingSpeed = (float) Math.sqrt(vx * vx + vy * vy);
                     homingSpeed = Math.min(homingSpeed + HOMING_ACCEL * delta, HOMING_MAX_SPEED);
                     vx = (dx / dist) * homingSpeed;
@@ -147,12 +126,12 @@ public class PointGem implements Pool.Poolable {
         return rectangle;
     }
 
-    /** The multiplier this gem's size and point value were scaled by when it spawned. */
-    /** How many gems this one stands for - see the field. */
+    /** How many gems this one stands for. */
     public int getRepresents() {
         return represents;
     }
 
+    /** The size and point-value multiplier. */
     public float getValueScale() {
         return valueScale;
     }

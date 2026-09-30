@@ -5,10 +5,7 @@ import com.badlogic.gdx.graphics.g2d.SpriteBatch;
 import com.badlogic.gdx.graphics.g2d.TextureRegion;
 import com.badlogic.gdx.utils.Pool;
 
-/** Base for an effect that plays one animation once at a fixed world position then reports
- *  finished - shared by HitEffect (weapon-bullet impacts) and BulletCancelEffect (bullets
- *  destroyed outright by a bomb or an enemy's bullet-cancel death), which differ only in how they
- *  pick their animation. */
+/** An animation played once, centered at a fixed position (hit, bullet-cancel and sprite cue effects). */
 abstract class SingleShotAnimation implements Pool.Poolable {
     private Animation<TextureRegion> animation;
     private float x, y, width, height;
@@ -18,8 +15,7 @@ abstract class SingleShotAnimation implements Pool.Poolable {
         init(animation, x, y, size, size);
     }
 
-    // Non-square variant - see ScheduledSpriteEffect, whose scripted sprites (e.g. wide banner art
-    // like WarningSign.png) aren't necessarily square like HitEffect/BulletCancelEffect's are.
+    // Non-square variant (e.g. wide sprite cue art).
     public void init(Animation<TextureRegion> animation, float x, float y, float width, float height) {
         this.animation = animation;
         this.x = x;

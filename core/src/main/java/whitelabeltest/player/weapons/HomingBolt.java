@@ -13,10 +13,8 @@ import whitelabeltest.gamemanagers.AssetManager;
 import whitelabeltest.gamemanagers.audio.AudioManager;
 import whitelabeltest.player.Player;
 
-/** A homing projectile launched by WaveBlastWeapon's Hyper Attack (see
- *  WaveBlastWeapon.hyperAttack()): re-aims itself toward the nearest active enemy every frame,
- *  turning at a limited rate rather than snapping instantly, and just flies straight once
- *  nothing's left to home in on. Never spawned through the normal fire-button path. */
+/** WaveBlast Hyper Attack projectile: turns (at a limited rate) toward the nearest enemy, or flies
+ *  straight when none is left. */
 public class HomingBolt extends BaseWeapon {
     private static final float TURN_RATE_DEG_PER_SEC = 480f;
 

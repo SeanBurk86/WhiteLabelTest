@@ -14,17 +14,11 @@ import whitelabeltest.enemy.bullets.EnemyBullet;
 import whitelabeltest.enemy.bullets.ShapeBullet;
 import whitelabeltest.gamemanagers.ObjectPools;
 
-/** Fires whole bullet PICTURES instead of single shots - each volley is `shapeCount` pictures fanned
- *  across spreadDegrees around the aim angle, every picture being one bullet per point of
- *  `shapePoints`. All of a picture's bullets leave the emitter together and only resolve into the
- *  picture mid-flight, at formTime, before drifting apart again - see ShapeBullet.
- *
- *  shapePoints are authored as the shape should look while travelling straight DOWN the screen (its
- *  "top" pointing back at the emitter), in world units at scale 1, centered on the cluster's own
- *  origin. With rotateWithDirection each cluster is turned by (travel angle - 270) so it keeps facing
- *  back at the emitter whichever way it flies; flipX mirrors the shape left-to-right first (e.g. a
- *  left hand from a right hand). Fires a volley the moment it starts (or restarts inside a
- *  Sequence), then every fireRate seconds. */
+/** Fires bullet pictures: each volley is shapeCount pictures fanned over spreadDegrees, each one
+ *  bullet per shapePoints dot. The dots leave together, form the picture at formTime, then drift
+ *  apart (see ShapeBullet). Points are authored as seen travelling down, in world units at scale 1;
+ *  rotateWithDirection turns each picture to its travel direction and flipX mirrors it. Fires on
+ *  start, then every fireRate seconds. */
 public class ShapeFiring implements FiringPattern {
     private final float fireRate;
     private final float bulletSize;

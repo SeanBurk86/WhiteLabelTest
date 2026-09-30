@@ -19,20 +19,17 @@ import whitelabeltest.gamemanagers.audio.AudioSettings;
 import whitelabeltest.gamemanagers.replay.ReplayBrowser;
 import whitelabeltest.gamemanagers.replay.ReplayData;
 
-/** Reached from StartScreen's REPLAYS item - lets the player pick one of their own recorded runs
- *  (see ReplayBrowser/ReplayRecorder) and watch it play back. Polls input directly the same way
- *  StartScreen/WeaponSelectScreen do, rather than through InputManager, since no GameController
- *  exists yet at this point in Main's state machine. */
+/** REPLAYS menu: pick a saved replay to watch. Polls input directly, since there is no
+ *  GameController/InputManager yet. */
 public class ReplaySelectScreen implements Disposable {
     private static final String CONFIRM_SOUND = "audio/menu/confirmsoundmenu.mp3";
     private static final String BACK_SOUND = "audio/menu/backsoundmenu.mp3";
     private static final String SELECT_SOUND = "audio/menu/selectsoundmenu.mp3";
 
-    // How many rows fit between startY and the bottom instructions line in draw() below, at this
-    // screen's rowSpacing (worldHeight * 0.09) - see ReplayBrowser.setPageSize().
+    // Rows that fit above the instructions line at this screen's row spacing.
     private static final int PAGE_SIZE = 5;
 
-    // Selection-box styling for the highlighted row - see drawSelectionBox().
+    // Green box around the highlighted row.
     private static final Color SELECTION_BOX_COLOR = new Color(0.35f, 1f, 0.55f, 1f);
     private static final float SELECTION_BOX_PADDING_X = 0.15f;
     private static final float SELECTION_BOX_PADDING_Y = 0.08f;
@@ -51,8 +48,7 @@ public class ReplaySelectScreen implements Disposable {
     private boolean backRequested;
     private boolean prevDpadUpDown, prevDpadDownDown, prevDpadLeftDown, prevDpadRightDown, prevConfirmDown, prevBackButtonDown;
 
-    // Kept alive after this screen is disposed (see getConfirmSound()) so the cue can keep playing
-    // while GameController loads; the caller is responsible for disposing it eventually.
+    // Outlives the screen so the cue keeps playing while the game loads; the caller disposes it.
     private Sound confirmSound;
 
     public ReplaySelectScreen(float worldWidth, float worldHeight, AudioSettings audioSettings) {
@@ -86,12 +82,7 @@ public class ReplaySelectScreen implements Disposable {
         browser.open();
         browser.setPageSize(PAGE_SIZE);
 
-        // Whatever button just confirmed the REPLAYS item on StartScreen (commonly gamepad buttonA,
-        // which is also this screen's own confirm button) is very likely still physically held down
-        // on the first frame this screen runs - seeding prev*Down from the controller's actual
-        // current state here (instead of leaving them at their false default) stops update() from
-        // misreading that same held press as a fresh confirm/back input and instantly picking
-        // whatever replay is highlighted. Same fix as StartScreen.enterMenuPhase().
+        // Seed from the current state so the still-held confirm button isn't read as a new press.
         Controller controller = Controllers.getCurrent();
         prevDpadUpDown = controller != null && controller.getButton(controller.getMapping().buttonDpadUp);
         prevDpadDownDown = controller != null && controller.getButton(controller.getMapping().buttonDpadDown);
@@ -102,8 +93,7 @@ public class ReplaySelectScreen implements Disposable {
             || controller.getButton(controller.getMapping().buttonB));
     }
 
-    /** Returns the confirmed replay the instant one is picked, null every frame before that - check
-     *  isBackRequested() separately for the "return to start screen" case. */
+    /** The picked replay, or null. Check isBackRequested() for cancel. */
     public ReplayData update(float delta) {
         if (Gdx.input.isKeyJustPressed(Input.Keys.UP) || Gdx.input.isKeyJustPressed(Input.Keys.W)) moveSelection(-1);
         if (Gdx.input.isKeyJustPressed(Input.Keys.DOWN) || Gdx.input.isKeyJustPressed(Input.Keys.S)) moveSelection(1);
@@ -217,8 +207,7 @@ public class ReplaySelectScreen implements Disposable {
         f.draw(batch, layout, cx - layout.width / 2f, y);
     }
 
-    /** Green rectangle drawn around the currently highlighted row - see WeaponSelectScreen's
-     *  identically-named method for why topY is treated as the text's top rather than its baseline. */
+    /** topY is the text's top (font.draw's y), so the box hangs down from it. */
     private void drawSelectionBox(SpriteBatch batch, float centerX, float topY, float textWidth, float textHeight) {
         float x = centerX - textWidth / 2f - SELECTION_BOX_PADDING_X;
         float y = topY - textHeight - SELECTION_BOX_PADDING_Y;
@@ -234,9 +223,7 @@ public class ReplaySelectScreen implements Disposable {
         batch.setColor(Color.WHITE);
     }
 
-    /** Returns the fire-and-forget confirm sound so the caller can dispose it once it's safe to cut
-     *  off (e.g. at app shutdown). Never disposed here, since this screen is torn down while the
-     *  sound is still meant to be playing. May be null if no replay was confirmed yet. */
+    /** The caller disposes this (e.g. at shutdown). Null if nothing was confirmed. */
     public Sound getConfirmSound() {
         return confirmSound;
     }

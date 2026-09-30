@@ -13,6 +13,7 @@ import whitelabeltest.enemy.bullets.EnemyBullet;
 import whitelabeltest.enemy.bullets.SineBullet;
 import whitelabeltest.gamemanagers.ObjectPools;
 
+/** Fires SineBullets that weave side to side as they travel down. */
 public class SineWaveFiring implements FiringPattern {
     private final float fireRate;
     private final float bulletSize;
@@ -58,14 +59,12 @@ public class SineWaveFiring implements FiringPattern {
         this(fireRate, bulletSize, bulletSpeed, spriteOverride, offsetX, offsetY, bulletDamage, SpeedProfile.CONSTANT_SPEED, HitboxSpec.DEFAULT);
     }
 
-    /** @param speedProfile how bulletSpeed changes over each bullet's flight - see SpeedProfile
-     *  @param hitboxSpec each bullet's collision hitbox, independent of its visual size - see
-     *  HitboxSpec */
+    /** @param speedProfile,hitboxSpec see SpeedProfile and HitboxSpec */
     public SineWaveFiring(float fireRate, float bulletSize, float bulletSpeed, Animation<TextureRegion> spriteOverride, float offsetX, float offsetY, int bulletDamage, SpeedProfile speedProfile, HitboxSpec hitboxSpec) {
         this(fireRate, bulletSize, bulletSpeed, spriteOverride, offsetX, offsetY, bulletDamage, speedProfile, hitboxSpec, DEFAULT_AMPLITUDE, DEFAULT_FREQUENCY);
     }
 
-    /** @param amplitude, frequency the sine wave's shape - see FiringPatternDef.amplitude/frequency */
+    /** @param amplitude,frequency the wave's shape */
     public SineWaveFiring(float fireRate, float bulletSize, float bulletSpeed, Animation<TextureRegion> spriteOverride, float offsetX, float offsetY, int bulletDamage, SpeedProfile speedProfile, HitboxSpec hitboxSpec, float amplitude, float frequency) {
         this.fireRate = fireRate;
         this.bulletSize = bulletSize;

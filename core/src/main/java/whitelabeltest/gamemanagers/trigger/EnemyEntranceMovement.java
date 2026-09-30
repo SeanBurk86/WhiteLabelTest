@@ -8,55 +8,25 @@ import whitelabeltest.enemy.movementpatterns.MovementPattern;
 import whitelabeltest.enemy.movementpatterns.SquadronMovement;
 import whitelabeltest.enemy.movementpatterns.WaypointPathMovement;
 
-/** Trigger.enterFromAbove's actual mechanism: spawn this enemy off-screen, above both the play area
- *  and its own authored y, then carry it straight down to that authored (x, y) at whatever speed
- *  lands it there exactly when its available real-time budget runs out - i.e. by the time the camera
- *  reaches this trigger's own distance, not merely "spawned early" (Trigger.spawnLead alone) with no
- *  way to actually get there without popping fully-formed into an already-visible spot.
- *
- * One shared computation (spawnY()/build()) used by BOTH TriggerManager.fire() (the real game) and
- * PlayerPreviewView (the editor's preview) - never two independently hand-matched reimplementations
- * of the same formula, which is exactly how the editor's OWN background rendering drifted out of
- * sync with real gameplay earlier this session. */
+/** Implements Trigger.enterFromAbove: the enemy spawns off-screen above the play area and travels
+ *  down to its authored (x, y), arriving as the camera reaches the trigger's distance. Shared by
+ *  TriggerManager (game) and PlayerPreviewView (editor) so the two can't drift apart. */
 public final class EnemyEntranceMovement {
     private EnemyEntranceMovement() {}
 
-    /** The off-screen spawn Y for `trigger`, above BOTH the visible play area and the trigger's own
-     *  arrival point, so it starts out of view regardless of where the arrival point itself sits
-     *  (even one already near the top of the play area) - MUST be called with the real spawn
-     *  sprite's own height (see build()'s own doc on why that's only known once the sprite actually
-     *  exists), not a guessed/default size: the margin above worldHeight this returns is deliberately
-     *  kept to spriteHeight - comfortably UNDER GenericEnemy.isOffScreen()'s own worldHeight +
-     *  spriteHeight*2 removal tolerance - so EntityManager doesn't strip the enemy as "off-screen"
-     *  before its first movement.update() call even has a chance to start carrying it down. A fixed
-     *  margin (this method's original shape) got this backwards for any ordinarily-sized (size ~1,
-     *  height <= 1) enemy: a flat 3-unit margin sits ABOVE that removal tolerance (height*2 <= 2),
-     *  so the entrance spawn was being deleted within a frame or two of spawning, never visibly
-     *  entering at all - indistinguishable, from the player's side, from an ordinary no-entrance
-     *  "pop in at the arrival point" spawn (see Trigger.spawnLead's own doc on that distinction),
-     *  which is exactly the bug this was reported as. */
+    /** Off-screen spawn Y above both the play area and the arrival point. The margin is one sprite
+     *  height, which must stay under GenericEnemy.isOffScreen()'s removal tolerance (2x height) or
+     *  the enemy is removed before it can enter, so pass the real sprite height. */
     public static float spawnY(Trigger trigger, float worldHeight, float spriteHeight) {
         return spawnY(trigger, worldHeight, spriteHeight, null);
     }
 
-    /** Same as the 3-arg overload above, but ALSO safe against a WaypointPathMovement `afterEntrance`
-     *  (looking through one SquadronMovement wrapper, same as build() below) whose own first leg's
-     *  target sits at or above trigger.y - which the plain trigger.y-only computation above knows
-     *  nothing about. That path's initFrom() curves straight from wherever this returns to that leg's
-     *  own absolute target (see WaypointPathMovement.getLegs()'s own doc), so the spawn point has to
-     *  clear THAT target specifically, not just trigger.y/worldHeight, or the "entrance" ends up
-     *  climbing toward/past that already-near-the-top target instead of descending onto screen -
-     *  exactly what a wave's own waveRotation can do to a movementPattern authored to arrive near
-     *  worldHeight already (see TriggerManager.fireWave()'s own doc on registerShiftedClone(), which
-     *  shifts that target's Y by the formation's own rotated per-member spread with no awareness of
-     *  where the off-screen spawn point itself lands). A non-WaypointPathMovement afterEntrance (or
-     *  null) behaves exactly like the 3-arg overload - only this specific case ever differs. */
+    /** As above, but also clears the first leg target of a WaypointPathMovement `afterEntrance`
+     *  (looking through one SquadronMovement wrapper). That path curves from the spawn point to its
+     *  first target, so spawning below that target would make the entrance climb instead of descend. */
     public static float spawnY(Trigger trigger, float worldHeight, float spriteHeight, MovementPattern afterEntrance) {
         float arrivalY = trigger.y;
-        // See Trigger.waveSpawnLift's own doc - ADDED to this member's own trigger.y (== its own
-        // slot.y), never replacing it, so every member keeps its own relative Y offset from its
-        // squadmates - the same offset its real (shifted) waypoint target has from theirs - instead of
-        // collapsing to one shared absolute height and losing the formation's own vertical shape.
+        // Additive per-member lift, so a wave keeps its vertical shape (see Trigger.waveSpawnLift).
         if (!Float.isNaN(trigger.waveSpawnLift)) arrivalY += trigger.waveSpawnLift;
         MovementPattern leader = afterEntrance instanceof SquadronMovement squadron ? squadron.getLeader() : afterEntrance;
         if (leader instanceof WaypointPathMovement waypointPath && waypointPath.getLegs().size > 0) {
@@ -65,62 +35,18 @@ public final class EnemyEntranceMovement {
         return Math.max(arrivalY, worldHeight) + Math.max(spriteHeight, 0.5f);
     }
 
-    /** The synthetic single-leg WaypointPathMovement carrying this spawn from spawnY() straight down
-     *  to its own authored (x, y) - null (meaning "just spawn there normally, no entrance") unless
-     *  trigger.enterFromAbove is set, trigger.y is authored, AND there's an actual real-time budget
-     *  to travel in (effectiveLead > 0).
+    /** The entrance movement for `trigger`, or null for a normal spawn (enterFromAbove unset, no y,
+     *  or no lead time to travel in).
      *
-     * effectiveLead is Math.min(spawnLead, distance) rather than raw spawnLead - see
-     * TriggerManager.update()'s own armDistance clamp: a lead bigger than the trigger's own distance
-     * already means "arms/spawns at distance 0" (present from the very start), so the real available
-     * travel time is capped at `distance` real-time-equivalent, not however much larger spawnLead
-     * itself was authored as - keeping this in sync with that clamp is why this reads trigger.distance
-     * directly rather than trusting the caller to have already worked out how much of spawnLead was
-     * actually usable.
-     *
-     * @param spriteWidth, spriteHeight the ALREADY-CONSTRUCTED spawn sprite's own size - required
-     * because WaypointPathMovement operates entirely in sprite-CENTER space (initFrom() reads
-     * sprite.getX()+width/2 as its own starting point, and every frame applies the curve's evaluated
-     * position via sprite.setCenterX/Y()), while trigger.x/trigger.y (like every other spawn-position
-     * field in this codebase) are the sprite's BOTTOM-LEFT corner. Landing this leg's own target at
-     * bare trigger.x/trigger.y instead of the center-adjusted point below would leave the enemy
-     * settled half a sprite-width/height off from where it would have spawned WITHOUT an entrance at
-     * all - call this only once the real spawn sprite's true size is known (after EnemyDefinition/
-     * texture-aspect sizing has actually run), not with a guessed/default size.
-     *
-     * Uses WaypointPathMovement (not a raw MoveToPointMovement) specifically because its isFinished()
-     * always reads false once arrived (see that class's own doc) - the enemy holds at its arrival
-     * point once it gets there instead of being treated as "done, remove me" the instant it lands,
-     * the exact bug this session already fixed once for hand-authored waypoint paths.
-     *
-     * @param afterEntrance whatever movement this spawn would otherwise be using (its own authored
-     * movementPattern, or PatternFactory's NoMovement if it didn't set one) - handed off to (see
-     * Chained below) the instant the entrance leg itself settles at its arrival point, so an
-     * entrance-spawned enemy with its own waypoint path actually starts flying it once it arrives
-     * instead of freezing there forever (WaypointPathMovement, including the entrance leg's own,
-     * never reports isFinished()==true on its own - see that class's own doc - so nothing would
-     * otherwise ever move this spawn on again after this method's returned pattern took over).
-     *
-     * A WaypointPathMovement `afterEntrance` is the one exception: it's returned UNWRAPPED, with no
-     * synthetic entrance leg at all. That path's own WaypointPathMovement.initFrom() already reads
-     * the sprite's real spawn position - already relocated off-screen by spawnY() (see
-     * GenericEnemy.initWithDefinition(), which applies that override independently of this method) -
-     * as its own first control point the first time it updates, so it curves in from off-screen using
-     * its own authored tension/orientation from the very first waypoint. Chaining a straight-line
-     * entrance leg in front of it (this method's ONLY behavior before this was added) instead read as
-     * two disconnected motions: a hard vertical drop to the plain (non-entrance) spawn point, then a
-     * sudden peel-off into the path's own shape once the entrance leg settled - "shoots down the
-     * screen" before it ever starts the path it was actually authored to fly.
-     *
-     * Looks through ONE SquadronMovement wrapper (see TriggerManager.fireWave()'s own "keep
-     * formation" doc - a wave member's afterEntrance is a SquadronMovement wrapping the real leader,
-     * never a bare WaypointPathMovement, even when that leader IS one) to find the same case: the
-     * wrapped leader's initFrom() still reads the sprite's real (off-screen, formation-offset-
-     * translated - see SquadronMovement.update()'s own translate-then-leader-then-translate-back
-     * shape) spawn position exactly the same way an unwrapped one would, so it's exactly as
-     * self-sufficient here as the plain case above - chaining a synthetic entrance leg in front of a
-     * SQUADRON wrapping a waypoint path reproduced the exact same "shoots down, then peels off" bug
-     * this method was written to fix, just one layer removed from where the original fix looked. */
+     * - The travel time comes from min(spawnLead, distance), matching TriggerManager's clamp of the
+     *   arm distance at 0.
+     * - spriteWidth/Height must be the real sprite's size: WaypointPathMovement works in sprite-center
+     *   space, while trigger x/y is the bottom-left corner.
+     * - The entrance is a single WaypointPathMovement leg because that pattern holds at its target
+     *   instead of reporting finished, then hands off to `afterEntrance` via Chained.
+     * - If `afterEntrance` is itself a WaypointPathMovement (directly or as a Squadron leader), it is
+     *   returned as-is: it already curves in from the off-screen spawn point on its own, and a
+     *   straight drop in front of it looked like two disconnected motions. */
     public static MovementPattern build(Trigger trigger, float cameraSpeed, float worldHeight, float spriteWidth, float spriteHeight, MovementPattern afterEntrance) {
         if (!trigger.enterFromAbove || Float.isNaN(trigger.y)) return null;
         MovementPattern effectiveLeader = afterEntrance instanceof SquadronMovement squadron ? squadron.getLeader() : afterEntrance;
@@ -141,13 +67,8 @@ public final class EnemyEntranceMovement {
         return afterEntrance != null ? new Chained(entrance, afterEntrance) : entrance;
     }
 
-    /** Delegates to `entrance` until it settles at its arrival point (see WaypointPathMovement.
-     *  isSettled()'s own doc), then delegates to `after` for good - see build()'s own doc on why
-     *  this handoff has to happen at all. `after` is never update()'d before the handoff, so
-     *  whatever it does on its own first call (most patterns read the sprite's CURRENT position
-     *  then, the same "read the sprite fresh" idiom WaypointPathMovement.initFrom() itself uses -
-     *  see that class's own doc) sees the sprite already sitting at its real arrival point, not
-     *  wherever it would have started without an entrance at all. */
+    /** Runs `entrance` until it settles, then `after` for good. `after` isn't updated before the
+     *  handoff, so its first update reads the sprite at its real arrival point. */
     private static final class Chained implements MovementPattern {
         private final MovementPattern entrance;
         private final MovementPattern after;
