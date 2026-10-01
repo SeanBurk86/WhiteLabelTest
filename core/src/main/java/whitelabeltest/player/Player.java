@@ -221,7 +221,7 @@ public class Player {
         weaponSlots[1] = null;
         activeSlot = 0;
         numBombs = 1;
-        maxBombs = playerDef.baseMaxBombs;
+        maxBombs = Math.min(playerDef.baseMaxBombs, MAX_BOMB_CAPACITY);
         numLives = playerDef.startingLives;
         grazePoints = 0;
         isInvincible = false;
@@ -650,7 +650,7 @@ public class Player {
         thunderboltWeapon.resetShootTimer();
         animationTime = 0;
         numBombs = 1;
-        maxBombs = playerDef.baseMaxBombs;
+        maxBombs = Math.min(playerDef.baseMaxBombs, MAX_BOMB_CAPACITY);
         numLives = playerDef.startingLives;
         isInvincible = false;
         isDead = false;
@@ -847,7 +847,7 @@ public class Player {
         disableGrazeHitbox();
         reattachHaloImmediately();
         resetWeaponsOnDeath();
-        maxBombs++;
+        maxBombs = Math.min(maxBombs + 1, MAX_BOMB_CAPACITY);
     }
 
     /** Dying drops both equipped weapons to level 1, remembering the highest level for the restore
@@ -873,8 +873,11 @@ public class Player {
     public int getNumBombs() { return numBombs;}
     public int getMaxBombs() { return maxBombs; }
 
+    // The most bombs the player can ever hold; the cap grows by one per death up to this.
+    public static final int MAX_BOMB_CAPACITY = 6;
+
     // Sets the bomb cap directly (normally it grows by one per death).
-    public void setMaxBombs(int maxBombs) { this.maxBombs = Math.max(0, maxBombs); }
+    public void setMaxBombs(int maxBombs) { this.maxBombs = MathUtils.clamp(maxBombs, 0, MAX_BOMB_CAPACITY); }
 
     public void setNumBombs(int numBombs) {
         this.numBombs = MathUtils.clamp(numBombs, 0, maxBombs);

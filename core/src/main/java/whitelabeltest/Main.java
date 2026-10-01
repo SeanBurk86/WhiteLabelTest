@@ -407,10 +407,13 @@ public class Main extends ApplicationAdapter {
             ui.drawEnemyHealthDebug(spriteBatch, game.getEntities().getEnemies());
         }
 
+        // Inside the scissor: the HUD overlays the play area, and panels switching sides slide
+        // out of view past its edges.
+        ui.drawHUD(spriteBatch, game.getScoreManager(), game.getEntities().getPlayer(), game.getStageNumber(),
+            PLAY_AREA_WIDTH, PLAY_AREA_HEIGHT, game.getBombCooldownTimer(), game.getBombCooldownFraction());
+
         spriteBatch.flush();
         Gdx.gl.glDisable(GL20.GL_SCISSOR_TEST);
-
-        ui.drawHUD(spriteBatch, game.getScoreManager(), game.getEntities().getPlayer(), PLAY_AREA_HEIGHT, leftX, PLAY_AREA_WIDTH, panelWidth, game.getBombCooldownTimer(), game.getBombCooldownFraction());
 
         ui.drawTextCues(spriteBatch, game.getSpawnScheduleRealTime(), game.getTextCues(),
             game.isTextCuesRequireConfirm(), game.getTextCueConfirmKeyLabel());

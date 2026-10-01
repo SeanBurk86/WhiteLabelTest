@@ -19,6 +19,18 @@ public class CircleMeterEffect implements Disposable {
 
     public void render(SpriteBatch batch, Texture quadTexture, float fraction, Color bgColor, Color fillColor,
                         float innerRadius, float outerRadius, float x, float y, float size) {
+        render(batch, quadTexture, fraction, bgColor, fillColor, innerRadius, outerRadius, x, y, size, 0);
+    }
+
+    /** @param dashes number of dashes around the ring, or 0 for a solid ring */
+    public void render(SpriteBatch batch, Texture quadTexture, float fraction, Color bgColor, Color fillColor,
+                        float innerRadius, float outerRadius, float x, float y, float size, int dashes) {
+        render(batch, quadTexture, fraction, bgColor, fillColor, innerRadius, outerRadius, x, y, size, dashes, 0f);
+    }
+
+    /** @param dashOffset rotates the dashes, as a fraction of a turn */
+    public void render(SpriteBatch batch, Texture quadTexture, float fraction, Color bgColor, Color fillColor,
+                        float innerRadius, float outerRadius, float x, float y, float size, int dashes, float dashOffset) {
         ShaderProgram previousShader = batch.getShader();
         float previousPackedColor = batch.getPackedColor();
         int previousSrcFunc = batch.getBlendSrcFunc();
@@ -35,6 +47,8 @@ public class CircleMeterEffect implements Disposable {
         shader.setUniformf("u_fillColor", fillColor.r, fillColor.g, fillColor.b, fillColor.a);
         shader.setUniformf("u_innerRadius", innerRadius);
         shader.setUniformf("u_outerRadius", outerRadius);
+        shader.setUniformf("u_dashes", dashes);
+        shader.setUniformf("u_dashOffset", dashOffset);
 
         batch.draw(quadTexture, x, y, size, size);
 

@@ -562,7 +562,8 @@ hitbox sizes, speed, `startingLives`, `baseMaxBombs` and `maxWeaponLevel`.
 - **Death:**
   - a 2 s wait, then respawn with 2 s of i-frames (enemies hold fire during both);
   - the halo snaps back and both weapons drop to level 1;
-  - a restore powerup drops at the death spot, and `maxBombs` grows by one.
+  - a restore powerup drops at the death spot, and `maxBombs` grows by one, up to
+    `Player.MAX_BOMB_CAPACITY` (6). Every way of setting the capacity is clamped to that.
 - **Powerups** (`WeaponPowerup`) bounce around the screen until collected. Each adds its `amount`
   (1–3) to *both* equipped weapons, capped at `maxWeaponLevel`. The restore drop is additive too, so
   it stacks with other pickups.
@@ -781,9 +782,10 @@ MEDIUM and LOW also compile the shaders with `QUALITY_MEDIUM` / `QUALITY_LOW`.
   - `ScheduledSpriteEffect`: sprite cues.
 - HUD shader effects:
   - `ChainFireEffect`: a port of a Godot fire shader with procedural noise. Intensity is
-    chain / 125, with an overdrive ramp up to 250.
-  - `CircleMeterEffect`: a ring meter.
-  - `DataStreamEffect`: digital rain from hash noise.
+    chain / 125, with an overdrive ramp up to 250. `getOverflow()` eases from 0 at a chain of 100
+    to 1 at 250, and the HUD uses it to grow the flame out of its box. Coloured to the HUD palette:
+    lime embers, a lime-to-cyan blaze, then orange to red.
+  - `CircleMeterEffect`: a ring meter, solid or dashed (with a rotation offset for spinning dashes).
 
   They use `tinted.vert` plus their own fragment shaders.
 
@@ -793,9 +795,37 @@ MEDIUM and LOW also compile the shaders with `QUALITY_MEDIUM` / `QUALITY_LOW`.
 
 `UIManager` draws:
 
-- **Left HUD panel:** score, the chain counter with its fire effect, the multiplier
-  (1 + chain / 10, capped at ×9), status, lives and bombs.
-- **Right HUD panel:** the weapon system boxes and the data-stream effect.
+- **The HUD** (`GameHud`, owned by `UIManager`), over the play area. The layout follows
+  `assets/UIGuide.png`; the styling is WipEout / Designers Republic: cyan `#00F0FF`, lime `#CCFF00`
+  and orange `#FF3B30` on dark carbon, chamfered panels, soft glows, hazard stripes, and the
+  Orbitron (numerals) and Share Tech Mono (labels) fonts in `assets/fonts` (SIL OFL; licences
+  alongside). Sizes are given in reference-design pixels: `PX` = 1/90 of a world unit, times
+  `SCALE` (1.25, for legibility).
+  - **Score bar:** a pinging dot, SCORE (lime), a STAGE tag, and HIGH SCORE (white, cyan glow).
+  - **Chain stack** (top right):
+    - the COMBO box, chamfered, with CHAIN and the count over the chain flame. A bar fills toward a
+      chain of 100, where a MAX tag lights up and the flame grows out of the box through the
+      score bar;
+    - lives as shield pods with hearts, sized for the starting lives: cyan, orange on the last
+      life, dark once lost;
+    - the chain timer as a heat meter: a red-to-orange hazard-striped fill, a dashed critical line
+      at 25%, and a CRIT label that blinks when the chain is about to break.
+  - **Weapons capsule** (bottom left), top to bottom:
+    - the weapon level in Roman numerals in a pill (both equipped weapons level up
+      together, so it's the active one's level);
+    - the two weapons' tiles (`images/ui/RainIcon`, `LightningIcon`, `MoonIcon`): bright
+      for the active one, dimmed for the other;
+    - the GRZ gauge, filling toward the next graze bomb (100 points), with the points shown;
+    - the BOMB gauge: a slowly turning dashed ring, full when a bomb is ready, filling while it
+      recharges, dim with none, with the bomb icon (`images/ui/BombIcon`) in the middle;
+    - one chevron per bomb of capacity (`FullBombIcon` / `EmptyBombIcon`), filled from the bottom
+      and pulsing, with room for the maximum capacity of 6;
+    - a PWR status tag underneath (CRITICAL on the last life).
+  - Cyan L-brackets in the play area's corners.
+  - **Side switching:** the chain stack and the capsule each move to the opposite edge when the
+    player's hitbox comes within 1 unit of them (`DockedPanel`), as long as the other side is
+    clear. They slide out past the edge and back in on the other side over 0.3 s, mirrored. The
+    HUD is drawn inside the play-area scissor, so a sliding panel disappears into the edge.
 - **Text cues:** see [Text cues](#text-cues).
 - **Game over sign, stage clear screen** (kills / total, peak chain, bonuses, TACTICAL RANK card)
   and the **stage select** hex lattice.

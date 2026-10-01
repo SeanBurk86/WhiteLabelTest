@@ -771,6 +771,11 @@ public class GameController implements Disposable {
     }
 
     /** The current stage's display name (by name, not play order, since map routes vary). */
+    /** 1-based position of the current stage in this run. */
+    public int getStageNumber() {
+        return stageIndex + 1;
+    }
+
     public String getStageName() {
         String name = currentStageDef != null ? currentStageDef.name : null;
         return name != null ? name : "STAGE " + (stageIndex + 1);

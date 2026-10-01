@@ -1,6 +1,6 @@
 package whitelabeltest.gamemanagers.effects;
 import whitelabeltest.gamemanagers.background.ShaderLoader;
-import whitelabeltest.gamemanagers.UIManager;
+import whitelabeltest.gamemanagers.GameHud;
 
 import com.badlogic.gdx.graphics.Color;
 import com.badlogic.gdx.graphics.GL20;
@@ -19,20 +19,20 @@ public class ChainFireEffect implements Disposable {
     // How fast displayed intensity eases toward the target (low, so flame shape doesn't snap).
     private static final float INTENSITY_SMOOTHING_SPEED = 3f;
 
-    // Low-chain ember ramp.
-    private static final Color EMBER_BOTTOM = new Color(0.10f, 0.3f, 0.16f, 1f);
-    private static final Color EMBER_MIDDLE = UIManager.HUD_GREEN_DIM;
-    private static final Color EMBER_TOP = new Color(0.04f, 0.1f, 0.06f, 1f);
+    // Low-chain ember ramp: dim lime.
+    private static final Color EMBER_BOTTOM = new Color(0.25f, 0.33f, 0.02f, 1f);
+    private static final Color EMBER_MIDDLE = new Color(0.32f, 0.42f, 0.04f, 1f);
+    private static final Color EMBER_TOP = new Color(0.03f, 0.07f, 0.06f, 1f);
 
-    // Full-blaze ramp: HUD green core to amber tip.
-    private static final Color BLAZE_BOTTOM = new Color(0.6f, 1.0f, 0.75f, 1f);
-    private static final Color BLAZE_MIDDLE = UIManager.HUD_GREEN;
-    private static final Color BLAZE_TOP = UIManager.HUD_AMBER;
+    // Full-blaze ramp: pale lime core, lime, cyan tip.
+    private static final Color BLAZE_BOTTOM = new Color(0.93f, 1.0f, 0.7f, 1f);
+    private static final Color BLAZE_MIDDLE = GameHud.LIME;
+    private static final Color BLAZE_TOP = GameHud.CYAN;
 
-    // Overdrive ramp past max intensity: amber to HUD red.
-    private static final Color MYSTIC_BOTTOM = new Color(1.0f, 0.85f, 0.55f, 1f);
-    private static final Color MYSTIC_MIDDLE = UIManager.HUD_AMBER;
-    private static final Color MYSTIC_TOP = UIManager.HUD_RED;
+    // Overdrive ramp past max intensity: pale orange core, orange, red tip.
+    private static final Color MYSTIC_BOTTOM = new Color(1.0f, 0.8f, 0.6f, 1f);
+    private static final Color MYSTIC_MIDDLE = GameHud.ORANGE;
+    private static final Color MYSTIC_TOP = new Color(0.86f, 0.15f, 0.15f, 1f);
 
     private final ShaderProgram shader;
     private float time;
@@ -40,6 +40,14 @@ public class ChainFireEffect implements Disposable {
     private float fadeAlpha;
     private float displayedIntensity;
     private float displayedMysticT;
+    // 0..1: how far past OVERFLOW_START_CHAIN the chain is, eased like intensity. The HUD grows the
+    // flame out of its box by this much.
+    private float displayedOverflow;
+    private static final int OVERFLOW_START_CHAIN = 100;
+    private static final int OVERFLOW_FULL_CHAIN = 250;
+    // Flame aperture from a fresh chain (sparse embers) to max intensity (dense flames).
+    private static final float MAX_APERTURE = 2.0f;
+    private static final float MIN_APERTURE = 0.6f;
 
     public ChainFireEffect() {
         shader = ShaderLoader.compile("ChainFireEffect shader", "tinted.vert", "chain_fire.frag");
@@ -61,10 +69,27 @@ public class ChainFireEffect implements Disposable {
 
         float targetMysticT = MathUtils.clamp((lastChainCount - CHAIN_COUNT_AT_MAX_INTENSITY) / (float) CHAIN_COUNT_AT_MAX_INTENSITY, 0f, 1f);
         displayedMysticT += (targetMysticT - displayedMysticT) * Math.min(1f, delta * INTENSITY_SMOOTHING_SPEED);
+
+        // A broken chain shrinks the flame back into its box (it also fades out).
+        int overflowChain = chainCount > 0 ? chainCount : 0;
+        float targetOverflow = MathUtils.clamp((overflowChain - OVERFLOW_START_CHAIN) / (float) (OVERFLOW_FULL_CHAIN - OVERFLOW_START_CHAIN), 0f, 1f);
+        displayedOverflow += (targetOverflow - displayedOverflow) * Math.min(1f, delta * INTENSITY_SMOOTHING_SPEED);
+    }
+
+    /** 0 up to a chain of 100, rising to 1 at 250 (eased). */
+    public float getOverflow() {
+        return displayedOverflow;
     }
 
     /** Draws the flames over the rect; quadTexture only carries UVs (e.g. a 1x1 white pixel). */
     public void render(SpriteBatch batch, Texture quadTexture, float x, float y, float width, float height) {
+        render(batch, quadTexture, x, y, width, height, 1f, 1f);
+    }
+
+    /** @param noiseScaleX,noiseScaleY below 1 enlarge the flame shapes relative to the rect, so a
+     *  small rect shows a few broad flames instead of fine speckle */
+    public void render(SpriteBatch batch, Texture quadTexture, float x, float y, float width, float height,
+                       float noiseScaleX, float noiseScaleY) {
         if (fadeAlpha <= 0f) return;
 
         float intensity = displayedIntensity;
@@ -84,9 +109,12 @@ public class ChainFireEffect implements Disposable {
 
         shader.setUniformf("u_time", time);
         shader.setUniformf("u_fireAlpha", MathUtils.lerp(0.35f, 0.9f, intensity) * fadeAlpha);
-        shader.setUniformf("u_fireAperture", MathUtils.lerp(3.00f, 0.00f, intensity));
+        // Never fully closed: at 0 the flame fills its rect solid, which in the small HUD box reads
+        // as a block rather than fire.
+        shader.setUniformf("u_fireAperture", MathUtils.lerp(MAX_APERTURE, MIN_APERTURE, intensity));
         shader.setUniformf("u_fireSpeed", 0f, MathUtils.lerp(2.0f, 14.0f, intensity));
         shader.setUniformf("u_intensity", intensity);
+        shader.setUniformf("u_noiseScale", noiseScaleX, noiseScaleY);
         setColorUniform("u_bottomColor", EMBER_BOTTOM, BLAZE_BOTTOM, MYSTIC_BOTTOM, intensity, mysticT);
         setColorUniform("u_middleColor", EMBER_MIDDLE, BLAZE_MIDDLE, MYSTIC_MIDDLE, intensity, mysticT);
         setColorUniform("u_topColor", EMBER_TOP, BLAZE_TOP, MYSTIC_TOP, intensity, mysticT);

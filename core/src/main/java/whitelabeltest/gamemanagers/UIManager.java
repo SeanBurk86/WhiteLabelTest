@@ -1,8 +1,6 @@
 package whitelabeltest.gamemanagers;
 import whitelabeltest.gamemanagers.effects.AnimationCache;
-import whitelabeltest.gamemanagers.effects.ChainFireEffect;
 import whitelabeltest.gamemanagers.effects.CircleMeterEffect;
-import whitelabeltest.gamemanagers.effects.DataStreamEffect;
 import whitelabeltest.gamemanagers.replay.DebugSaveState;
 import whitelabeltest.gamemanagers.spawning.LevelRank;
 import whitelabeltest.gamemanagers.spawning.PatternPreviewer;
@@ -28,7 +26,7 @@ import com.badlogic.gdx.utils.Disposable;
 import whitelabeltest.enemy.Enemy;
 import whitelabeltest.player.Player;
 
-/** Draws the HUD side panels, text cues, game over / stage clear / stage select screens and every
+/** Draws the in-game HUD, text cues, game over / stage clear / stage select screens and every
  *  debug overlay and menu. */
 public class UIManager implements Disposable {
     // "Cyber terminal" HUD palette: green/amber readouts on a near-black panel. Public so effects
@@ -39,50 +37,25 @@ public class UIManager implements Disposable {
     public static final Color HUD_RED = new Color(1f, 0.32f, 0.26f, 1f);
     private static final Color HUD_LABEL = new Color(0.5f, 0.62f, 0.55f, 1f);
     private static final Color HUD_GAUGE_BG = new Color(0.05f, 0.12f, 0.08f, 1f);
-    // The bright head of each DATA_STREAM column.
-    private static final Color HUD_STREAM_HEAD = new Color(0.85f, 1f, 0.9f, 1f);
 
     private final BitmapFont font;
     private final GlyphLayout gameOverLayout;
     private final GlyphLayout textCueLayout;
     private final GlyphLayout measureLayout;
 
-    // HUD strings rebuilt only when their value changes (String.format allocates on every call).
-    private final CachedText scoreText = new CachedText();
-    private final CachedText highScoreText = new CachedText();
-    private final CachedText grazeText = new CachedText();
-    private final CachedText shieldCooldownText = new CachedText();
-    private final CachedText chainMultText = new CachedText();
-
-    /** One piece of HUD text plus the value it was built from. */
-    private static final class CachedText {
-        private long key = Long.MIN_VALUE;
-        private String text;
-
-        String get(long value, java.util.function.LongFunction<String> build) {
-            if (value != key || text == null) {
-                key = value;
-                text = build.apply(value);
-            }
-            return text;
-        }
-    }
     private final Texture whitePixel;
-    private final Texture heartIcon;
     // 4x3 sheet, 12 frames; plays once and holds the last frame.
     private final Texture gameOverSignTexture;
     private final Animation<TextureRegion> gameOverSignAnimation;
     private static final float GAME_OVER_SIGN_FRAME_DURATION = 0.07f;
     private final InputType inputType;
     private final CircleMeterEffect circleMeterEffect;
-    private final ChainFireEffect chainFireEffect;
-    private final DataStreamEffect dataStreamEffect;
+    private final GameHud gameHud;
 
     public UIManager(InputType inputType) {
         this.inputType = inputType;
         this.circleMeterEffect = new CircleMeterEffect();
-        this.chainFireEffect = new ChainFireEffect();
-        this.dataStreamEffect = new DataStreamEffect();
+        this.gameHud = new GameHud();
 
         FreeTypeFontGenerator generator = new FreeTypeFontGenerator(Gdx.files.internal("fonts/VT323-Regular.ttf"));
         FreeTypeFontParameter fontParams = new FreeTypeFontParameter();
@@ -102,269 +75,19 @@ public class UIManager implements Disposable {
         whitePixel = new Texture(pixmap);
         pixmap.dispose();
 
-        // White heart icon, tinted per draw.
-        Pixmap heartPixmap = new Pixmap(32, 32, Pixmap.Format.RGBA8888);
-        heartPixmap.setColor(Color.WHITE);
-        heartPixmap.fillCircle(10, 11, 8);
-        heartPixmap.fillCircle(22, 11, 8);
-        heartPixmap.fillTriangle(2, 12, 30, 12, 16, 30);
-        heartIcon = new Texture(heartPixmap);
-        heartPixmap.dispose();
-
         gameOverSignTexture = new Texture(Gdx.files.internal("images/ui/GameOverSign.png"));
         gameOverSignAnimation = AnimationCache.get(gameOverSignTexture, 4, 3, 12, GAME_OVER_SIGN_FRAME_DURATION, Animation.PlayMode.NORMAL);
     }
 
-    public void drawHUD(SpriteBatch batch, ScoreManager scoreManager, Player player, float worldHeight,
-                         float leftPanelX, float rightPanelX, float panelWidth,
-                         float bombCooldownTimer, float bombCooldownFraction) {
-        chainFireEffect.update(Gdx.graphics.getDeltaTime(), scoreManager.getChainCount());
-        dataStreamEffect.update(Gdx.graphics.getDeltaTime());
-        drawLeftHudPanel(batch, scoreManager, player, worldHeight, leftPanelX, panelWidth, bombCooldownTimer, bombCooldownFraction);
-        drawRightHudPanel(batch, player, worldHeight, rightPanelX, panelWidth);
-    }
-
-    private void drawLeftHudPanel(SpriteBatch batch, ScoreManager scoreManager, Player player, float worldHeight,
-                                   float leftPanelX, float panelWidth, float bombCooldownTimer, float bombCooldownFraction) {
-        float x = leftPanelX + 0.2f;
-        float innerWidth = panelWidth - 0.4f;
-        float rightEdge = x + innerWidth;
-        float y = worldHeight - 0.25f;
-
-        drawLabelValue(batch, "SYS:", "ONLINE", x, y, HUD_GREEN);
-
-        y -= 0.35f;
-        drawDivider(batch, x, y, innerWidth);
-
-        y -= 0.35f;
-        drawSectionLabel(batch, "SCORE_REGISTER", x, y);
-        y -= 0.6f;
-        drawScaledText(batch, scoreText.get(scoreManager.getScore(), v -> String.format("%010d", v)), x, y, 1.7f, HUD_GREEN);
-
-        y -= 0.45f;
-        font.setColor(HUD_LABEL);
-        font.draw(batch, "HI_SCORE:", x, y);
-        font.setColor(Color.WHITE);
-        y -= 0.42f;
-        drawScaledText(batch, highScoreText.get(scoreManager.getHighScore(), v -> String.format("%010d", v)), x, y, 1.25f, HUD_AMBER);
-
-        y -= 0.35f;
-        drawDivider(batch, x, y, innerWidth);
-
-        y -= 0.55f;
-        drawSectionLabel(batch, "CHAIN_COUNTER", x, y);
-        y -= 1.0f;
-
-        // Flames behind the chain number, sized around its ~0.96-high glyphs.
-        float chainNumberHeight = 0.96f;
-        float chainFlameWidth = 3.4f;
-        float chainFlameHeight = 1.35f;
-        chainFireEffect.render(batch, whitePixel, x, y - chainNumberHeight - 0.15f, chainFlameWidth, chainFlameHeight);
-
-        drawScaledText(batch, String.valueOf(scoreManager.getChainCount()), x, y, 3.2f, HUD_AMBER);
-
-        int chainMult = MathUtils.clamp(1 + scoreManager.getChainCount() / 10, 1, 9);
-        y -= 0.28f;
-        drawMeterBar(batch, x, y, innerWidth, 0.06f, scoreManager.getChainTimerFraction(), HUD_GREEN);
-        y -= 0.32f;
-        drawTextRightAligned(batch, chainMultText.get(chainMult, v -> "x" + v + " MULT"), rightEdge, y, HUD_GREEN);
-
-        y -= 0.4f;
-        boolean critical = player.getNumLives() <= 1;
-        font.setColor(HUD_LABEL);
-        font.draw(batch, "STATUS:", x, y);
-        font.setColor(Color.WHITE);
-        drawTextRightAligned(batch, critical ? "CRITICAL" : "NOMINAL", rightEdge, y, critical ? HUD_RED : HUD_GREEN);
-
-        y -= 0.35f;
-        drawDivider(batch, x, y, innerWidth);
-
-        // Lives/bombs footer, anchored to the bottom of the panel.
-        float labelY = 1.0f;
-        float iconY = 0.55f;
-        float iconSpacing = 0.34f;
-        float iconSize = 0.26f;
-        float rightColX = x + innerWidth * 0.62f;
-
-        font.setColor(HUD_LABEL);
-        font.draw(batch, "BURNER SHELLS:", x, labelY);
-        font.draw(batch, "BOMB.EXE:", rightColX, labelY);
-        font.setColor(Color.WHITE);
-
-        for (int i = 0; i < player.getNumLives(); i++) {
-            drawHeartIcon(batch, x + i * iconSpacing, iconY - iconSize, iconSize, HUD_GREEN);
-        }
-        for (int i = 0; i < player.getNumBombs(); i++) {
-            drawDiamondIcon(batch, rightColX + i * iconSpacing + iconSize / 2f, iconY - iconSize / 2f, iconSize, HUD_AMBER);
-        }
-
-        if (bombCooldownTimer > 0) {
-            drawMeterBar(batch, rightColX, iconY - iconSize - 0.14f, rightEdge - rightColX, 0.05f,
-                1f - bombCooldownFraction, HUD_AMBER);
-        }
-    }
-
-    private void drawRightHudPanel(SpriteBatch batch, Player player, float worldHeight,
-                                    float rightPanelX, float panelWidth) {
-        float x = rightPanelX + 0.2f;
-        float innerWidth = panelWidth - 0.4f;
-        float rightEdge = x + innerWidth;
-        float y = worldHeight - 0.25f;
-
-        drawLabelValue(batch, "SCAN:", "ACTIVE", x, y, HUD_GREEN);
-        String pwr = pwrLabel(player);
-        drawLabelValueRight(batch, "PWR:", pwr, rightEdge, y, pwrColor(pwr));
-
-        y -= 0.35f;
-        drawDivider(batch, x, y, innerWidth);
-
-        y -= 0.35f;
-        drawSectionLabel(batch, "GRAZE_SENSOR", x, y);
-
-        float gaugeSize = 1.7f;
-        float gaugeCenterX = x + innerWidth / 2f;
-        float gaugeCenterY = y - 0.15f - gaugeSize / 2f;
-        float grazeFraction = Math.min(player.getGrazePoints() / 100f, 1f);
-        circleMeterEffect.render(batch, whitePixel, grazeFraction, HUD_GAUGE_BG, HUD_GREEN,
-            0.34f, 0.5f, gaugeCenterX - gaugeSize / 2f, gaugeCenterY - gaugeSize / 2f, gaugeSize);
-        drawScaledCentered(batch, grazeText.get((int) player.getGrazePoints(), v -> String.format("%03d", v)), gaugeCenterX, gaugeCenterY + 0.15f, 1.5f, HUD_GREEN);
-        drawCentered(batch, "GRAZE_PTS", gaugeCenterX, gaugeCenterY - 0.35f, HUD_LABEL);
-
-        y = gaugeCenterY - gaugeSize / 2f - 0.3f;
-        drawDivider(batch, x, y, innerWidth);
-
-        y -= 0.35f;
-        drawSectionLabel(batch, "WEAPON_SYSTEM", x, y);
-        y -= 0.15f;
-
-        y -= WEAPON_BOX_HEIGHT;
-        drawWeaponBox(batch, player, 0, x, y + WEAPON_BOX_HEIGHT, innerWidth);
-        y -= 0.15f + WEAPON_BOX_HEIGHT;
-        drawWeaponBox(batch, player, 1, x, y + WEAPON_BOX_HEIGHT, innerWidth);
-
-        y -= 0.35f;
-        drawDivider(batch, x, y, innerWidth);
-
-        y -= 0.35f;
-        drawSectionLabel(batch, "DATA_STREAM", x, y);
-        y -= 0.15f;
-
-        // Fills the rest of the panel down to a small floor margin - see DataStreamEffect.
-        float cellSize = 0.18f;
-        float streamHeight = Math.max(0.6f, y - 0.3f);
-        int columns = Math.max(4, (int) (innerWidth / cellSize));
-        int rows = Math.max(4, (int) (streamHeight / cellSize));
-        dataStreamEffect.render(batch, font, x, y - streamHeight, innerWidth, streamHeight,
-            columns, rows, HUD_GREEN, HUD_STREAM_HEAD, 0.85f);
-    }
-
-    private static final float WEAPON_BOX_HEIGHT = 1.05f;
-
-    /** One bordered weapon box in WEAPON_SYSTEM, occupying [yTop - WEAPON_BOX_HEIGHT, yTop]. */
-    private void drawWeaponBox(SpriteBatch batch, Player player, int slot, float x, float yTop, float width) {
-        String weaponId = player.getSlotWeaponId(slot);
-        boolean equipped = weaponId != null;
-        boolean active = equipped && player.getActiveSlot() == slot;
-        Color accent = active ? HUD_GREEN : HUD_GREEN_DIM;
-
-        drawBoxBorder(batch, x, yTop - WEAPON_BOX_HEIGHT, width, WEAPON_BOX_HEIGHT, accent);
-
-        float innerX = x + 0.12f;
-        float rightEdge = x + width - 0.12f;
-        float rowY = yTop - 0.26f;
-
-        font.setColor(accent);
-        font.draw(batch, "> " + weaponLabel(weaponId), innerX, rowY);
-        font.setColor(Color.WHITE);
-        String status = !equipped ? "OFFLINE" : (active ? "ONLINE" : "STANDBY");
-        drawTextRightAligned(batch, "[" + status + "]", rightEdge, rowY, accent);
-
-        int level = player.getWeaponLevel(weaponId);
-        int maxLevel = player.getMaxWeaponLevel();
-        float fraction = maxLevel > 0 ? level / (float) maxLevel : 0f;
-
-        rowY -= 0.3f;
-        drawMeterBar(batch, innerX, rowY - 0.09f, rightEdge - innerX, 0.09f, fraction, accent);
-
-        rowY -= 0.26f;
-        font.setColor(HUD_LABEL);
-        font.draw(batch, "LV:" + level + "/" + maxLevel, innerX, rowY);
-        font.setColor(Color.WHITE);
-        drawTextRightAligned(batch, "PWR:" + (int) (fraction * 100) + "%", rightEdge, rowY, HUD_LABEL);
-
-        if (equipped && weaponId.equals("OrbitWeapon")) {
-            rowY -= 0.24f;
-            String shieldText;
-            Color shieldColor;
-            if (player.isShieldActive()) {
-                shieldText = "SHIELD: ACTIVE";
-                shieldColor = Color.CYAN;
-            } else if (player.getShieldCooldownTimer() > 0) {
-                shieldText = shieldCooldownText.get(Math.round(player.getShieldCooldownTimer() * 10f), v -> String.format("SHIELD_CD: %.1fs", v / 10f));
-                shieldColor = HUD_LABEL;
-            } else {
-                shieldText = "SHIELD: READY";
-                shieldColor = HUD_GREEN;
-            }
-            font.setColor(shieldColor);
-            font.draw(batch, shieldText, innerX, rowY);
-            font.setColor(Color.WHITE);
-        }
-    }
-
-    private String pwrLabel(Player player) {
-        float fraction = averageEquippedWeaponFraction(player);
-        if (fraction <= 0f) return "--";
-        if (fraction >= 0.9f) return "MAX";
-        if (fraction >= 0.6f) return "HIGH";
-        if (fraction >= 0.3f) return "MED";
-        return "LOW";
-    }
-
-    private Color pwrColor(String label) {
-        return switch (label) {
-            case "MAX", "HIGH" -> HUD_GREEN;
-            case "MED" -> HUD_AMBER;
-            case "LOW" -> HUD_RED;
-            default -> HUD_LABEL;
-        };
-    }
-
-    private float averageEquippedWeaponFraction(Player player) {
-        float sum = 0f;
-        int count = 0;
-        for (int slot = 0; slot < 2; slot++) {
-            String id = player.getSlotWeaponId(slot);
-            if (id == null) continue;
-            sum += player.getWeaponLevel(id) / (float) player.getMaxWeaponLevel();
-            count++;
-        }
-        return count > 0 ? sum / count : 0f;
+    /** The in-game HUD (see GameHud). */
+    public void drawHUD(SpriteBatch batch, ScoreManager scoreManager, Player player, int stageNumber,
+                         float worldWidth, float worldHeight, float bombCooldownTimer, float bombCooldownFraction) {
+        gameHud.draw(batch, scoreManager, player, stageNumber, worldWidth, worldHeight, bombCooldownTimer, bombCooldownFraction);
     }
 
     private void drawSectionLabel(SpriteBatch batch, String text, float x, float y) {
         font.setColor(HUD_LABEL);
         font.draw(batch, "> " + text, x, y);
-        font.setColor(Color.WHITE);
-    }
-
-    private void drawLabelValue(SpriteBatch batch, String label, String value, float x, float y, Color valueColor) {
-        font.setColor(HUD_LABEL);
-        font.draw(batch, label + " ", x, y);
-        measureLayout.setText(font, label + " ");
-        font.setColor(valueColor);
-        font.draw(batch, value, x + measureLayout.width, y);
-        font.setColor(Color.WHITE);
-    }
-
-    private void drawLabelValueRight(SpriteBatch batch, String label, String value, float rightEdgeX, float y, Color valueColor) {
-        measureLayout.setText(font, label + " " + value);
-        float startX = rightEdgeX - measureLayout.width;
-        font.setColor(HUD_LABEL);
-        font.draw(batch, label + " ", startX, y);
-        measureLayout.setText(font, label + " ");
-        font.setColor(valueColor);
-        font.draw(batch, value, startX + measureLayout.width, y);
         font.setColor(Color.WHITE);
     }
 
@@ -380,16 +103,6 @@ public class UIManager implements Disposable {
         font.setColor(color);
         font.draw(batch, text, centerX - measureLayout.width / 2f, y);
         font.setColor(Color.WHITE);
-    }
-
-    private void drawScaledText(SpriteBatch batch, String text, float x, float y, float scale, Color color) {
-        float originalScaleX = font.getData().scaleX;
-        float originalScaleY = font.getData().scaleY;
-        font.getData().setScale(originalScaleX * scale, originalScaleY * scale);
-        font.setColor(color);
-        font.draw(batch, text, x, y);
-        font.setColor(Color.WHITE);
-        font.getData().setScale(originalScaleX, originalScaleY);
     }
 
     private void drawScaledCentered(SpriteBatch batch, String text, float centerX, float y, float scale, Color color) {
@@ -430,22 +143,11 @@ public class UIManager implements Disposable {
         batch.setColor(Color.WHITE);
     }
 
-    private void drawDiamondIcon(SpriteBatch batch, float cx, float cy, float size, Color color) {
-        batch.setColor(color);
-        drawRotatedQuad(batch, cx - size / 2f, cy - size / 2f, size / 2f, size / 2f, size, size, 45f);
-        batch.setColor(Color.WHITE);
-    }
-
     // Rotated whitePixel quad (SpriteBatch's rotated Texture overload needs an explicit source rect).
     private void drawRotatedQuad(SpriteBatch batch, float x, float y, float originX, float originY, float width, float height, float rotation) {
         batch.draw(whitePixel, x, y, originX, originY, width, height, 1f, 1f, rotation, 0, 0, whitePixel.getWidth(), whitePixel.getHeight(), false, false);
     }
 
-    private void drawHeartIcon(SpriteBatch batch, float x, float y, float size, Color color) {
-        batch.setColor(color);
-        batch.draw(heartIcon, x, y, size, size);
-        batch.setColor(Color.WHITE);
-    }
 
     // Health meter above enemies with showHealthBar (e.g. the tutorial's streaming targets).
     public void drawEnemyHealthBars(SpriteBatch batch, Array<Enemy> enemies) {
@@ -1327,9 +1029,8 @@ public class UIManager implements Disposable {
     public void dispose() {
         font.dispose();
         whitePixel.dispose();
-        heartIcon.dispose();
         gameOverSignTexture.dispose();
         circleMeterEffect.dispose();
-        chainFireEffect.dispose();
+        gameHud.dispose();
     }
 }
