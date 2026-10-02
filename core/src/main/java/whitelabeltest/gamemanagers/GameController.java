@@ -98,6 +98,13 @@ public class GameController implements Disposable {
     private final ReplayBrowser replayBrowser = new ReplayBrowser();
     private ReplayRecorder recorder;
     private ReplayPlayer replayPlayer;
+    // See createGhost().
+    private final boolean ghost;
+    private boolean ghostRunStarted;
+    private boolean ghostFinished;
+    // Incremented by every reset(), so a ghost can tell when the live run restarts.
+    private int runNumber;
+    private java.util.function.Consumer<com.badlogic.gdx.graphics.g2d.SpriteBatch> underEntitiesDrawer;
 
     // Pre-stage video.
     private final InterstitialPlayer interstitialPlayer = new InterstitialPlayer();
@@ -175,13 +182,20 @@ public class GameController implements Disposable {
 
     /** @param stageSequenceId the stage_sequences.json entry this run plays. */
     public GameController(float worldWidth, float worldHeight, KeyBindings keyBindings, AudioSettings audioSettings, WeaponLoadout loadout, String stageSequenceId) {
+        this(worldWidth, worldHeight, keyBindings, audioSettings, loadout, stageSequenceId, null);
+    }
+
+    /** @param ghostAssets non-null makes this a ghost: see createGhost(). */
+    private GameController(float worldWidth, float worldHeight, KeyBindings keyBindings, AudioSettings audioSettings,
+                           WeaponLoadout loadout, String stageSequenceId, AssetManager ghostAssets) {
+        this.ghost = ghostAssets != null;
         this.worldWidth = worldWidth;
         this.worldHeight = worldHeight;
         this.loadout = loadout;
         this.audioSettings = audioSettings;
         this.stageSequenceId = stageSequenceId;
-        this.assets = new AssetManager();
-        this.audio = new AudioManager(audioSettings);
+        this.assets = ghost ? ghostAssets : new AssetManager();
+        this.audio = ghost ? AudioManager.silent(audioSettings) : new AudioManager(audioSettings);
         this.entities = new EntityManager(assets, worldWidth, worldHeight);
         this.collisionManager = new CollisionManager();
         this.keyBindings = keyBindings;
@@ -190,8 +204,8 @@ public class GameController implements Disposable {
         this.scoreManager = new ScoreManager(assets.getGameBalance().defaultChainWindow);
         this.debugSaveStateManager = new DebugSaveStateManager();
 
-        if (System.getProperty("debug") != null ||
-            java.lang.management.ManagementFactory.getRuntimeMXBean().getInputArguments().toString().contains("-agentlib:jdwp")) {
+        if (!ghost && (System.getProperty("debug") != null ||
+            java.lang.management.ManagementFactory.getRuntimeMXBean().getInputArguments().toString().contains("-agentlib:jdwp"))) {
             this.debugToolsAvailable = true;
             this.debugMode = true;
         }
@@ -199,13 +213,31 @@ public class GameController implements Disposable {
         reset();
     }
 
+    /** A ghost replays a recorded run alongside a live one (see GhostRun): it shares the live run's
+     *  AssetManager, is silent, has no debug tools, skips shader/video backgrounds and interstitial
+     *  videos, and is never drawn whole; only its player and shots are (drawGhost()). When its
+     *  recording runs out, or the recorded run restarts, it stops (isGhostFinished()) instead of
+     *  starting a new run. The caller must keep MathUtils.random and EnemySpawnRegistry separate
+     *  from the live run's around everything it calls on a ghost. */
+    public static GameController createGhost(ReplayData replay, float worldWidth, float worldHeight, AssetManager sharedAssets) {
+        // Placeholder loadout and sequence; startReplay() applies the recorded ones.
+        GameController ghost = new GameController(worldWidth, worldHeight, new KeyBindings(), new AudioSettings(),
+            WeaponLoadout.BASIC_THUNDERBOLT, DEFAULT_STAGE_SEQUENCE_ID, sharedAssets);
+        ghost.startReplay(replay);
+        // An unreadable replay leaves nothing to play.
+        if (ghost.replayPlayer == null) ghost.ghostFinished = true;
+        return ghost;
+    }
+
     public void update(float delta) {
+        if (ghostFinished) return;
         ReplayFrame frame = null;
         // Like recording, playback skips frames while the debug menu or an interstitial is up, so
         // neither consumes replay frames.
         if (replayPlayer != null && !debugMenuOpen && !interstitialPlayer.isActive()) {
             if (!replayPlayer.hasNext()) {
-                stopReplay();
+                if (ghost) ghostFinished = true;
+                else stopReplay();
                 return;
             }
             frame = replayPlayer.next();
@@ -671,7 +703,7 @@ public class GameController implements Disposable {
         StageDefinition stageDef = assets.getStageDefinition(stageSequence.get(index));
         currentStageDef = stageDef;
         if (background != null) background.dispose();
-        background = new ScrollingBackground(worldWidth, worldHeight, audioSettings, assets, stageDef.backgroundLayers, stageDef.bossVideo, stageDef.backgroundVideo, stageDef.shaderBackground, stageDef.hueCycleBackground, stageDef.playerFeedbackBackground);
+        background = new ScrollingBackground(worldWidth, worldHeight, audioSettings, assets, stageDef.backgroundLayers, stageDef.bossVideo, stageDef.backgroundVideo, stageDef.shaderBackground, stageDef.hueCycleBackground, stageDef.playerFeedbackBackground, ghost);
         background.setMuted(audio.isMuted());
         // A trigger file replaces the schedule entirely, so the editor and the game always agree.
         if (stageDef.triggerFile != null) {
@@ -726,6 +758,12 @@ public class GameController implements Disposable {
             return;
         }
         String chosen = videos.get(MathUtils.random(videos.size - 1));
+        // A ghost skips the video, but still takes the random pick above so its run stays in step
+        // with the recording. Replays don't consume frames during interstitials anyway.
+        if (ghost) {
+            audio.playStageMusic();
+            return;
+        }
         interstitialPlayer.play(chosen, audio.isMuted() ? 0f : audioSettings.getEffectiveMusicVolume());
     }
 
@@ -997,6 +1035,7 @@ public class GameController implements Disposable {
             PerfProbe.begin(PerfProbe.Section.FEEDBACK_DRAW);
             background.drawPlayerFeedbackOverlay(batch);
             PerfProbe.end(PerfProbe.Section.FEEDBACK_DRAW);
+            if (underEntitiesDrawer != null) underEntitiesDrawer.accept(batch);
             PerfProbe.begin(PerfProbe.Section.ENTITY_DRAW);
             entities.draw(batch, layerCount);
             PerfProbe.end(PerfProbe.Section.ENTITY_DRAW);
@@ -1004,6 +1043,7 @@ public class GameController implements Disposable {
             PerfProbe.begin(PerfProbe.Section.BACKGROUND_DRAW);
             background.draw(batch);
             PerfProbe.end(PerfProbe.Section.BACKGROUND_DRAW);
+            if (underEntitiesDrawer != null) underEntitiesDrawer.accept(batch);
             PerfProbe.begin(PerfProbe.Section.ENTITY_DRAW);
             entities.draw(batch, 0);
             PerfProbe.end(PerfProbe.Section.ENTITY_DRAW);
@@ -1012,6 +1052,12 @@ public class GameController implements Disposable {
     }
 
     public void reset() {
+        // A ghost's recorded run restarting (a confirm after game over or the last stage) ends it.
+        if (ghost && ghostRunStarted) {
+            ghostFinished = true;
+            return;
+        }
+        runNumber++;
         if (recorder != null) {
             recorder.setSummary(scoreManager.getScore(), stageIndex + 1, gameOver);
             recorder.saveIfNonTrivial();
@@ -1019,7 +1065,7 @@ public class GameController implements Disposable {
         long seed = replayPlayer != null ? replayPlayer.getSeed() : System.nanoTime();
         MathUtils.random.setSeed(seed);
         // Tutorial runs aren't recorded.
-        boolean recordingEnabled = replayPlayer == null && !stageSequenceId.equals(TUTORIAL_STAGE_SEQUENCE_ID);
+        boolean recordingEnabled = !ghost && replayPlayer == null && !stageSequenceId.equals(TUTORIAL_STAGE_SEQUENCE_ID);
         recorder = recordingEnabled ? new ReplayRecorder(stageSequenceId, loadout, seed) : null;
 
         scoreManager.reset();
@@ -1065,6 +1111,36 @@ public class GameController implements Disposable {
         java.util.Arrays.fill(fpsHistory, 0);
         fpsHistoryTimer = 0f;
         startInterstitial();
+        if (ghost && replayPlayer != null) ghostRunStarted = true;
+    }
+
+    // --- Ghost support (see createGhost() and GhostRun) ---
+
+    public boolean isGhostFinished() { return ghostFinished; }
+
+    /** True while stage gameplay is running: not in an interstitial, a stage clear, game over or
+     *  the debug menu. */
+    public boolean isInGameplay() {
+        return !interstitialPlayer.isActive() && !levelComplete && !gameOver && !debugMenuOpen;
+    }
+
+    /** The recorded duration of the next replay frame (0 if none); lets a ghost keep time. */
+    public float peekReplayDelta() {
+        return replayPlayer != null && replayPlayer.hasNext() ? replayPlayer.peek().delta : 0f;
+    }
+
+    public int getRunNumber() { return runNumber; }
+
+    public AssetManager getAssets() { return assets; }
+
+    /** Draws between the background and the entities (a ghost run, under everything live). */
+    public void setUnderEntitiesDrawer(java.util.function.Consumer<com.badlogic.gdx.graphics.g2d.SpriteBatch> drawer) {
+        this.underEntitiesDrawer = drawer;
+    }
+
+    /** Draws only the player and their shots (a ghost's visible part). */
+    public void drawGhost(com.badlogic.gdx.graphics.g2d.SpriteBatch batch) {
+        entities.drawPlayerAndShots(batch);
     }
 
     @Override
@@ -1074,7 +1150,8 @@ public class GameController implements Disposable {
             recorder.saveIfNonTrivial();
             recorder = null;
         }
-        assets.dispose();
+        // A ghost's assets belong to the live run.
+        if (!ghost) assets.dispose();
         audio.dispose();
         background.dispose();
         interstitialPlayer.dispose();

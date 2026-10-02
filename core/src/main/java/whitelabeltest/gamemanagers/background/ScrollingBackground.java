@@ -82,14 +82,22 @@ public class ScrollingBackground {
     private VideoPlayer backgroundVideoPlayer;
     private boolean backgroundVideoStarted;
 
+    /** @param layersOnly keep only the scrolling layer state, with no shaders or videos (for
+     *  a ghost run, whose background is never drawn) */
     public ScrollingBackground(float worldWidth, float worldHeight, AudioSettings audioSettings, AssetManager assets,
                                 Array<StageDefinition.BackgroundLayerDef> layerDefs, String bossVideoFile, String backgroundVideoFile,
-                                String shaderBackgroundId, boolean hueCycleBackground, boolean playerFeedbackBackground) {
+                                String shaderBackgroundId, boolean hueCycleBackground, boolean playerFeedbackBackground,
+                                boolean layersOnly) {
         this.worldWidth = worldWidth;
         this.worldHeight = worldHeight;
         this.audioSettings = audioSettings;
-        this.bossVideoFile = bossVideoFile;
-        this.backgroundVideoFile = backgroundVideoFile;
+        this.bossVideoFile = layersOnly ? null : bossVideoFile;
+        this.backgroundVideoFile = layersOnly ? null : backgroundVideoFile;
+        if (layersOnly) {
+            shaderBackgroundId = null;
+            hueCycleBackground = false;
+            playerFeedbackBackground = false;
+        }
         for (StageDefinition.BackgroundLayerDef layerDef : layerDefs) {
             Texture[] textures;
             if (layerDef.textureSequence != null && layerDef.textureSequence.size > 0) {

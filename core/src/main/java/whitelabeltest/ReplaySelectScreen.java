@@ -16,11 +16,12 @@ import com.badlogic.gdx.graphics.g2d.freetype.FreeTypeFontGenerator.FreeTypeFont
 import com.badlogic.gdx.utils.Array;
 import com.badlogic.gdx.utils.Disposable;
 import whitelabeltest.gamemanagers.audio.AudioSettings;
+import whitelabeltest.gamemanagers.input.InputType;
 import whitelabeltest.gamemanagers.replay.ReplayBrowser;
 import whitelabeltest.gamemanagers.replay.ReplayData;
 
-/** REPLAYS menu: pick a saved replay to watch. Polls input directly, since there is no
- *  GameController/InputManager yet. */
+/** REPLAYS menu: pick a saved replay to watch, or to race as a ghost. Polls input directly, since
+ *  there is no GameController/InputManager yet. */
 public class ReplaySelectScreen implements Disposable {
     private static final String CONFIRM_SOUND = "audio/menu/confirmsoundmenu.mp3";
     private static final String BACK_SOUND = "audio/menu/backsoundmenu.mp3";
@@ -46,7 +47,10 @@ public class ReplaySelectScreen implements Disposable {
     private final Sound selectSound;
     private final Sound backSound;
     private boolean backRequested;
-    private boolean prevDpadUpDown, prevDpadDownDown, prevDpadLeftDown, prevDpadRightDown, prevConfirmDown, prevBackButtonDown;
+    // Set with the picked replay: race it as a ghost (instead of watching), and with which input.
+    private boolean ghostRequested;
+    private InputType pickInputType = InputType.KEYBOARD;
+    private boolean prevDpadUpDown, prevDpadDownDown, prevDpadLeftDown, prevDpadRightDown, prevConfirmDown, prevGhostDown, prevBackButtonDown;
 
     // Outlives the screen so the cue keeps playing while the game loads; the caller disposes it.
     private Sound confirmSound;
@@ -89,6 +93,7 @@ public class ReplaySelectScreen implements Disposable {
         prevDpadLeftDown = controller != null && controller.getButton(controller.getMapping().buttonDpadLeft);
         prevDpadRightDown = controller != null && controller.getButton(controller.getMapping().buttonDpadRight);
         prevConfirmDown = controller != null && controller.getButton(controller.getMapping().buttonA);
+        prevGhostDown = controller != null && controller.getButton(controller.getMapping().buttonY);
         prevBackButtonDown = controller != null && (controller.getButton(controller.getMapping().buttonBack)
             || controller.getButton(controller.getMapping().buttonB));
     }
@@ -103,6 +108,8 @@ public class ReplaySelectScreen implements Disposable {
             || Gdx.input.isKeyJustPressed(Input.Keys.SPACE)
             || Gdx.input.isKeyJustPressed(Input.Keys.Z);
         boolean backPressed = Gdx.input.isKeyJustPressed(Input.Keys.ESCAPE);
+        boolean ghostPressed = Gdx.input.isKeyJustPressed(Input.Keys.G);
+        boolean gamepadPick = false;
 
         Controller controller = Controllers.getCurrent();
         if (controller != null) {
@@ -121,8 +128,18 @@ public class ReplaySelectScreen implements Disposable {
             prevDpadRightDown = dpadRightDown;
 
             boolean confirmDown = controller.getButton(controller.getMapping().buttonA);
-            if (confirmDown && !prevConfirmDown) confirmPressed = true;
+            if (confirmDown && !prevConfirmDown) {
+                confirmPressed = true;
+                gamepadPick = true;
+            }
             prevConfirmDown = confirmDown;
+
+            boolean ghostDown = controller.getButton(controller.getMapping().buttonY);
+            if (ghostDown && !prevGhostDown) {
+                ghostPressed = true;
+                gamepadPick = true;
+            }
+            prevGhostDown = ghostDown;
 
             boolean backButtonDown = controller.getButton(controller.getMapping().buttonBack)
                 || controller.getButton(controller.getMapping().buttonB);
@@ -136,10 +153,12 @@ public class ReplaySelectScreen implements Disposable {
             return null;
         }
 
-        if (!confirmPressed) return null;
+        if (!confirmPressed && !ghostPressed) return null;
 
         ReplayData data = browser.confirmSelection();
         if (data == null) return null; // empty list, or the selected file failed to parse
+        ghostRequested = ghostPressed;
+        pickInputType = gamepadPick ? InputType.GAMEPAD : InputType.KEYBOARD;
 
         confirmSound = Gdx.audio.newSound(Gdx.files.internal(CONFIRM_SOUND));
         confirmSound.play(audioSettings.getEffectiveSfxVolume());
@@ -159,6 +178,12 @@ public class ReplaySelectScreen implements Disposable {
     }
 
     public boolean isBackRequested() { return backRequested; }
+
+    /** With a picked replay: true to race it as a ghost rather than watch it. */
+    public boolean isGhostRequested() { return ghostRequested; }
+
+    /** With a picked replay: the input it was picked with (a ghost race is played with it). */
+    public InputType getPickInputType() { return pickInputType; }
 
     public void draw(SpriteBatch batch) {
         float cx = worldWidth / 2f;
@@ -196,8 +221,8 @@ public class ReplaySelectScreen implements Disposable {
 
         font.setColor(Color.LIGHT_GRAY);
         String instructions = browser.getPageCount() > 1
-            ? "Up/Down - Move   Left/Right - Page   Enter/Space - Watch   Esc - Back"
-            : "Up/Down - Move   Enter/Space - Watch   Esc - Back";
+            ? "Up/Down - Move   Left/Right - Page   Enter - Watch   G - Race ghost   Esc - Back"
+            : "Up/Down - Move   Enter - Watch   G - Race ghost   Esc - Back";
         drawCentered(batch, font, instructions, cx, worldHeight * 0.1f);
         font.setColor(Color.WHITE);
     }

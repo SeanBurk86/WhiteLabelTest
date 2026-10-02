@@ -83,7 +83,7 @@ START ──► WEAPON_SELECT ──► PLAYING
 - **WeaponSelectScreen**: picks one of the `WeaponLoadout` pairs (Basic+Thunderbolt, Basic+Orbit,
   Thunderbolt+Orbit). WaveBlast is never a starting weapon.
 - **OptionsScreen** (scene2d): key bindings, audio volumes and background shader quality.
-- **ReplaySelectScreen**: pick a saved replay to watch.
+- **ReplaySelectScreen**: pick a saved replay to watch, or race it as a ghost (G / gamepad Y).
 - The **tutorial** skips weapon select. Its stage sequence supplies a starting loadout.
 - **Quick Play** (from the editor) goes straight to PLAYING at a chosen stage and distance.
 - `-DautoReplay=<file>` plays a replay without any menus and exits when it finishes.
@@ -844,7 +844,8 @@ MEDIUM and LOW also compile the shaders with `QUALITY_MEDIUM` / `QUALITY_LOW`.
   - fixed SFX and the music tracks;
   - **sound banks** (`data/sounds.json`): `{type, level, sounds[]}` for `BasicWeapon`,
     `WaveBlastWeapon`, `OrbitWhip`, `Thunderbolt`, `Explosion`, `PointGem` and `OrbitGong`, with a
-    random pick on each play;
+    random pick on each play (from its own RNG, not the seeded gameplay one, so muting or a silent
+    ghost run never shifts gameplay);
   - cue sounds by path (cached, preloaded per stage);
   - stage music: switching to the track already playing does nothing, and music fades out over 3 s;
   - the victory fanfare, then a loop;
@@ -894,9 +895,29 @@ MEDIUM and LOW also compile the shaders with `QUALITY_MEDIUM` / `QUALITY_LOW`.
   - `MathUtils.random` is seeded at every reset, and a replay reuses the recorded seed;
   - the debug menu and interstitial videos don't consume frames;
   - stage select and every random pick use only recorded input or the seeded RNG;
-  - debug seeks are recorded.
+  - debug seeks are recorded;
+  - sound variant picks use their own RNG, so sound on or off doesn't matter. Replays recorded
+    before this change don't play back exactly (as watched or as ghosts) if a banked sound played.
 - Tutorial runs aren't recorded.
 - `ReplayBrowser` pages replays newest first. Both ReplaySelectScreen and the debug menu use it.
+
+### Ghost mode
+
+In REPLAYS, **G** (gamepad **Y**) races the selected replay: a live run with its stage sequence and
+loadout, with the recorded run playing alongside as a ghost. The live run is recorded as usual.
+
+- `GhostRun` runs the ghost as a second `GameController` (`GameController.createGhost()`): it
+  shares the live run's `AssetManager`, has silent audio (`AudioManager.silent()`), no debug tools,
+  layer-only backgrounds, no interstitial videos, and is never recorded.
+- **Isolation:** `MathUtils.random` and `EnemySpawnRegistry` are static, so the ghost gets its own
+  of each, swapped in around every call into it. The ghost reproduces the replay exactly.
+- **Pacing:** the runs are lined up per stage on gameplay time (interstitials, stage clears and game
+  over don't count). A ghost that clears a stage first waits at its stage clear; one a stage behind
+  catches up, hidden, at up to 120 frames a frame. When the live run restarts, the ghost starts over;
+  when the recording ends (or its run restarts), it stops.
+- **Drawing:** only the ghost's player and shots, between the background and the live entities, so
+  it never hides a bullet. They're drawn to an offscreen layer (premultiplied alpha) and faded in as
+  one image at `GhostRun.ALPHA` (0.35). Shown only while both runs are in gameplay on the same stage.
 
 ---
 

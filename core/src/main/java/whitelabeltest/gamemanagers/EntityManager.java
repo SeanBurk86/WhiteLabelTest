@@ -255,6 +255,15 @@ public class EntityManager {
         for (ScheduledSpriteEffect s : scheduledSprites) s.draw(batch);
     }
 
+    /** Just the player and their shots, for a ghost run (see GameController.drawGhost()). */
+    public void drawPlayerAndShots(SpriteBatch batch) {
+        for (Weapon b : bullets) {
+            if (!(b instanceof ThunderboltWeapon)) b.draw(batch);
+        }
+        drawThunderboltBolts(batch);
+        player.draw(batch);
+    }
+
     /** Draws enemies attached to background layer layerIndex, called right after that layer so they
      *  sit between it and the next. */
     public void drawEnemiesAttachedToLayer(SpriteBatch batch, int layerIndex) {

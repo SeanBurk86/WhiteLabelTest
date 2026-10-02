@@ -3,6 +3,7 @@ package whitelabeltest.gamemanagers.audio;
 import com.badlogic.gdx.Gdx;
 import com.badlogic.gdx.audio.Music;
 import com.badlogic.gdx.audio.Sound;
+import com.badlogic.gdx.math.RandomXS128;
 import com.badlogic.gdx.utils.Array;
 import com.badlogic.gdx.utils.Disposable;
 import com.badlogic.gdx.utils.Json;
@@ -16,6 +17,11 @@ public class AudioManager implements Disposable {
 
     private final AudioSettings settings;
     private boolean muted;
+    // A ghost run's audio (see silent()): loads nothing and plays nothing.
+    private final boolean silent;
+    // Picks among a sound bank's variants. Separate from MathUtils.random, which drives gameplay and
+    // must advance identically whether or not sounds play (a replay or ghost must stay in step).
+    private final RandomXS128 variantRandom = new RandomXS128();
     private boolean fadingOutStageMusic;
     private float stageMusicFadeTimer;
     private float stageMusicFadeStartVolume;
@@ -71,8 +77,30 @@ public class AudioManager implements Disposable {
     private float clock;
     private float lastPointGem = -1f, lastExplosion = -1f, lastOrbitGong = -1f, lastHaloBash = -1f;
 
+    /** Audio that loads and plays nothing, for a ghost run. */
+    public static AudioManager silent(AudioSettings settings) {
+        return new AudioManager(settings, true);
+    }
+
     public AudioManager(AudioSettings settings) {
+        this(settings, false);
+    }
+
+    private AudioManager(AudioSettings settings, boolean silent) {
         this.settings = settings;
+        this.silent = silent;
+        if (silent) {
+            muted = true;
+            playerDeathSound = bombSound = gameOverSound = powerupSound = gemPickupSound = textCueSound = null;
+            haloDetachSound = haloBashSound = haloReturnSound = haloLatchSound = null;
+            grazeLevelUpSound = bombReadySound = shieldsReadySound = null;
+            thunderboltHyperLevelSounds = new Sound[0];
+            thunderboltHyperExplosionSound = thunderboltNullSound = null;
+            victoryFanfare = victoryLoop = null;
+            basicWeaponSounds = waveBlastWeaponSounds = thunderboltWeaponSounds = null;
+            explosionSounds = pointGemSounds = orbitGongSounds = orbitWhipSounds = null;
+            return;
+        }
         playerDeathSound = Gdx.audio.newSound(Gdx.files.internal("audio/sfx/playerdeath.mp3"));
         bombSound = Gdx.audio.newSound(Gdx.files.internal("audio/sfx/bombsound.mp3"));
         gameOverSound = Gdx.audio.newSound(Gdx.files.internal("audio/sfx/gameover.mp3"));
@@ -146,16 +174,21 @@ public class AudioManager implements Disposable {
      *  never null afterwards. */
     public void loadStageMusic(String path) {
         fadingOutStageMusic = false;
+        stageMusicPath = path;
+        if (silent) return;
         if (stageMusic != null) stageMusic.dispose();
         stageMusic = Gdx.audio.newMusic(Gdx.files.internal(path));
         stageMusic.setLooping(true);
-        stageMusicPath = path;
     }
 
     /** Switches to and plays (looping) the track at `path` mid-stage, cancelling any fade. No-op if
      *  that track is already playing, so re-syncing after a seek never restarts it. */
     public void switchStageMusic(String path) {
         if (path == null) return;
+        if (silent) {
+            stageMusicPath = path;
+            return;
+        }
         if (path.equals(stageMusicPath) && stageMusic.isPlaying() && !fadingOutStageMusic) return;
         if (stageMusic != null) stageMusic.stop();
         loadStageMusic(path);
@@ -166,6 +199,7 @@ public class AudioManager implements Disposable {
     public String getStageMusicPath() { return stageMusicPath; }
 
     public void setMuted(boolean muted) {
+        if (silent) return;
         this.muted = muted;
         stageMusic.setVolume(muted ? 0f : settings.getEffectiveMusicVolume());
     }
@@ -173,18 +207,21 @@ public class AudioManager implements Disposable {
 
     public void playStageMusic() {
         fadingOutStageMusic = false;
+        if (silent) return;
         stageMusic.setVolume(muted ? 0f : settings.getEffectiveMusicVolume());
         stageMusic.play();
     }
 
     public void stopStageMusic() {
         fadingOutStageMusic = false;
+        if (silent) return;
         stageMusic.stop();
     }
 
     /** Fades the stage music out over STAGE_MUSIC_FADE_DURATION, then stops it (used before the boss
      *  video's own audio). */
     public void fadeOutStageMusic() {
+        if (silent) return;
         if (!stageMusic.isPlaying() || fadingOutStageMusic) return;
         fadingOutStageMusic = true;
         stageMusicFadeTimer = 0f;
@@ -237,7 +274,7 @@ public class AudioManager implements Disposable {
 
     // Stops every blip instance. Not gated on `muted`, so a loop started before muting still stops.
     public void stopTextCueLoop() {
-        textCueSound.stop();
+        if (!silent) textCueSound.stop();
     }
 
     public void playHaloDetach() {
@@ -291,6 +328,7 @@ public class AudioManager implements Disposable {
     }
 
     public void stopVictory() {
+        if (silent) return;
         victoryFanfare.stop();
         victoryLoop.stop();
     }
@@ -299,38 +337,38 @@ public class AudioManager implements Disposable {
         if (clock - lastPointGem < POINT_GEM_SOUND_INTERVAL && lastPointGem >= 0f) return;
         lastPointGem = clock;
         PerfProbe.soundStarted();
-        if (!muted && pointGemSounds != null) pointGemSounds.get(1).random().play(settings.getEffectiveSfxVolume());
+        if (!muted && pointGemSounds != null) pick(pointGemSounds.get(1)).play(settings.getEffectiveSfxVolume());
     }
 
     public void playExplosion() {
         if (clock - lastExplosion < EXPLOSION_SOUND_INTERVAL && lastExplosion >= 0f) return;
         lastExplosion = clock;
         PerfProbe.soundStarted();
-        if (!muted && explosionSounds != null) explosionSounds.get(1).random().play(settings.getEffectiveSfxVolume());
+        if (!muted && explosionSounds != null) pick(explosionSounds.get(1)).play(settings.getEffectiveSfxVolume());
     }
 
     public void playOrbitGong() {
         if (clock - lastOrbitGong < ORBIT_GONG_SOUND_INTERVAL && lastOrbitGong >= 0f) return;
         lastOrbitGong = clock;
         PerfProbe.soundStarted();
-        if (!muted && orbitGongSounds != null) orbitGongSounds.get(1).random().play(settings.getEffectiveSfxVolume());
+        if (!muted && orbitGongSounds != null) pick(orbitGongSounds.get(1)).play(settings.getEffectiveSfxVolume());
     }
 
     public void playBasicWeaponSound(int level) {
-        if (!muted && basicWeaponSounds != null && basicWeaponSounds.containsKey(level)) basicWeaponSounds.get(level).random().play(settings.getEffectiveSfxVolume());
+        if (!muted && basicWeaponSounds != null && basicWeaponSounds.containsKey(level)) pick(basicWeaponSounds.get(level)).play(settings.getEffectiveSfxVolume());
     }
 
     public void playWaveBlastWeaponSound(int level) {
-        if (!muted && waveBlastWeaponSounds != null && waveBlastWeaponSounds.containsKey(level)) waveBlastWeaponSounds.get(level).random().play(settings.getEffectiveSfxVolume());
+        if (!muted && waveBlastWeaponSounds != null && waveBlastWeaponSounds.containsKey(level)) pick(waveBlastWeaponSounds.get(level)).play(settings.getEffectiveSfxVolume());
     }
 
     public void playOrbitWhip() {
         PerfProbe.soundStarted();
-        if (!muted && orbitWhipSounds != null) orbitWhipSounds.get(1).random().play(settings.getEffectiveSfxVolume());
+        if (!muted && orbitWhipSounds != null) pick(orbitWhipSounds.get(1)).play(settings.getEffectiveSfxVolume());
     }
 
     public void playThunderboltWeaponSound(int level) {
-        if (!muted && thunderboltWeaponSounds != null && thunderboltWeaponSounds.containsKey(level)) thunderboltWeaponSounds.get(level).random().play(settings.getEffectiveSfxVolume());
+        if (!muted && thunderboltWeaponSounds != null && thunderboltWeaponSounds.containsKey(level)) pick(thunderboltWeaponSounds.get(level)).play(settings.getEffectiveSfxVolume());
     }
 
     public void playThunderboltNullSound() {
@@ -356,14 +394,14 @@ public class AudioManager implements Disposable {
 
     /** Loads a cue sound ahead of time so its first play doesn't stall a frame. */
     public void preloadCueSound(String path) {
-        if (path == null || cueSounds.containsKey(path)) return;
+        if (silent || path == null || cueSounds.containsKey(path)) return;
         if (!Gdx.files.internal(path).exists()) return;
         cueSounds.put(path, Gdx.audio.newSound(Gdx.files.internal(path)));
     }
 
     /** @param volume multiplied into the SFX volume setting. @param pitch 1 = unchanged. */
     public void playCueSound(String path, float volume, float pitch) {
-        if (path == null) return;
+        if (silent || path == null) return;
         Sound sound = cueSounds.get(path);
         if (sound == null) {
             sound = Gdx.audio.newSound(Gdx.files.internal(path));
@@ -375,6 +413,7 @@ public class AudioManager implements Disposable {
 
     @Override
     public void dispose() {
+        if (silent) return;
         playerDeathSound.dispose();
         bombSound.dispose();
         gameOverSound.dispose();
@@ -402,6 +441,10 @@ public class AudioManager implements Disposable {
         disposeSoundsMap(orbitGongSounds);
         disposeSoundsMap(orbitWhipSounds);
         for (Sound s : cueSounds.values()) s.dispose();
+    }
+
+    private Sound pick(Array<Sound> variants) {
+        return variants.get(variantRandom.nextInt(variants.size));
     }
 
     private void disposeSoundsMap(ObjectMap<Integer, Array<Sound>> soundsMap) {

@@ -25,6 +25,18 @@ public final class EnemySpawnRegistry {
         EnemySpawnRegistry.worldHeight = worldHeight;
     }
 
+    /** What the registry spawns into, so a second simulation (a ghost run) can swap its own in
+     *  and the live run's back. */
+    public record State(AssetManager assets, Array<Enemy> enemies, float worldWidth, float worldHeight) {}
+
+    public static State getState() {
+        return new State(assets, enemies, worldWidth, worldHeight);
+    }
+
+    public static void setState(State state) {
+        init(state.assets(), state.enemies(), state.worldWidth(), state.worldHeight());
+    }
+
     /** Texture lookup for firing patterns that override their enemy's bullet texture. */
     public static Texture getTexture(String path) {
         return (assets != null && path != null) ? assets.getTexture(path) : null;

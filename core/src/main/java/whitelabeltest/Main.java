@@ -26,6 +26,7 @@ import whitelabeltest.gamemanagers.EntityManager;
 import whitelabeltest.gamemanagers.GameController;
 import whitelabeltest.gamemanagers.input.InputType;
 import whitelabeltest.gamemanagers.input.KeyBindings;
+import whitelabeltest.gamemanagers.replay.GhostRun;
 import whitelabeltest.gamemanagers.replay.ReplayData;
 import whitelabeltest.gamemanagers.UIManager;
 import whitelabeltest.player.WeaponLoadout;
@@ -76,6 +77,8 @@ public class Main extends ApplicationAdapter {
     private InputType pendingInputType;
     private OptionsScreen optionsScreen;
     private ReplaySelectScreen replaySelectScreen;
+    // Racing a replay picked with "race ghost": its ghost, alongside the live game.
+    private GhostRun ghostRun;
     // Watching a replay picked from the menu: when it ends or is cancelled, return to the start screen.
     private boolean replayFromMenu;
     private KeyBindings keyBindings;
@@ -182,7 +185,9 @@ public class Main extends ApplicationAdapter {
             if (startScreen != null) startScreen.applyMusicVolume();
             ReplayData picked = replaySelectScreen.update(delta);
             drawReplaySelectScreen();
-            if (picked != null) {
+            if (picked != null && replaySelectScreen.isGhostRequested()) {
+                transitionToGhostRace(picked, replaySelectScreen.getPickInputType());
+            } else if (picked != null) {
                 transitionToReplayWatch(picked);
             } else if (replaySelectScreen.isBackRequested()) {
                 transitionToStartFromReplaySelect();
@@ -190,6 +195,7 @@ public class Main extends ApplicationAdapter {
         } else {
             PerfProbe.begin(PerfProbe.Section.UPDATE);
             game.update(delta);
+            if (ghostRun != null) ghostRun.update(delta);
             PerfProbe.end(PerfProbe.Section.UPDATE);
             PerfProbe.begin(PerfProbe.Section.DRAW);
             drawGame();
@@ -303,10 +309,41 @@ public class Main extends ApplicationAdapter {
         state = AppState.PLAYING;
     }
 
+    /** A live run with the picked replay's stages and loadout, its ghost playing alongside. */
+    private void transitionToGhostRace(ReplayData data, InputType inputType) {
+        replaySelectConfirmSound = replaySelectScreen.getConfirmSound();
+        replaySelectScreen.dispose();
+        replaySelectScreen = null;
+        if (startScreen != null) {
+            startScreen.dispose();
+            startScreen = null;
+        }
+        WeaponLoadout loadout;
+        try {
+            loadout = WeaponLoadout.valueOf(data.weaponLoadout);
+        } catch (IllegalArgumentException | NullPointerException e) {
+            loadout = WeaponLoadout.BASIC_THUNDERBOLT;
+        }
+        String sequence = data.stageSequenceId != null ? data.stageSequenceId : GameController.DEFAULT_STAGE_SEQUENCE_ID;
+        game = new GameController(PLAY_AREA_WIDTH, PLAY_AREA_HEIGHT, keyBindings, audioSettings, loadout, sequence);
+        game.setActiveInput(inputType);
+        ghostRun = new GhostRun(data, game, PLAY_AREA_WIDTH, PLAY_AREA_HEIGHT);
+        game.setUnderEntitiesDrawer(ghostRun::draw);
+        ui = new UIManager(inputType);
+        state = AppState.PLAYING;
+    }
+
+    private void disposeGhostRun() {
+        if (ghostRun == null) return;
+        ghostRun.dispose();
+        ghostRun = null;
+    }
+
     /** After a menu replay ends or is cancelled (an auto replay quits instead). */
     private void transitionToStartFromReplayWatch() {
         if (autoReplayLimit != 0f) { Gdx.app.exit(); return; }
         replayFromMenu = false;
+        disposeGhostRun();
         game.dispose();
         game = null;
         if (ui != null) {
@@ -319,6 +356,7 @@ public class Main extends ApplicationAdapter {
 
     /** When the tutorial reaches its scripted end. */
     private void transitionToStartFromTutorial() {
+        disposeGhostRun();
         game.dispose();
         game = null;
         if (ui != null) {
@@ -331,6 +369,7 @@ public class Main extends ApplicationAdapter {
 
     /** When QUIT is confirmed on the game-over / level-complete prompt. */
     private void transitionToStartFromGameOver() {
+        disposeGhostRun();
         game.dispose();
         game = null;
         if (ui != null) {
@@ -577,6 +616,7 @@ public class Main extends ApplicationAdapter {
         if (startScreenConfirmSound != null) startScreenConfirmSound.dispose();
         if (weaponSelectConfirmSound != null) weaponSelectConfirmSound.dispose();
         if (replaySelectConfirmSound != null) replaySelectConfirmSound.dispose();
+        disposeGhostRun();
         if (game != null) game.dispose();
         if (ui != null) ui.dispose();
         if (spriteBatch != null) spriteBatch.dispose();
